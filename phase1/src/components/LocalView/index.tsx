@@ -1396,7 +1396,7 @@ export function LocalView({
         })()}
 
         {/* Beta Threshold with +/- buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 6 }}>
           <span style={{ color: '#666', whiteSpace: 'nowrap', fontSize: 11 }}>β ≥ {betaThreshold.toFixed(2)}</span>
           {/* Decrease min bound */}
           <button
@@ -1407,14 +1407,15 @@ export function LocalView({
             }}
             disabled={sliderMin <= 0}
             style={{
-              width: 16, height: 16, padding: 0, fontSize: 10, lineHeight: 1,
+              width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
               cursor: sliderMin <= 0 ? 'not-allowed' : 'pointer',
               border: '1px solid #ccc', borderRadius: 2,
               background: sliderMin <= 0 ? '#f5f5f5' : 'white',
               color: sliderMin <= 0 ? '#ccc' : '#666'
             }}
-            title={`Decrease min (${sliderMin.toFixed(2)})`}
+            title="Decrease min"
           >−</button>
+          <span style={{ fontSize: 9, color: '#999', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
           <input
             type="range"
             min={sliderMin}
@@ -1422,9 +1423,9 @@ export function LocalView({
             step={betaRange.step}
             value={Math.min(Math.max(betaThreshold, sliderMin), sliderMax)}
             onChange={(e) => onBetaThresholdChange(parseFloat(e.target.value))}
-            style={{ width: 80 }}
-            title={`Range: ${sliderMin.toFixed(2)} - ${sliderMax.toFixed(2)}`}
+            style={{ width: 70 }}
           />
+          <span style={{ fontSize: 9, color: '#999', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
           {/* Increase max bound */}
           <button
             onClick={() => {
@@ -1433,11 +1434,11 @@ export function LocalView({
               setSliderMax(Math.round(newMax * 100) / 100)
             }}
             style={{
-              width: 16, height: 16, padding: 0, fontSize: 10, lineHeight: 1,
+              width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
               cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
               background: 'white', color: '#666'
             }}
-            title={`Increase max (${sliderMax.toFixed(2)})`}
+            title="Increase max"
           >+</button>
           {/* Reset to auto-calculated range */}
           <button
@@ -1447,11 +1448,11 @@ export function LocalView({
               onBetaThresholdChange(calculateOptimalThreshold)
             }}
             style={{
-              width: 16, height: 16, padding: 0, fontSize: 9, lineHeight: 1,
+              width: 14, height: 14, padding: 0, fontSize: 9, lineHeight: 1,
               cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
               background: 'white', color: '#888'
             }}
-            title="Reset to auto range"
+            title="Reset"
           >↺</button>
         </div>
 
