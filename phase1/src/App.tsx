@@ -208,6 +208,7 @@ function App() {
   const isDraggingRef = useRef(false)
   const localViewResetRef = useRef<(() => void) | null>(null)  // Store LocalView's reset function
   const urlStateRestoredRef = useRef(false)  // Track if URL state has been restored
+  const clickTimeoutRef = useRef<number | null>(null)  // For delayed single-click to allow double-click
 
   // Handle split divider drag
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -2049,6 +2050,10 @@ function App() {
     // Remove old handlers and add new ones
     g.on('click', null).on('dblclick', null).on('mouseenter', null).on('mouseleave', null)
 
+    // Delayed single-click to allow time for double-click detection
+    // This prevents accidental expand/collapse when user intended to double-click
+    const CLICK_DELAY = 250 // ms - generous window for double-click
+
     g.on('click', (event) => {
       const target = event.target as Element
       if (target.classList.contains('node')) {
@@ -2056,22 +2061,33 @@ function App() {
         const nodeId = target.getAttribute('data-id')
         if (nodeId) {
           const node = nodeDataMap.get(nodeId)
-          if (node?.hasChildren) {
-            // Root node (ring 0): reset view if expanded, normal expand if collapsed
-            if (node.ring === 0 && expandedNodes.has(node.id)) {
-              resetView()
-            } else {
-              toggleExpansion(node.id)
-            }
+
+          // Clear any pending click timeout
+          if (clickTimeoutRef.current) {
+            window.clearTimeout(clickTimeoutRef.current)
+            clickTimeoutRef.current = null
           }
-        }
-        // Clear highlight when clicking any node
-        if (highlightedPath.size > 0) {
-          setHighlightedPath(new Set())
-          setHighlightedTarget(null)
+
+          // Delay single-click action to allow double-click
+          clickTimeoutRef.current = window.setTimeout(() => {
+            clickTimeoutRef.current = null
+            if (node?.hasChildren) {
+              // Root node (ring 0): reset view if expanded, normal expand if collapsed
+              if (node.ring === 0 && expandedNodes.has(node.id)) {
+                resetView()
+              } else {
+                toggleExpansion(node.id)
+              }
+            }
+            // Clear highlight when clicking any node
+            if (highlightedPath.size > 0) {
+              setHighlightedPath(new Set())
+              setHighlightedTarget(null)
+            }
+          }, CLICK_DELAY)
         }
       } else {
-        // Clicked on background - clear highlight
+        // Clicked on background - clear highlight immediately
         if (highlightedPath.size > 0) {
           setHighlightedPath(new Set())
           setHighlightedTarget(null)
@@ -2080,6 +2096,13 @@ function App() {
     })
     .on('dblclick', (event) => {
       const target = event.target as Element
+
+      // Cancel pending single-click
+      if (clickTimeoutRef.current) {
+        window.clearTimeout(clickTimeoutRef.current)
+        clickTimeoutRef.current = null
+      }
+
       if (target.classList.contains('node')) {
         // Double-click on node - add to Local View
         event.stopPropagation()
