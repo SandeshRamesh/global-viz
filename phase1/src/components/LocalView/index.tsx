@@ -1415,7 +1415,7 @@ export function LocalView({
             }}
             title="Decrease min"
           >−</button>
-          <span style={{ fontSize: 9, color: '#999', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
+          <span style={{ fontSize: 10, color: '#999', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
           <input
             type="range"
             min={sliderMin}
@@ -1425,7 +1425,7 @@ export function LocalView({
             onChange={(e) => onBetaThresholdChange(parseFloat(e.target.value))}
             style={{ width: 70 }}
           />
-          <span style={{ fontSize: 9, color: '#999', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
+          <span style={{ fontSize: 10, color: '#999', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
           {/* Increase max bound */}
           <button
             onClick={() => {
