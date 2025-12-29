@@ -1047,46 +1047,8 @@ export function computeLocalViewLayout(
   const visualBetas = allNodes.map(n => n.visualBeta)
   const minBeta = Math.min(...visualBetas, 0.01)
   const maxBeta = Math.max(...visualBetas, 0.1)
-  const totalNodes = allNodes.length
   const direction = getFlowDirection(containerWidth, containerHeight)
   const isVertical = direction === 'vertical'
-  const shouldDeclutter = totalNodes > opts.declutterThreshold
-
-  // === DEBUG: Log beta values and sizing ===
-  console.group('🔍 Local View Sizing Debug')
-  console.log('Beta range:', minBeta.toFixed(3), '-', maxBeta.toFixed(3), '| Total nodes:', totalNodes, '| Declutter:', shouldDeclutter, '| Direction:', direction)
-  console.table(
-    allNodes.map(n => {
-      const showBeta = shouldShowBeta(n, totalNodes, opts.declutterThreshold, isVertical)
-      const dims = getNodeDimensions(n, minBeta, maxBeta, opts.horizontalPadding, opts.verticalPadding, opts.sizeMinScale, opts.sizeMaxScale, showBeta)
-      return {
-        label: n.label.substring(0, 25),
-        role: n.isTarget ? 'TARGET' : n.isInput ? 'input' : 'output',
-        depth: n.depth,
-        'β (original)': n.beta?.toFixed(3) ?? 'N/A',
-        'β (visual)': n.visualBeta.toFixed(3),
-        'showBeta': showBeta,
-        'width': dims.width.toFixed(1),
-        'height': dims.height.toFixed(1),
-        'fontSize': getFontSize(n.visualBeta, minBeta, maxBeta).toFixed(1),
-        'edgeWidth': getEdgeWidth(n.visualBeta, minBeta, maxBeta).toFixed(2)
-      }
-    })
-  )
-  console.log('Edges:')
-  console.table(
-    edges.map(e => {
-      const targetNode = allNodes.find(n => n.id === e.target)
-      return {
-        'source→target': `${e.source.substring(0, 10)}→${e.target.substring(0, 10)}`,
-        'edge β': Math.abs(e.beta).toFixed(3),
-        'target visualβ': targetNode?.visualBeta.toFixed(3) ?? 'N/A',
-        'strokeWidth': targetNode ? getEdgeWidth(targetNode.visualBeta, minBeta, maxBeta).toFixed(2) : 'N/A'
-      }
-    })
-  )
-  console.groupEnd()
-  // === END DEBUG ===
 
   // Calculate gap based on viewport size (responsive)
   const columnGap = Math.max(30, Math.min(80, containerWidth * 0.04))
