@@ -2052,7 +2052,7 @@ function App() {
 
     // Delayed single-click to allow time for double-click detection
     // This prevents accidental expand/collapse when user intended to double-click
-    const CLICK_DELAY = 250 // ms - generous window for double-click
+    const CLICK_DELAY = 150 // ms - window for double-click
 
     g.on('click', (event) => {
       const target = event.target as Element
