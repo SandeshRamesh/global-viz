@@ -156,6 +156,30 @@ User mental model:
 - [x] Target count badge on Local tab
 - [ ] URL sync (?view=local&node=NODE_ID) - deferred
 
+#### 4.6 Smooth Animations ✅
+- [x] Node entry: scale 0→1, opacity 0→1, from parent position (300ms easeCubicOut)
+- [x] Node exit: scale 1→0, opacity 1→0, to parent position (200ms easeCubicIn)
+- [x] Edge entry: extend from source with opacity fade (200ms, delayed 200ms to avoid backward pointing)
+- [x] Edge exit: retract with opacity fade (200ms)
+- [x] Text labels: fade in after nodes settle (150ms, 300ms delay)
+- [x] Position updates: smooth transition on layout changes (300ms)
+- [x] Viewport pan/zoom: auto-fit after expand/collapse (400ms easeCubicOut)
+- [x] Reset (R key): collapses all expansions and fits viewport
+- [x] Node dimension changes: smooth size animation when beta visuals appear/disappear
+- [x] Matches Global View timing constants for visual consistency
+
+#### 4.7 Split View Layout ✅
+- [x] Horizontal mode: Bezier curves with arrow markers
+- [x] Vertical mode: Orthogonal paths (90-degree turns) with no arrows
+- [x] Edge thickness indicates beta magnitude in both modes
+- [x] Auto-switches based on container aspect ratio
+- [x] Tree-based layout: subtree width/height calculations prevent overlaps
+- [x] Parent-centered children: 1 child directly under, 2 split evenly, odd centers middle
+- [x] Multi-row wrapping: max 4 nodes per row, excess wraps to new rows
+- [x] Vertical compactness: tighter spacing (15px), smaller row gaps (12-30px)
+- [x] Aggressive decluttering: hide beta values for depth >1 in vertical mode
+- [x] Glow effects: targets and depth 1 nodes only (octagon-shaped for outputs)
+
 ---
 
 ## Testing & Polish (Final Week)

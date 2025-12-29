@@ -5,7 +5,7 @@
  * from the visualization data for Local View.
  */
 
-import type { RawEdge, RawNodeV21, LocalViewEdge, LocalViewNode } from '../types'
+import type { RawEdge, RawNodeV21, LocalViewEdge, LocalViewNode, LocalNodeShape, LocalViewMode, EdgePathway } from '../types'
 
 /** Default beta threshold for filtering edges */
 export const DEFAULT_BETA_THRESHOLD = 0.5
@@ -15,18 +15,33 @@ export const MAX_BETA_VALUE = 100
 
 /**
  * Extract causal edges from raw edges
+ * @param ringFilter - If provided, only return edges where BOTH source and target are at this ring level
  */
-export function getCausalEdges(edges: RawEdge[]): LocalViewEdge[] {
-  return edges
+export function getCausalEdges(
+  edges: RawEdge[],
+  nodeById?: Map<string, RawNodeV21>,
+  ringFilter?: number
+): LocalViewEdge[] {
+  let filtered = edges
     .filter(e => e.relationship === 'causal' && e.weight !== undefined)
     .filter(e => Math.abs(e.weight!) <= MAX_BETA_VALUE) // Filter outliers
-    .map(e => ({
-      source: e.source,
-      target: e.target,
-      beta: e.weight!,
-      sourceSector: '', // Will be filled by getSectorForNode
-      targetSector: ''
-    }))
+
+  // If ring filter is provided, only include same-ring edges
+  if (ringFilter !== undefined && nodeById) {
+    filtered = filtered.filter(e => {
+      const srcNode = nodeById.get(e.source)
+      const tgtNode = nodeById.get(e.target)
+      return srcNode?.layer === ringFilter && tgtNode?.layer === ringFilter
+    })
+  }
+
+  return filtered.map(e => ({
+    source: e.source,
+    target: e.target,
+    beta: e.weight!,
+    sourceSector: '', // Will be filled by getSectorForNode
+    targetSector: ''
+  }))
 }
 
 /**
@@ -79,6 +94,222 @@ export function getOutgoingEdges(
 }
 
 /**
+ * Get all Ring 5 (indicator) descendants of a node
+ * Recursively traverses hierarchy to find all leaf indicators
+ */
+function getAllIndicatorDescendants(
+  nodeId: string,
+  nodeById: Map<string, RawNodeV21>
+): string[] {
+  const node = nodeById.get(nodeId)
+  if (!node) return []
+
+  // If this IS a Ring 5 indicator, return it
+  if (node.layer === 5) return [nodeId]
+
+  // Otherwise, recursively get all children's indicators
+  const indicators: string[] = []
+  if (node.children) {
+    for (const childId of node.children) {
+      indicators.push(...getAllIndicatorDescendants(String(childId), nodeById))
+    }
+  }
+  return indicators
+}
+
+/**
+ * Get ancestor at a specific ring level
+ */
+function getAncestorAtRing(
+  nodeId: string,
+  targetRing: number,
+  nodeById: Map<string, RawNodeV21>
+): RawNodeV21 | null {
+  let current = nodeById.get(nodeId)
+
+  while (current) {
+    if (current.layer === targetRing) return current
+    if (current.layer < targetRing) return null // Gone too high
+    if (current.parent) {
+      current = nodeById.get(String(current.parent))
+    } else {
+      break
+    }
+  }
+  return null
+}
+
+/**
+ * Check if a node has direct same-ring causal edges
+ */
+export function hasDirectSameRingEdges(
+  nodeId: string,
+  allEdges: RawEdge[],
+  nodeById: Map<string, RawNodeV21>
+): boolean {
+  const node = nodeById.get(nodeId)
+  if (!node) return false
+  const ring = node.layer
+
+  return allEdges.some(e => {
+    if (e.relationship !== 'causal') return false
+    const src = nodeById.get(e.source)
+    const tgt = nodeById.get(e.target)
+    if (!src || !tgt) return false
+    if (src.layer !== ring || tgt.layer !== ring) return false
+    return e.source === nodeId || e.target === nodeId
+  })
+}
+
+/**
+ * Aggregate descendant indicator edges upward to target ring level
+ * Works for Ring 1-4 nodes by finding their Ring 5 descendants' edges
+ * and grouping by ancestor at target ring level
+ */
+export function aggregateChildEdges(
+  targetIds: string[],
+  allEdges: RawEdge[],
+  nodeById: Map<string, RawNodeV21>,
+  threshold: number = DEFAULT_BETA_THRESHOLD
+): {
+  inputEdges: Map<string, { edge: LocalViewEdge; pathways: EdgePathway[] }>
+  outputEdges: Map<string, { edge: LocalViewEdge; pathways: EdgePathway[] }>
+  activeChildCount: number
+  totalChildCount: number
+} {
+  // Determine target ring from first target
+  const firstTarget = targetIds[0] ? nodeById.get(targetIds[0]) : undefined
+  const targetRing = firstTarget?.layer ?? 4
+
+  // Get all Ring 5 causal edges (the base causal data)
+  const ring5Edges = getCausalEdges(allEdges, nodeById, 5)
+
+  // Collect all Ring 5 indicator descendants of target nodes
+  const targetIndicatorIds = new Set<string>()
+  for (const targetId of targetIds) {
+    const indicators = getAllIndicatorDescendants(targetId, nodeById)
+    indicators.forEach(id => targetIndicatorIds.add(id))
+  }
+  const totalChildCount = targetIndicatorIds.size
+
+  // Maps for aggregated edges
+  const inputEdges = new Map<string, { edge: LocalViewEdge; pathways: EdgePathway[] }>()
+  const outputEdges = new Map<string, { edge: LocalViewEdge; pathways: EdgePathway[] }>()
+
+  // Track which indicators have edges
+  const activeIndicatorIds = new Set<string>()
+
+  // Process each Ring 5 edge
+  for (const edge of ring5Edges) {
+    const isInputToIndicator = targetIndicatorIds.has(edge.target)
+    const isOutputFromIndicator = targetIndicatorIds.has(edge.source)
+
+    // Skip edges below threshold
+    if (Math.abs(edge.beta) < threshold) continue
+
+    if (isInputToIndicator) {
+      // This edge points TO one of our indicators
+      activeIndicatorIds.add(edge.target)
+
+      // Get ancestors at target ring level
+      const sourceAncestor = getAncestorAtRing(edge.source, targetRing, nodeById)
+      const targetAncestor = getAncestorAtRing(edge.target, targetRing, nodeById)
+
+      if (!sourceAncestor || !targetAncestor) continue
+
+      // Skip internal edges (both endpoints under same target)
+      if (targetIndicatorIds.has(edge.source)) continue
+
+      const key = sourceAncestor.id + '->' + targetAncestor.id
+
+      if (!inputEdges.has(key)) {
+        inputEdges.set(key, {
+          edge: {
+            source: String(sourceAncestor.id),
+            target: String(targetAncestor.id),
+            beta: 0,
+            sourceSector: getSectorForNode(String(sourceAncestor.id), nodeById),
+            targetSector: getSectorForNode(String(targetAncestor.id), nodeById),
+            isAggregated: true,
+            pathwayCount: 0,
+            pathways: []
+          },
+          pathways: []
+        })
+      }
+
+      const agg = inputEdges.get(key)!
+      agg.pathways.push({
+        childSource: edge.source,
+        childTarget: edge.target,
+        beta: edge.beta
+      })
+    }
+
+    if (isOutputFromIndicator) {
+      // This edge originates FROM one of our indicators
+      activeIndicatorIds.add(edge.source)
+
+      // Get ancestors at target ring level
+      const sourceAncestor = getAncestorAtRing(edge.source, targetRing, nodeById)
+      const targetAncestor = getAncestorAtRing(edge.target, targetRing, nodeById)
+
+      if (!sourceAncestor || !targetAncestor) continue
+
+      // Skip internal edges
+      if (targetIndicatorIds.has(edge.target)) continue
+
+      const key = sourceAncestor.id + '->' + targetAncestor.id
+
+      if (!outputEdges.has(key)) {
+        outputEdges.set(key, {
+          edge: {
+            source: String(sourceAncestor.id),
+            target: String(targetAncestor.id),
+            beta: 0,
+            sourceSector: getSectorForNode(String(sourceAncestor.id), nodeById),
+            targetSector: getSectorForNode(String(targetAncestor.id), nodeById),
+            isAggregated: true,
+            pathwayCount: 0,
+            pathways: []
+          },
+          pathways: []
+        })
+      }
+
+      const agg = outputEdges.get(key)!
+      agg.pathways.push({
+        childSource: edge.source,
+        childTarget: edge.target,
+        beta: edge.beta
+      })
+    }
+  }
+
+  // Calculate averages and attach pathways
+  for (const [, agg] of inputEdges) {
+    const avgBeta = agg.pathways.reduce((sum, p) => sum + Math.abs(p.beta), 0) / agg.pathways.length
+    agg.edge.beta = avgBeta
+    agg.edge.pathwayCount = agg.pathways.length
+    agg.edge.pathways = agg.pathways.sort((a, b) => Math.abs(b.beta) - Math.abs(a.beta))
+  }
+
+  for (const [, agg] of outputEdges) {
+    const avgBeta = agg.pathways.reduce((sum, p) => sum + Math.abs(p.beta), 0) / agg.pathways.length
+    agg.edge.beta = avgBeta
+    agg.edge.pathwayCount = agg.pathways.length
+    agg.edge.pathways = agg.pathways.sort((a, b) => Math.abs(b.beta) - Math.abs(a.beta))
+  }
+
+  return {
+    inputEdges,
+    outputEdges,
+    activeChildCount: activeIndicatorIds.size,
+    totalChildCount
+  }
+}
+
+/**
  * Group edges by sector (for collapsible groups in Local View)
  */
 export function groupEdgesBySector(
@@ -107,15 +338,32 @@ export function groupEdgesBySector(
 }
 
 /**
+ * Get shape based on node role
+ */
+function getShapeForRole(role: 'target' | 'input' | 'output'): LocalNodeShape {
+  switch (role) {
+    case 'target': return 'rectangle'
+    case 'input': return 'pill'
+    case 'output': return 'hexagon'
+  }
+}
+
+/**
  * Create LocalViewNode from raw node data
  */
 export function toLocalViewNode(
   rawNode: RawNodeV21,
   nodeById: Map<string, RawNodeV21>,
   domainColors: Record<string, string>,
-  role: 'target' | 'input' | 'output'
+  role: 'target' | 'input' | 'output',
+  depth: number = 1,
+  beta?: number,
+  visualBeta: number = 1.0,
+  parentId?: string
 ): LocalViewNode {
   const sector = getSectorForNode(String(rawNode.id), nodeById)
+  const childIds = rawNode.children?.map(c => String(c)) ?? []
+  const hasChildren = childIds.length > 0
 
   return {
     id: String(rawNode.id),
@@ -126,78 +374,431 @@ export function toLocalViewNode(
     importance: rawNode.importance ?? 0,
     isTarget: role === 'target',
     isInput: role === 'input',
-    isOutput: role === 'output'
+    isOutput: role === 'output',
+    depth,
+    shape: getShapeForRole(role),
+    beta,
+    visualBeta,
+    parentId,
+    hasChildren,
+    childIds
   }
 }
 
 /**
- * Build complete Local View data for given targets
+ * Build complete Local View data for given targets with per-node expansion
+ *
+ * Uses PROPAGATED BETAS for visual hierarchy:
+ * - Targets have visualBeta = 1.0 (reference point)
+ * - Children: visualBeta = parent's visualBeta × edge beta
+ * - This ensures visual hierarchy: children always smaller than parents
+ *
+ * @param expandedInputNodes - Set of node IDs whose causes are expanded (beyond global depth)
+ * @param expandedOutputNodes - Set of node IDs whose effects are expanded (beyond global depth)
+ * @param maxInputDepth - Global max depth for causes (1-3)
+ * @param maxOutputDepth - Global max depth for effects (1-3)
  */
 export function buildLocalViewData(
   targetIds: string[],
   allEdges: RawEdge[],
   nodeById: Map<string, RawNodeV21>,
   domainColors: Record<string, string>,
-  threshold: number = DEFAULT_BETA_THRESHOLD
+  threshold: number = DEFAULT_BETA_THRESHOLD,
+  expandedInputNodes: Set<string> = new Set(),
+  expandedOutputNodes: Set<string> = new Set(),
+  maxInputDepth: number = 1,
+  maxOutputDepth: number = 1
 ): {
   targets: LocalViewNode[]
   inputs: LocalViewNode[]
   outputs: LocalViewNode[]
   edges: LocalViewEdge[]
+  targetRing: number
+  mode: LocalViewMode
+  activeChildCount?: number
+  totalChildCount?: number
 } {
-  // Get causal edges
-  const causalEdges = getCausalEdges(allEdges)
+  // Determine target ring level from first target
+  const firstTarget = targetIds[0] ? nodeById.get(targetIds[0]) : undefined
+  const targetRing = firstTarget?.layer ?? 5
 
-  // Collect all edges for targets
-  const relevantEdges: LocalViewEdge[] = []
-  const inputNodeIds = new Set<string>()
-  const outputNodeIds = new Set<string>()
+  // Check if targets need aggregation (non-Ring-5 nodes without direct same-ring edges)
+  // For Ring 1-4, we aggregate from their Ring 5 descendants
+  const needsAggregation = targetRing < 5 && targetIds.every(
+    id => !hasDirectSameRingEdges(id, allEdges, nodeById)
+  )
 
-  for (const targetId of targetIds) {
-    // Incoming edges (causes)
-    const incoming = getIncomingEdges(targetId, causalEdges, threshold)
-    for (const edge of incoming) {
-      if (!targetIds.includes(edge.source)) {
-        inputNodeIds.add(edge.source)
-        edge.sourceSector = getSectorForNode(edge.source, nodeById)
-        edge.targetSector = getSectorForNode(edge.target, nodeById)
-        relevantEdges.push(edge)
+  // === AGGREGATED MODE: Non-indicator nodes without direct edges ===
+  // Uses BFS to support multi-layer traversal at the aggregated ring level
+  if (needsAggregation) {
+    // Build target nodes
+    const targets: LocalViewNode[] = targetIds
+      .map(id => nodeById.get(id))
+      .filter((n): n is RawNodeV21 => n !== undefined)
+      .map(n => {
+        const node = toLocalViewNode(n, nodeById, domainColors, 'target', 0, undefined, 1.0, undefined)
+        node.hasMoreInputs = false
+        node.hasMoreOutputs = false
+        node.isInputExpanded = true
+        node.isOutputExpanded = true
+        return node
+      })
+
+    const inputs: LocalViewNode[] = []
+    const outputs: LocalViewNode[] = []
+    const edges: LocalViewEdge[] = []
+    const allCollectedIds = new Set<string>(targetIds)
+    const nodeVisualBetaMap = new Map<string, number>()
+    const nodeParentMap = new Map<string, string>()
+    const hasMoreInputsMap = new Map<string, boolean>()
+    const hasMoreOutputsMap = new Map<string, boolean>()
+
+    // Initialize targets with visualBeta = 1.0
+    for (const targetId of targetIds) {
+      nodeVisualBetaMap.set(targetId, 1.0)
+    }
+
+    // === BFS FOR INPUTS (AGGREGATED) ===
+    const inputQueue: Array<{ nodeId: string; depth: number }> =
+      targetIds.map(id => ({ nodeId: id, depth: 0 }))
+
+    while (inputQueue.length > 0) {
+      const { nodeId, depth: parentDepth } = inputQueue.shift()!
+      const currentDepth = parentDepth + 1
+
+      // Check expansion criteria
+      const isTarget = targetIds.includes(nodeId)
+      const withinGlobalDepth = parentDepth < maxInputDepth
+      const isExpanded = isTarget || withinGlobalDepth || expandedInputNodes.has(nodeId)
+
+      // Get aggregated inputs for this node
+      const nodeAggregated = aggregateChildEdges([nodeId], allEdges, nodeById, threshold)
+      const potentialInputs = [...nodeAggregated.inputEdges.values()]
+        .filter(({ edge }) => !allCollectedIds.has(edge.source))
+
+      // Mark if has unexpanded inputs
+      if (potentialInputs.length > 0 && !isTarget) {
+        hasMoreInputsMap.set(nodeId, !isExpanded)
+      }
+
+      if (!isExpanded) continue
+
+      const parentVisualBeta = nodeVisualBetaMap.get(nodeId) ?? 1.0
+
+      for (const { edge } of potentialInputs) {
+        const rawNode = nodeById.get(edge.source)
+        if (!rawNode) continue
+
+        allCollectedIds.add(edge.source)
+
+        // Calculate visual beta with propagation
+        const edgeBeta = Math.abs(edge.beta)
+        const PARENT_CAP = 0.65
+        const DEPTH_SHRINK = 0.80
+        const cappedBeta = Math.min(edgeBeta, parentVisualBeta * PARENT_CAP)
+        const childVisualBeta = cappedBeta * Math.pow(DEPTH_SHRINK, currentDepth)
+        nodeVisualBetaMap.set(edge.source, childVisualBeta)
+        nodeParentMap.set(edge.source, edge.target)
+
+        const node = toLocalViewNode(
+          rawNode, nodeById, domainColors, 'input',
+          currentDepth, edge.beta, childVisualBeta, edge.target
+        )
+        inputs.push(node)
+        edges.push(edge)
+
+        // Continue BFS
+        inputQueue.push({ nodeId: edge.source, depth: currentDepth })
       }
     }
 
-    // Outgoing edges (effects)
-    const outgoing = getOutgoingEdges(targetId, causalEdges, threshold)
-    for (const edge of outgoing) {
-      if (!targetIds.includes(edge.target)) {
-        outputNodeIds.add(edge.target)
-        edge.sourceSector = getSectorForNode(edge.source, nodeById)
-        edge.targetSector = getSectorForNode(edge.target, nodeById)
-        relevantEdges.push(edge)
+    // === BFS FOR OUTPUTS (AGGREGATED) ===
+    const outputQueue: Array<{ nodeId: string; depth: number }> =
+      targetIds.map(id => ({ nodeId: id, depth: 0 }))
+
+    while (outputQueue.length > 0) {
+      const { nodeId, depth: parentDepth } = outputQueue.shift()!
+      const currentDepth = parentDepth + 1
+
+      const isTarget = targetIds.includes(nodeId)
+      const withinGlobalDepth = parentDepth < maxOutputDepth
+      const isExpanded = isTarget || withinGlobalDepth || expandedOutputNodes.has(nodeId)
+
+      const nodeAggregated = aggregateChildEdges([nodeId], allEdges, nodeById, threshold)
+      const potentialOutputs = [...nodeAggregated.outputEdges.values()]
+        .filter(({ edge }) => !allCollectedIds.has(edge.target))
+
+      if (potentialOutputs.length > 0 && !isTarget) {
+        hasMoreOutputsMap.set(nodeId, !isExpanded)
       }
+
+      if (!isExpanded) continue
+
+      const parentVisualBeta = nodeVisualBetaMap.get(nodeId) ?? 1.0
+
+      for (const { edge } of potentialOutputs) {
+        const rawNode = nodeById.get(edge.target)
+        if (!rawNode) continue
+
+        allCollectedIds.add(edge.target)
+
+        const edgeBeta = Math.abs(edge.beta)
+        const PARENT_CAP = 0.65
+        const DEPTH_SHRINK = 0.80
+        const cappedBeta = Math.min(edgeBeta, parentVisualBeta * PARENT_CAP)
+        const childVisualBeta = cappedBeta * Math.pow(DEPTH_SHRINK, currentDepth)
+        nodeVisualBetaMap.set(edge.target, childVisualBeta)
+        nodeParentMap.set(edge.target, edge.source)
+
+        const node = toLocalViewNode(
+          rawNode, nodeById, domainColors, 'output',
+          currentDepth, edge.beta, childVisualBeta, edge.source
+        )
+        outputs.push(node)
+        edges.push(edge)
+
+        outputQueue.push({ nodeId: edge.target, depth: currentDepth })
+      }
+    }
+
+    // Update hasMoreInputs/Outputs on all nodes
+    for (const node of inputs) {
+      node.hasMoreInputs = hasMoreInputsMap.get(node.id) ?? false
+    }
+    for (const node of outputs) {
+      node.hasMoreOutputs = hasMoreOutputsMap.get(node.id) ?? false
+    }
+    // Also update targets
+    for (const target of targets) {
+      target.hasMoreInputs = hasMoreInputsMap.get(target.id) ?? false
+      target.hasMoreOutputs = hasMoreOutputsMap.get(target.id) ?? false
+    }
+
+    const hasAnyEdges = inputs.length > 0 || outputs.length > 0
+    return {
+      targets,
+      inputs,
+      outputs,
+      edges,
+      targetRing,
+      mode: hasAnyEdges ? 'aggregated' : 'empty',
+      activeChildCount: 0,
+      totalChildCount: 0
     }
   }
 
-  // Build node lists
+  // === DIRECT MODE: Normal same-ring edge processing ===
+  // Get causal edges filtered to same-ring connections
+  const causalEdges = getCausalEdges(allEdges, nodeById, targetRing)
+
+  // Track all edges and nodes
+  const relevantEdges: LocalViewEdge[] = []
+  const inputNodes = new Map<string, { depth: number }>()
+  const outputNodes = new Map<string, { depth: number }>()
+
+  // All node IDs that are targets or already collected (to avoid duplicates)
+  const allCollectedIds = new Set<string>(targetIds)
+
+  // Track the beta, visual beta, and parent for each node
+  const nodeBetaMap = new Map<string, number>()         // Original edge beta (for display)
+  const nodeVisualBetaMap = new Map<string, number>()   // Propagated beta (for sizing)
+  const nodeParentMap = new Map<string, string>()
+
+  // Track which nodes have potential children (for +/- buttons)
+  const hasMoreInputsMap = new Map<string, boolean>()
+  const hasMoreOutputsMap = new Map<string, boolean>()
+
+  // Track which nodes CAN expand (have any children at current threshold)
+  const canExpandMap = new Map<string, boolean>()
+
+  // Initialize targets with visualBeta = 1.0 (reference point)
+  for (const targetId of targetIds) {
+    nodeVisualBetaMap.set(targetId, 1.0)
+  }
+
+  // === COLLECT INPUT NODES (causes) via BFS ===
+  // Queue: [nodeId, depth]
+  const inputQueue: Array<[string, number]> = targetIds.map(id => [id, 0])
+
+  while (inputQueue.length > 0) {
+    const [nodeId, parentDepth] = inputQueue.shift()!
+    const currentDepth = parentDepth + 1
+
+    // Check if this node's inputs should be expanded:
+    // - Targets always expand
+    // - Nodes within global depth limit expand
+    // - Individually expanded nodes expand
+    const isTarget = targetIds.includes(nodeId)
+    const withinGlobalDepth = parentDepth < maxInputDepth
+    const isExpanded = isTarget || withinGlobalDepth || expandedInputNodes.has(nodeId)
+
+    // Get incoming edges for this node
+    const incoming = getIncomingEdges(nodeId, causalEdges, threshold)
+
+    // Check if there are any potential inputs (for showing +/- button)
+    const potentialInputs = incoming.filter(e => !allCollectedIds.has(e.source))
+    if (potentialInputs.length > 0 && !targetIds.includes(nodeId)) {
+      hasMoreInputsMap.set(nodeId, !isExpanded)
+      canExpandMap.set(nodeId, true)  // Has children at current threshold
+    }
+
+    // Only add children if this node is expanded
+    if (!isExpanded) continue
+
+    const parentVisualBeta = nodeVisualBetaMap.get(nodeId) ?? 1.0
+
+    for (const edge of incoming) {
+      // Skip if already collected
+      if (allCollectedIds.has(edge.source)) continue
+
+      inputNodes.set(edge.source, { depth: currentDepth })
+      allCollectedIds.add(edge.source)
+
+      // Store original beta (for display) and parent
+      const edgeBeta = Math.abs(edge.beta)
+      nodeBetaMap.set(edge.source, edgeBeta)
+      nodeParentMap.set(edge.source, edge.target)
+
+      // Calculate propagated visual beta
+      const PARENT_CAP = 0.65
+      const DEPTH_SHRINK = 0.80
+      const uncappedBeta = parentVisualBeta * edgeBeta
+      const cappedBeta = Math.min(uncappedBeta, parentVisualBeta * PARENT_CAP)
+      const childVisualBeta = cappedBeta * Math.pow(DEPTH_SHRINK, currentDepth)
+      nodeVisualBetaMap.set(edge.source, childVisualBeta)
+
+      // Add edge with sector info
+      edge.sourceSector = getSectorForNode(edge.source, nodeById)
+      edge.targetSector = getSectorForNode(edge.target, nodeById)
+      relevantEdges.push(edge)
+
+      // Add to queue for further expansion
+      inputQueue.push([edge.source, currentDepth])
+    }
+  }
+
+  // === COLLECT OUTPUT NODES (effects) via BFS ===
+  const outputQueue: Array<[string, number]> = targetIds.map(id => [id, 0])
+
+  while (outputQueue.length > 0) {
+    const [nodeId, parentDepth] = outputQueue.shift()!
+    const currentDepth = parentDepth + 1
+
+    // Check if this node's outputs should be expanded:
+    // - Targets always expand
+    // - Nodes within global depth limit expand
+    // - Individually expanded nodes expand
+    const isTarget = targetIds.includes(nodeId)
+    const withinGlobalDepth = parentDepth < maxOutputDepth
+    const isExpanded = isTarget || withinGlobalDepth || expandedOutputNodes.has(nodeId)
+
+    // Get outgoing edges for this node
+    const outgoing = getOutgoingEdges(nodeId, causalEdges, threshold)
+
+    // Check if there are any potential outputs (for showing +/- button)
+    const potentialOutputs = outgoing.filter(e => !allCollectedIds.has(e.target))
+    if (potentialOutputs.length > 0 && !targetIds.includes(nodeId)) {
+      hasMoreOutputsMap.set(nodeId, !isExpanded)
+      canExpandMap.set(nodeId, true)  // Has children at current threshold
+    }
+
+    // Only add children if this node is expanded
+    if (!isExpanded) continue
+
+    const parentVisualBeta = nodeVisualBetaMap.get(nodeId) ?? 1.0
+
+    for (const edge of outgoing) {
+      // Skip if already collected
+      if (allCollectedIds.has(edge.target)) continue
+
+      outputNodes.set(edge.target, { depth: currentDepth })
+      allCollectedIds.add(edge.target)
+
+      // Store original beta (for display) and parent
+      const edgeBeta = Math.abs(edge.beta)
+      nodeBetaMap.set(edge.target, edgeBeta)
+      nodeParentMap.set(edge.target, edge.source)
+
+      // Calculate propagated visual beta
+      const PARENT_CAP = 0.65
+      const DEPTH_SHRINK = 0.80
+      const uncappedBeta = parentVisualBeta * edgeBeta
+      const cappedBeta = Math.min(uncappedBeta, parentVisualBeta * PARENT_CAP)
+      const childVisualBeta = cappedBeta * Math.pow(DEPTH_SHRINK, currentDepth)
+      nodeVisualBetaMap.set(edge.target, childVisualBeta)
+
+      // Add edge with sector info
+      edge.sourceSector = getSectorForNode(edge.source, nodeById)
+      edge.targetSector = getSectorForNode(edge.target, nodeById)
+      relevantEdges.push(edge)
+
+      // Add to queue for further expansion
+      outputQueue.push([edge.target, currentDepth])
+    }
+  }
+
+  // Targets are always expanded, so hasMore is always false for them
+  for (const targetId of targetIds) {
+    hasMoreInputsMap.set(targetId, false)
+    hasMoreOutputsMap.set(targetId, false)
+  }
+
+  // === BUILD NODE LISTS ===
   const targets: LocalViewNode[] = targetIds
     .map(id => nodeById.get(id))
     .filter((n): n is RawNodeV21 => n !== undefined)
-    .map(n => toLocalViewNode(n, nodeById, domainColors, 'target'))
+    .map(n => {
+      const node = toLocalViewNode(n, nodeById, domainColors, 'target', 0, undefined, 1.0, undefined)
+      node.hasMoreInputs = false  // Targets always show their direct children
+      node.hasMoreOutputs = false
+      node.isInputExpanded = true
+      node.isOutputExpanded = true
+      return node
+    })
 
-  const inputs: LocalViewNode[] = Array.from(inputNodeIds)
-    .map(id => nodeById.get(id))
-    .filter((n): n is RawNodeV21 => n !== undefined)
-    .map(n => toLocalViewNode(n, nodeById, domainColors, 'input'))
+  // Build input nodes list
+  const inputs: LocalViewNode[] = []
+  for (const [id, { depth }] of inputNodes) {
+    const rawNode = nodeById.get(id)
+    if (rawNode) {
+      const beta = nodeBetaMap.get(id)
+      const visualBeta = nodeVisualBetaMap.get(id) ?? 0.5
+      const parentId = nodeParentMap.get(id)
+      const node = toLocalViewNode(rawNode, nodeById, domainColors, 'input', depth, beta, visualBeta, parentId)
+      node.hasMoreInputs = hasMoreInputsMap.get(id) ?? false
+      node.isInputExpanded = expandedInputNodes.has(id)
+      node.canExpand = canExpandMap.get(id) ?? false
+      inputs.push(node)
+    }
+  }
 
-  const outputs: LocalViewNode[] = Array.from(outputNodeIds)
-    .map(id => nodeById.get(id))
-    .filter((n): n is RawNodeV21 => n !== undefined)
-    .map(n => toLocalViewNode(n, nodeById, domainColors, 'output'))
+  // Build output nodes list
+  const outputs: LocalViewNode[] = []
+  for (const [id, { depth }] of outputNodes) {
+    const rawNode = nodeById.get(id)
+    if (rawNode) {
+      const beta = nodeBetaMap.get(id)
+      const visualBeta = nodeVisualBetaMap.get(id) ?? 0.5
+      const parentId = nodeParentMap.get(id)
+      const node = toLocalViewNode(rawNode, nodeById, domainColors, 'output', depth, beta, visualBeta, parentId)
+      node.hasMoreOutputs = hasMoreOutputsMap.get(id) ?? false
+      node.isOutputExpanded = expandedOutputNodes.has(id)
+      node.canExpand = canExpandMap.get(id) ?? false
+      outputs.push(node)
+    }
+  }
+
+  // Determine mode based on whether any edges exist
+  const hasAnyEdges = inputs.length > 0 || outputs.length > 0
+  const mode: LocalViewMode = hasAnyEdges ? 'direct' : 'empty'
 
   return {
     targets,
     inputs,
     outputs,
-    edges: relevantEdges
+    edges: relevantEdges,
+    targetRing,
+    mode
   }
 }
 

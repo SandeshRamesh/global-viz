@@ -88,6 +88,12 @@ export interface RingConfig {
 /** View mode for the application */
 export type ViewMode = 'global' | 'local' | 'split'
 
+/** Shape types for different node roles in Local View */
+export type LocalNodeShape = 'pill' | 'rectangle' | 'hexagon'
+
+/** Flow direction for Local View layout */
+export type FlowDirection = 'horizontal' | 'vertical'
+
 /** A node in the Local View */
 export interface LocalViewNode {
   id: string
@@ -99,6 +105,18 @@ export interface LocalViewNode {
   isTarget: boolean     // Is this a selected target node?
   isInput: boolean      // Is this an input (cause) to a target?
   isOutput: boolean     // Is this an output (effect) of a target?
+  depth: number         // Depth level: 1 = direct, 2 = indirect, 3 = 2nd indirect
+  shape: LocalNodeShape // Shape based on role: pill (input), rectangle (target), hexagon (output)
+  beta?: number         // Original beta value from direct edge (for display)
+  visualBeta: number    // Propagated beta for sizing (parent's visualBeta × edge beta)
+  parentId?: string     // ID of parent node in the causal tree (for tree layout)
+  hasMoreInputs?: boolean   // Has unexpanded causes
+  hasMoreOutputs?: boolean  // Has unexpanded effects
+  isInputExpanded?: boolean  // Are this node's causes shown?
+  isOutputExpanded?: boolean // Are this node's effects shown?
+  canExpand?: boolean        // Has any children at current threshold (for dimming)
+  hasChildren?: boolean      // Has hierarchical children (for drill-down)
+  childIds?: string[]        // IDs of hierarchical children
 }
 
 /** A causal edge in the Local View */
@@ -108,7 +126,20 @@ export interface LocalViewEdge {
   beta: number          // Effect size (β coefficient)
   sourceSector: string  // Sector of source node
   targetSector: string  // Sector of target node
+  isAggregated?: boolean     // True if this is an aggregated edge from children
+  pathwayCount?: number      // Number of child pathways (for aggregated edges)
+  pathways?: EdgePathway[]   // Detailed pathways (for expansion)
 }
+
+/** A pathway through child nodes (for aggregated edges) */
+export interface EdgePathway {
+  childSource: string   // Child indicator that is the source
+  childTarget: string   // Child indicator that is the target
+  beta: number          // Beta value for this specific pathway
+}
+
+/** Mode for Local View data */
+export type LocalViewMode = 'direct' | 'aggregated' | 'empty'
 
 /** Aggregated data for Local View */
 export interface LocalViewData {

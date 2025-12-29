@@ -3,6 +3,12 @@ import * as d3 from 'd3'
 import Fuse from 'fuse.js'
 import './styles/App.css'
 import { debug } from './utils/debug'
+import {
+  getStateFromBrowserURL,
+  updateBrowserURL,
+  copyURLToClipboard,
+  type URLState
+} from './utils/urlState'
 import type {
   RawNodeV21,
   GraphDataV21,
@@ -12,6 +18,7 @@ import type {
 } from './types'
 import { ViewTabs } from './components/ViewTabs'
 import { LocalView } from './components/LocalView'
+import { Breadcrumb } from './components/Breadcrumb'
 import { getCausalEdges } from './utils/causalEdges'
 import {
   computeRadialLayout,
@@ -173,6 +180,8 @@ function App() {
   } | null>(null)
   const [domainCounts, setDomainCounts] = useState<Record<string, number>>({})
   const [hoveredNode, setHoveredNode] = useState<ExpandableNode | null>(null)
+  const [breadcrumbNodeId, setBreadcrumbNodeId] = useState<string | null>(null)  // Persists last hovered node for breadcrumb
+  const tooltipNodeRef = useRef<ExpandableNode | null>(null)  // Caches last hovered node for smooth tooltip fade
   const [ringStats, setRingStats] = useState<Array<{ label: string; count: number; minDistance: number }>>([])
   const [fps, setFps] = useState<number>(0)
 
@@ -186,13 +195,19 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const recentSearchesTimeoutRef = useRef<number | null>(null)
   const [highlightedPath, setHighlightedPath] = useState<Set<string>>(new Set())
+  const [highlightedTarget, setHighlightedTarget] = useState<string | null>(null)  // The searched node itself
 
   // View mode state (Global vs Local)
   const [viewMode, setViewMode] = useState<ViewMode>('global')
   const [localViewTargets, setLocalViewTargets] = useState<string[]>([])
   const [localViewBetaThreshold, setLocalViewBetaThreshold] = useState(0.5)  // Synced from LocalView
+  const [localViewInputDepth, setLocalViewInputDepth] = useState(1)  // Global depth for causes
+  const [localViewOutputDepth, setLocalViewOutputDepth] = useState(1)  // Global depth for effects
   const [splitRatio, setSplitRatio] = useState(0.67) // 0-1, percentage for left pane (2/3 global, 1/3 local)
+  const [drillDownHistory, setDrillDownHistory] = useState<{ prevTargets: string[]; prevBeta: number } | null>(null)
   const isDraggingRef = useRef(false)
+  const localViewResetRef = useRef<(() => void) | null>(null)  // Store LocalView's reset function
+  const urlStateRestoredRef = useRef(false)  // Track if URL state has been restored
 
   // Handle split divider drag
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -228,19 +243,25 @@ function App() {
       if (prev.includes(nodeId)) return prev
       return [...prev, nodeId]
     })
-    // Default to split view when adding a node (shows both views)
-    setViewMode('split')
+    // Switch to local view when double-clicking from global view
+    // Stay in local view if already there
+    setViewMode(prev => prev === 'global' ? 'local' : prev)
+    // Clear drill-down history (manual change invalidates undo)
+    setDrillDownHistory(null)
   }, [])
 
   // Remove a node from Local View targets
   const removeFromLocalView = useCallback((nodeId: string) => {
     setLocalViewTargets(prev => prev.filter(id => id !== nodeId))
+    // Clear drill-down history (manual change invalidates undo)
+    setDrillDownHistory(null)
   }, [])
 
   // Clear all Local View targets
   const clearLocalViewTargets = useCallback(() => {
     setLocalViewTargets([])
     setViewMode('global')
+    setDrillDownHistory(null)
   }, [])
 
   // Viewport-aware layout engine
@@ -317,10 +338,70 @@ function App() {
     return new Map(rawData.nodes.map(n => [String(n.id), n]))
   }, [rawData])
 
+  // Drill down: replace targets with children (works for targets and non-targets)
+  // Also handles undo (drill up) when history exists
+  const drillDownTarget = useCallback((nodeId: string) => {
+    const node = nodeByIdMap.get(nodeId)
+    if (!node?.children || node.children.length === 0) return
+
+    const childIds = node.children.map(c => String(c))
+    const prevBeta = localViewBetaThreshold
+    const prevTargets = [...localViewTargets]
+    const isCurrentTarget = localViewTargets.includes(nodeId)
+
+    if (isCurrentTarget) {
+      // Replace the target with its children
+      setLocalViewTargets(prev => {
+        const filtered = prev.filter(id => id !== nodeId)
+        return [...filtered, ...childIds]
+      })
+    } else {
+      // For non-target nodes: replace ALL targets with just the children
+      // This drills into that branch of the hierarchy
+      setLocalViewTargets(childIds)
+    }
+
+    // Always save history for undo (can go back one step)
+    setDrillDownHistory({ prevTargets, prevBeta })
+
+    // Auto-adjust beta threshold based on number of new targets
+    const childCount = childIds.length
+    if (childCount > 10) {
+      setLocalViewBetaThreshold(prev => Math.max(prev, 1.0))
+    } else if (childCount > 5) {
+      setLocalViewBetaThreshold(prev => Math.max(prev, 0.7))
+    }
+  }, [nodeByIdMap, localViewTargets, localViewBetaThreshold])
+
+  // Drill up: restore previous targets from history
+  const drillUpTarget = useCallback(() => {
+    if (!drillDownHistory) return
+    setLocalViewTargets(drillDownHistory.prevTargets)
+    setLocalViewBetaThreshold(drillDownHistory.prevBeta)
+    setDrillDownHistory(null)
+  }, [drillDownHistory])
+
   // All nodes from layout (stored for filtering)
   const [allNodes, setAllNodes] = useState<ExpandableNode[]>([])
   const [allEdges, setAllEdges] = useState<StructuralEdge[]>([])
   const [computedRingsState, setComputedRingsState] = useState<Array<{ radius: number; nodeSize: number; label?: string }>>([])
+
+  // Share current state via URL
+  const shareCurrentState = useCallback(async (): Promise<boolean> => {
+    const state: URLState = {
+      view: viewMode,
+      expanded: Array.from(expandedNodes),
+      targets: localViewTargets,
+      beta: localViewBetaThreshold !== 0.5 ? localViewBetaThreshold : undefined,
+      highlight: highlightedTarget || undefined,
+      zoom: currentTransformRef.current ? {
+        k: currentTransformRef.current.k,
+        x: currentTransformRef.current.x,
+        y: currentTransformRef.current.y
+      } : undefined
+    }
+    return copyURLToClipboard(state)
+  }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
 
   // Toggle expansion of a node
   const toggleExpansion = useCallback((nodeId: string) => {
@@ -534,91 +615,121 @@ function App() {
   // Compute all node IDs visible in Local View (targets + inputs + outputs)
   // Used for glow highlighting in Global View
   // Track node roles for glow colors: target=cyan, input=orange, output=purple
+  // Supports multi-depth (causes of causes, effects of effects)
   const localViewNodeRoles = useMemo(() => {
     const roles = new Map<string, 'target' | 'input' | 'output'>()
     if (localViewTargets.length === 0 || !rawData) return roles
 
     const causalEdges = getCausalEdges(rawData.edges)
 
+    // Mark targets
     for (const targetId of localViewTargets) {
       roles.set(targetId, 'target')
+    }
 
-      // Add input nodes (sources of edges pointing to target)
-      causalEdges
-        .filter(e => e.target === targetId && Math.abs(e.beta) >= localViewBetaThreshold)
-        .forEach(e => {
-          if (!roles.has(e.source)) roles.set(e.source, 'input')
-        })
+    // Collect input nodes (causes) up to inputDepth levels
+    let currentInputSources = new Set(localViewTargets)
+    for (let depth = 1; depth <= localViewInputDepth; depth++) {
+      const nextSources = new Set<string>()
+      for (const nodeId of currentInputSources) {
+        causalEdges
+          .filter(e => e.target === nodeId && Math.abs(e.beta) >= localViewBetaThreshold)
+          .forEach(e => {
+            if (!roles.has(e.source)) {
+              roles.set(e.source, 'input')
+              nextSources.add(e.source)
+            }
+          })
+      }
+      currentInputSources = nextSources
+    }
 
-      // Add output nodes (targets of edges from target)
-      causalEdges
-        .filter(e => e.source === targetId && Math.abs(e.beta) >= localViewBetaThreshold)
-        .forEach(e => {
-          if (!roles.has(e.target)) roles.set(e.target, 'output')
-        })
+    // Collect output nodes (effects) up to outputDepth levels
+    let currentOutputSources = new Set(localViewTargets)
+    for (let depth = 1; depth <= localViewOutputDepth; depth++) {
+      const nextSources = new Set<string>()
+      for (const nodeId of currentOutputSources) {
+        causalEdges
+          .filter(e => e.source === nodeId && Math.abs(e.beta) >= localViewBetaThreshold)
+          .forEach(e => {
+            if (!roles.has(e.target)) {
+              roles.set(e.target, 'output')
+              nextSources.add(e.target)
+            }
+          })
+      }
+      currentOutputSources = nextSources
     }
 
     return roles
-  }, [localViewTargets, rawData, localViewBetaThreshold])
+  }, [localViewTargets, rawData, localViewBetaThreshold, localViewInputDepth, localViewOutputDepth])
 
   // Flat set of all Local View node IDs (for filtering)
   const localViewNodeIds = useMemo(() => {
     return new Set(localViewNodeRoles.keys())
   }, [localViewNodeRoles])
 
-  // Reset view: fit to show all highlighted nodes (Local View nodes) or collapse if none
+  // Reset view: handles both Global and Local views based on current viewMode
   const resetView = useCallback(() => {
-    if (!zoomRef.current || !svgRef.current) return
+    // Reset Local View if in local or split mode
+    if ((viewMode === 'local' || viewMode === 'split') && localViewResetRef.current) {
+      localViewResetRef.current()
+    }
+
+    // Reset Global View if in global or split mode
+    if (viewMode === 'global' || viewMode === 'split') {
+      if (!zoomRef.current || !svgRef.current) return
+
+      const svg = d3.select(svgRef.current)
+
+      // Always collapse all expanded nodes
+      setExpandedNodes(new Set())
+      currentTransformRef.current = null
+
+      // Zoom to show root and ring 1 (outcomes)
+      const rootAndOutcomes = allNodes.filter(n => n.ring <= 1)
+      const initialTransform = calculateInitialTransform(rootAndOutcomes.length > 0 ? rootAndOutcomes : allNodes.filter(n => n.ring === 0))
+      svg.transition().duration(300).call(zoomRef.current.transform, initialTransform)
+    }
+  }, [allNodes, calculateInitialTransform, viewMode])
+
+  // Fit view to all visible nodes (for double-click on empty space)
+  const fitToVisibleNodes = useCallback(() => {
+    if (!zoomRef.current || !svgRef.current || visibleNodes.length === 0) return
 
     const svg = d3.select(svgRef.current)
     const width = viewMode === 'split' ? window.innerWidth * splitRatio : window.innerWidth
     const height = window.innerHeight
 
-    // If we have Local View nodes highlighted, fit to show them all
-    if (localViewNodeIds.size > 0) {
-      // Get all highlighted nodes that are currently visible
-      const highlightedNodes = visibleNodes.filter(n => localViewNodeIds.has(n.id))
+    // Calculate bounding box of all visible nodes
+    const allXs = visibleNodes.map(n => n.x)
+    const allYs = visibleNodes.map(n => n.y)
 
-      if (highlightedNodes.length > 0) {
-        // Calculate bounding box of highlighted nodes + root (0,0)
-        const allXs = highlightedNodes.map(n => n.x)
-        const allYs = highlightedNodes.map(n => n.y)
+    const boundsMinX = Math.min(...allXs)
+    const boundsMaxX = Math.max(...allXs)
+    const boundsMinY = Math.min(...allYs)
+    const boundsMaxY = Math.max(...allYs)
 
-        const boundsMinX = Math.min(0, ...allXs)
-        const boundsMaxX = Math.max(0, ...allXs)
-        const boundsMinY = Math.min(0, ...allYs)
-        const boundsMaxY = Math.max(0, ...allYs)
+    const boundsWidth = boundsMaxX - boundsMinX
+    const boundsHeight = boundsMaxY - boundsMinY
 
-        const boundsWidth = boundsMaxX - boundsMinX
-        const boundsHeight = boundsMaxY - boundsMinY
+    // Calculate center
+    const centerX = (boundsMinX + boundsMaxX) / 2
+    const centerY = (boundsMinY + boundsMaxY) / 2
 
-        // Calculate center
-        const centerX = (boundsMinX + boundsMaxX) / 2
-        const centerY = (boundsMinY + boundsMaxY) / 2
+    // Calculate scale to fit with padding
+    const padding = 0.1
+    const scaleX = width * (1 - 2 * padding) / Math.max(boundsWidth, 1)
+    const scaleY = height * (1 - 2 * padding) / Math.max(boundsHeight, 1)
+    const fitScale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
 
-        // Calculate scale to fit with tight padding (5% margin) to fill screen
-        const padding = 0.05
-        const scaleX = width * (1 - 2 * padding) / Math.max(boundsWidth, 1)
-        const scaleY = height * (1 - 2 * padding) / Math.max(boundsHeight, 1)
-        const fitScale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
+    const newX = width / 2 - centerX * fitScale
+    const newY = height / 2 - centerY * fitScale
+    const newTransform = d3.zoomIdentity.translate(newX, newY).scale(fitScale)
 
-        const newX = width / 2 - centerX * fitScale
-        const newY = height / 2 - centerY * fitScale
-        const newTransform = d3.zoomIdentity.translate(newX, newY).scale(fitScale)
-
-        svg.transition().duration(300).call(zoomRef.current.transform, newTransform)
-        currentTransformRef.current = newTransform
-        return
-      }
-    }
-
-    // No highlighted nodes - collapse all and zoom to root
-    setExpandedNodes(new Set())
-    currentTransformRef.current = null
-    const rootOnly = allNodes.filter(n => n.ring === 0)
-    const initialTransform = calculateInitialTransform(rootOnly)
-    svg.transition().duration(300).call(zoomRef.current.transform, initialTransform)
-  }, [allNodes, calculateInitialTransform, localViewNodeIds, visibleNodes, viewMode, splitRatio])
+    svg.transition().duration(300).call(zoomRef.current.transform, newTransform)
+    currentTransformRef.current = newTransform
+  }, [visibleNodes, viewMode, splitRatio])
 
   // Keyboard shortcuts for reset view (R or Home) and view switching (G, L, S)
   useEffect(() => {
@@ -665,6 +776,11 @@ function App() {
       hasChildren: (n.children?.length || 0) > 0
     }))
   }, [rawData])
+
+  // Node map for breadcrumb navigation
+  const breadcrumbNodeMap = useMemo(() => {
+    return new Map(searchableNodes.map(n => [n.id, n]))
+  }, [searchableNodes])
 
   // Fuse.js index for fuzzy search (searches ALL nodes, not just visible)
   const fuseIndex = useMemo(() => {
@@ -762,6 +878,49 @@ function App() {
     // Delay highlight to ensure nodes are rendered first
     setTimeout(() => {
       setHighlightedPath(highlightPath)
+      setHighlightedTarget(node.id)  // Track which node is the actual search target
+    }, 350)
+  }, [getPathToNode, searchableNodes])
+
+  // Show node in Global View (from Local View)
+  // Expands path to node, switches to Global View, highlights and zooms to node
+  const showInGlobalView = useCallback((nodeId: string) => {
+    // Get path from root to target node
+    const pathToExpand = getPathToNode(nodeId)
+
+    // Calculate highlight path: from target node up to Ring 1 ancestor
+    const nodeMap = new Map(searchableNodes.map(n => [n.id, n]))
+    const highlightPath = new Set<string>()
+    highlightPath.add(nodeId)
+
+    let current = nodeMap.get(nodeId)
+    while (current && current.parentId) {
+      const parent = nodeMap.get(current.parentId)
+      if (parent) {
+        highlightPath.add(parent.id)
+        // Stop at Ring 1 (outcome level)
+        if (parent.ring <= 1) break
+      }
+      current = parent
+    }
+
+    // Expand all nodes in path
+    setExpandedNodes(prev => {
+      const next = new Set(prev)
+      pathToExpand.forEach(id => next.add(id))
+      return next
+    })
+
+    // Switch to Global View
+    setViewMode('global')
+
+    // Set pending zoom to frame the target node
+    pendingZoomRef.current = { nodeId, action: 'expand' }
+
+    // Delay highlight to ensure nodes are rendered first
+    setTimeout(() => {
+      setHighlightedPath(highlightPath)
+      setHighlightedTarget(nodeId)
     }, 350)
   }, [getPathToNode, searchableNodes])
 
@@ -792,10 +951,18 @@ function App() {
         setShowSearchResults(false)
         searchInputRef.current?.blur()
       }
+
+      // C to clear Local View targets
+      if (e.key === 'c' || e.key === 'C') {
+        if (localViewTargets.length > 0) {
+          e.preventDefault()
+          clearLocalViewTargets()
+        }
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [localViewTargets.length, clearLocalViewTargets])
 
   // Fetch data once on mount
   const fetchData = useCallback(async () => {
@@ -1301,10 +1468,16 @@ function App() {
     const glowsToKeepVisible = glowSelection.filter(d => !actuallyMovingNodeIds.has(d.id))
 
     // Stationary glows - just update position immediately, stay visible
-    glowsToKeepVisible
-      .attr('cx', d => d.x)
-      .attr('cy', d => d.y)
-      .attr('r', d => getSize(d) + 3)
+    glowsToKeepVisible.each(function(d) {
+      const isTarget = d.id === highlightedTarget
+      d3.select(this)
+        .attr('cx', d.x)
+        .attr('cy', d.y)
+        .attr('r', getSize(d) + 3)
+        .attr('stroke', isTarget ? '#D32F2F' : '#FFCDD2')  // Dark red for target, light pink for parents
+        .attr('stroke-width', 3)
+        .attr('opacity', 0.5)
+    })
 
     // Moving glows - check actual DOM position vs target to determine if animation needed
     if (actuallyMovingNodeIds.size > 0) {
@@ -1312,6 +1485,8 @@ function App() {
       glowsToAnimate.each(function(d) {
         const glowEl = d3.select(this)
         const nodeEl = nodesLayer.select<SVGCircleElement>(`circle.node[data-id="${d.id}"]`)
+        const isTarget = d.id === highlightedTarget
+        const glowColor = isTarget ? '#D32F2F' : '#FFCDD2'
 
         if (!nodeEl.empty()) {
           const nodeCx = parseFloat(nodeEl.attr('cx') || '0')
@@ -1330,6 +1505,7 @@ function App() {
               .attr('cx', nodeCx)
               .attr('cy', nodeCy)
               .attr('opacity', 0)
+              .attr('stroke', glowColor)
               .transition('glow-move')
               .delay(glowRotationDelay)
               .duration(rotationDuration)
@@ -1342,19 +1518,21 @@ function App() {
               .transition('glow-show')
               .delay(glowReappearDelay)
               .duration(200)
-              .attr('opacity', 0.35)
+              .attr('opacity', 0.5)
           } else {
             // Node isn't actually moving - just update glow position, keep visible
             glowEl
               .attr('cx', targetX)
               .attr('cy', targetY)
               .attr('r', getSize(d) + 3)
+              .attr('stroke', glowColor)
+              .attr('opacity', 0.5)
           }
         }
       })
     }
 
-    // Add new glows - subtle styling (RED for search)
+    // Add new glows - RED for search (dark red for target, light pink for parents)
     // During collapse: start at OLD position, animate with nodes, then fade in
     // During expand: wait until node finishes entering, then fade in at final position
     const hasAnyAnimation = isCollapsing || actuallyMovingNodeIds.size > 0 || newNodeIds.size > 0
@@ -1380,7 +1558,7 @@ function App() {
       })
       .attr('r', d => getSize(d) + 3)
       .attr('fill', 'none')
-      .attr('stroke', '#F44336')  // Red for search highlights
+      .attr('stroke', d => d.id === highlightedTarget ? '#D32F2F' : '#FFCDD2')  // Dark red for target, light pink for parents
       .attr('stroke-width', 3)
       .attr('opacity', 0)  // Start hidden
       .style('filter', 'blur(2px)')
@@ -1417,7 +1595,7 @@ function App() {
               .attr('cy', targetY)
               .transition()
               .duration(200)
-              .attr('opacity', 0.35)
+              .attr('opacity', 0.5)
           } else {
             // Node is stationary: snap to position, fade in after exit
             glowEl
@@ -1426,7 +1604,7 @@ function App() {
               .transition()
               .delay(collapseExitEndTime + 50)
               .duration(200)
-              .attr('opacity', 0.35)
+              .attr('opacity', 0.5)
           }
         } else {
           // Node not found, just fade in at target position
@@ -1436,7 +1614,7 @@ function App() {
             .transition()
             .delay(collapseExitEndTime + 50)
             .duration(200)
-            .attr('opacity', 0.35)
+            .attr('opacity', 0.5)
         }
       })
     } else if (hasAnyAnimation) {
@@ -1445,13 +1623,13 @@ function App() {
         .transition('new-glow-expand')
         .delay(expandGlowDelay + 50)
         .duration(200)
-        .attr('opacity', 0.35)
+        .attr('opacity', 0.5)
     } else {
       // No animation - just fade in
       newSearchGlows
         .transition()
         .duration(200)
-        .attr('opacity', 0.35)
+        .attr('opacity', 0.5)
     }
 
     // === GLOW for Local View nodes (different colors by role) ===
@@ -1890,24 +2068,30 @@ function App() {
         // Clear highlight when clicking any node
         if (highlightedPath.size > 0) {
           setHighlightedPath(new Set())
+          setHighlightedTarget(null)
         }
       } else {
         // Clicked on background - clear highlight
         if (highlightedPath.size > 0) {
           setHighlightedPath(new Set())
+          setHighlightedTarget(null)
         }
       }
     })
     .on('dblclick', (event) => {
-      // Double-click to add node to Local View
       const target = event.target as Element
       if (target.classList.contains('node')) {
+        // Double-click on node - add to Local View
         event.stopPropagation()
         event.preventDefault()
         const nodeId = target.getAttribute('data-id')
         if (nodeId) {
           addToLocalView(nodeId)
         }
+      } else {
+        // Double-click on empty space - fit all visible nodes
+        event.preventDefault()
+        fitToVisibleNodes()
       }
     })
     .on('mouseenter', (event) => {
@@ -1924,6 +2108,8 @@ function App() {
               .attr('r', radius * 1.3)
               .attr('stroke-width', hoverStroke)
             setHoveredNode(node)
+            setBreadcrumbNodeId(node.id)  // Persist for breadcrumb (doesn't reset on hover off)
+            tooltipNodeRef.current = node  // Cache for smooth tooltip fade
           }
         }
       }
@@ -2265,12 +2451,104 @@ function App() {
         return isLabelVisible(d.ring, pos.fontSize, currentScale) ? 1 : 0
       })
 
-  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio])
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio])
 
   // Fetch data once on mount
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Restore state from URL after data loads
+  useEffect(() => {
+    if (!rawData || urlStateRestoredRef.current) return
+
+    const urlState = getStateFromBrowserURL()
+    if (!urlState) {
+      urlStateRestoredRef.current = true
+      return
+    }
+
+    debug.layout('[URL Restore] Restoring state from URL:', urlState)
+
+    // Restore view mode
+    if (urlState.view) {
+      setViewMode(urlState.view)
+    }
+
+    // Restore expanded nodes
+    if (urlState.expanded && urlState.expanded.length > 0) {
+      setExpandedNodes(new Set(urlState.expanded))
+    }
+
+    // Restore Local View targets
+    if (urlState.targets && urlState.targets.length > 0) {
+      setLocalViewTargets(urlState.targets)
+    }
+
+    // Restore beta threshold
+    if (urlState.beta !== undefined) {
+      setLocalViewBetaThreshold(urlState.beta)
+    }
+
+    // Restore highlighted node (trigger navigation)
+    if (urlState.highlight) {
+      const nodeMap = new Map(rawData.nodes.map(n => [String(n.id), n]))
+      const node = nodeMap.get(urlState.highlight)
+      if (node) {
+        // Delay highlight to ensure nodes are rendered
+        setTimeout(() => {
+          setHighlightedTarget(urlState.highlight!)
+          // Build highlight path from node to Ring 1
+          const highlightPath = new Set<string>()
+          highlightPath.add(urlState.highlight!)
+          let current = node
+          while (current.parent) {
+            const parentId = String(current.parent)
+            highlightPath.add(parentId)
+            const parent = nodeMap.get(parentId)
+            if (!parent || parent.layer <= 1) break
+            current = parent
+          }
+          setHighlightedPath(highlightPath)
+        }, 500)
+      }
+    }
+
+    // Restore zoom state
+    if (urlState.zoom && zoomRef.current && svgRef.current) {
+      setTimeout(() => {
+        const transform = d3.zoomIdentity
+          .translate(urlState.zoom!.x, urlState.zoom!.y)
+          .scale(urlState.zoom!.k)
+        currentTransformRef.current = transform
+        d3.select(svgRef.current!).call(zoomRef.current!.transform, transform)
+      }, 600)
+    }
+
+    urlStateRestoredRef.current = true
+  }, [rawData])
+
+  // Sync state to URL when key state changes
+  useEffect(() => {
+    // Don't sync until URL state has been restored (avoid overwriting on load)
+    if (!urlStateRestoredRef.current) return
+
+    const state: URLState = {
+      view: viewMode,
+      expanded: expandedNodes.size > 0 ? Array.from(expandedNodes) : undefined,
+      targets: localViewTargets.length > 0 ? localViewTargets : undefined,
+      beta: localViewBetaThreshold !== 0.5 ? localViewBetaThreshold : undefined,
+      highlight: highlightedTarget || undefined
+    }
+
+    // Add zoom state if available
+    if (currentTransformRef.current) {
+      const t = currentTransformRef.current
+      state.zoom = { k: t.k, x: t.x, y: t.y }
+    }
+
+    updateBrowserURL(state)
+  }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
 
   // Recompute layout when rawData or ringRadii changes
   useEffect(() => {
@@ -2489,10 +2767,10 @@ function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#fafafa' }}>
-      {/* Search Bar */}
+      {/* Search Bar - Top Left */}
       <div className="search-container" style={{
-        position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
-        zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center'
+        position: 'absolute', top: 10, left: 10,
+        zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'flex-start'
       }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -2669,7 +2947,8 @@ function App() {
         </div>
       )}
 
-      {stats && (
+      {/* Stats Panel - Hidden in local view */}
+      {stats && viewMode !== 'local' && (
         <div style={{ position: 'absolute', top: 70, left: 10, background: 'white', padding: 12, borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', fontSize: 13, zIndex: 50 }}>
           <div><strong>Visible:</strong> {visibleNodes.length.toLocaleString()} / {stats.nodes.toLocaleString()}</div>
           <div><strong>Outcomes:</strong> {stats.outcomes}</div>
@@ -2681,7 +2960,8 @@ function App() {
         </div>
       )}
 
-      {ringStats.length > 0 && (
+      {/* Rings Panel - Hidden in local view */}
+      {ringStats.length > 0 && viewMode !== 'local' && (
         <div style={{ position: 'absolute', top: 210, left: 10, background: 'white', padding: 12, borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', fontSize: 12, maxWidth: 220, zIndex: 50 }}>
           <div style={{ fontWeight: 'bold', marginBottom: 8, fontSize: 13 }}>Rings ({ringStats.length})</div>
           {ringStats.map((ring, i) => (
@@ -2719,9 +2999,19 @@ function App() {
         </div>
       )}
 
-      {/* Domain Legend - Left side under other controls */}
+      {/* Domain Legend - Vertically centered in local view, below rings panel in global/split */}
       {Object.keys(domainCounts).length > 0 && (
-        <div style={{ position: 'absolute', top: 460, left: 10, background: 'white', padding: 12, borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', zIndex: 50 }}>
+        <div style={{
+          position: 'absolute',
+          top: viewMode === 'local' ? '50%' : 460,
+          left: 10,
+          transform: viewMode === 'local' ? 'translateY(-50%)' : 'none',
+          background: 'white',
+          padding: 12,
+          borderRadius: 4,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          zIndex: 50
+        }}>
           <div style={{ fontWeight: 'bold', marginBottom: 8, fontSize: 13 }}>Domains</div>
           {Object.entries(domainCounts).sort((a, b) => b[1] - a[1]).map(([domain, count]) => (
             <div key={domain} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
@@ -2739,7 +3029,29 @@ function App() {
         onViewChange={setViewMode}
         localTargetCount={localViewTargets.length}
         onReset={resetView}
+        onClear={clearLocalViewTargets}
+        onShare={shareCurrentState}
       />
+
+      {/* Breadcrumb Navigation - always visible, shows path to hovered/highlighted node */}
+      {viewMode !== 'local' && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 15
+          }}
+        >
+          <Breadcrumb
+            nodeId={breadcrumbNodeId || highlightedTarget || null}
+            nodeMap={breadcrumbNodeMap}
+            onNavigate={showInGlobalView}
+            domainColors={DOMAIN_COLORS}
+          />
+        </div>
+      )}
 
       {/* Views Container - handles split view layout */}
       <div
@@ -2822,8 +3134,18 @@ function App() {
                 // Add clicked node as new target
                 addToLocalView(nodeId)
               }}
-              showGlow={viewMode === 'split'}
+              onShowInGlobal={showInGlobalView}
+              onDrillDown={drillDownTarget}
+              onDrillUp={drillUpTarget}
+              canDrillUp={drillDownHistory !== null}
+              showGlow={true}
+              betaThreshold={localViewBetaThreshold}
               onBetaThresholdChange={setLocalViewBetaThreshold}
+              inputDepth={localViewInputDepth}
+              outputDepth={localViewOutputDepth}
+              onInputDepthChange={setLocalViewInputDepth}
+              onOutputDepthChange={setLocalViewOutputDepth}
+              onResetLocalView={(resetFn) => { localViewResetRef.current = resetFn }}
             />
           )}
         </div>
@@ -2847,23 +3169,29 @@ function App() {
         </div>
       )}
 
-      {/* Hover tooltip panel */}
-      {hoveredNode && layoutValues && viewportLayoutRef.current && (() => {
-        const vLayout = viewportLayoutRef.current!
+      {/* Hover tooltip panel - always rendered for smooth transitions */}
+      {(() => {
+        // Use current hovered node or cached node for fade-out
+        const displayNode = hoveredNode || tooltipNodeRef.current
+        const isVisible = hoveredNode !== null
+
+        if (!displayNode || !layoutValues || !viewportLayoutRef.current) return null
+
+        const vLayout = viewportLayoutRef.current
         const { sizeRange } = layoutValues
 
         // Compute global and local ranks for tooltip
         const sortedGlobal = allNodes.map(n => n.importance).sort((a, b) => b - a)
-        const globalRank = sortedGlobal.findIndex(imp => imp <= hoveredNode.importance) + 1
+        const globalRank = sortedGlobal.findIndex(imp => imp <= displayNode.importance) + 1
 
-        const ringNodes = allNodes.filter(n => n.ring === hoveredNode.ring)
+        const ringNodes = allNodes.filter(n => n.ring === displayNode.ring)
         const sortedRing = ringNodes.map(n => n.importance).sort((a, b) => b - a)
-        const ringRank = sortedRing.findIndex(imp => imp <= hoveredNode.importance) + 1
+        const ringRank = sortedRing.findIndex(imp => imp <= displayNode.importance) + 1
         const ringPercentile = ((1 - ringRank / ringNodes.length) * 100).toFixed(0)
 
         // Check if node is at floor size using viewport-aware calculation
-        const floored = vLayout.isNodeFloored(hoveredNode.importance)
-        const targetArea = sizeRange.minArea + hoveredNode.importance * sizeRange.scaleFactor
+        const floored = vLayout.isNodeFloored(displayNode.importance)
+        const targetArea = sizeRange.minArea + displayNode.importance * sizeRange.scaleFactor
         const targetRadius = Math.sqrt(targetArea / Math.PI)
 
         return (
@@ -2871,29 +3199,31 @@ function App() {
             position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
             background: 'white', padding: '12px 16px', borderRadius: 8,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxWidth: 500, zIndex: 100,
-            pointerEvents: 'none'
+            pointerEvents: 'none',
+            opacity: isVisible ? 1 : 0,
+            transition: 'opacity 0.2s ease'
           }}>
             {/* Badge row: ring, domain, subdomain, special status */}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
               <span style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: '#eee', fontSize: 11 }}>
-                {ringConfigs[hoveredNode.ring]?.label || `Ring ${hoveredNode.ring}`}
+                {ringConfigs[displayNode.ring]?.label || `Ring ${displayNode.ring}`}
               </span>
-              {hoveredNode.semanticPath.domain && (
-                <span style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: DOMAIN_COLORS[hoveredNode.semanticPath.domain] || '#9E9E9E', color: 'white', fontSize: 11, fontWeight: 'bold' }}>
-                  {hoveredNode.semanticPath.domain}
+              {displayNode.semanticPath.domain && (
+                <span style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: DOMAIN_COLORS[displayNode.semanticPath.domain] || '#9E9E9E', color: 'white', fontSize: 11, fontWeight: 'bold' }}>
+                  {displayNode.semanticPath.domain}
                 </span>
               )}
-              {hoveredNode.semanticPath.subdomain && hoveredNode.semanticPath.subdomain !== hoveredNode.semanticPath.domain && (
+              {displayNode.semanticPath.subdomain && displayNode.semanticPath.subdomain !== displayNode.semanticPath.domain && (
                 <span style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: '#f0f0f0', fontSize: 11, color: '#555' }}>
-                  {hoveredNode.semanticPath.subdomain}
+                  {displayNode.semanticPath.subdomain}
                 </span>
               )}
-              {hoveredNode.isOutcome && (
+              {displayNode.isOutcome && (
                 <span style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: '#9C27B0', color: 'white', fontSize: 11 }}>
                   Outcome
                 </span>
               )}
-              {hoveredNode.isDriver && (
+              {displayNode.isDriver && (
                 <span style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: '#4CAF50', color: 'white', fontSize: 11 }}>
                   Driver
                 </span>
@@ -2906,31 +3236,31 @@ function App() {
             </div>
 
             {/* Node name */}
-            <div style={{ fontWeight: 'bold', fontSize: 14, marginBottom: 6 }}>{hoveredNode.label}</div>
+            <div style={{ fontWeight: 'bold', fontSize: 14, marginBottom: 6 }}>{displayNode.label}</div>
 
             {/* Stats grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', fontSize: 11, color: '#444', marginBottom: 8 }}>
               <div><strong>Global Rank:</strong> #{globalRank} of {allNodes.length}</div>
-              <div><strong>Importance:</strong> {(hoveredNode.importance * 100).toFixed(2)}%</div>
+              <div><strong>Importance:</strong> {(displayNode.importance * 100).toFixed(2)}%</div>
               <div><strong>Ring Rank:</strong> #{ringRank} of {ringNodes.length}</div>
               <div><strong>Percentile:</strong> Top {ringPercentile}%</div>
-              <div><strong>Connections:</strong> {hoveredNode.degree}</div>
-              <div><strong>Children:</strong> {hoveredNode.childIds.length}</div>
+              <div><strong>Connections:</strong> {displayNode.degree}</div>
+              <div><strong>Children:</strong> {displayNode.childIds.length}</div>
             </div>
 
             {/* Expand/collapse hint */}
-            {hoveredNode.hasChildren && (
-              <div style={{ fontSize: 11, color: expandedNodes.has(hoveredNode.id) ? '#2196F3' : '#666', marginBottom: 6 }}>
-                {expandedNodes.has(hoveredNode.id)
-                  ? `Click to collapse ${hoveredNode.childIds.length} children`
-                  : `Click to expand ${hoveredNode.childIds.length} children`}
+            {displayNode.hasChildren && (
+              <div style={{ fontSize: 11, color: expandedNodes.has(displayNode.id) ? '#2196F3' : '#666', marginBottom: 6 }}>
+                {expandedNodes.has(displayNode.id)
+                  ? `Click to collapse ${displayNode.childIds.length} children`
+                  : `Click to expand ${displayNode.childIds.length} children`}
               </div>
             )}
 
             {/* Description */}
-            {hoveredNode.description && (
+            {displayNode.description && (
               <div style={{ fontSize: 12, color: '#666', borderTop: '1px solid #eee', paddingTop: 6 }}>
-                {hoveredNode.description}
+                {displayNode.description}
               </div>
             )}
 

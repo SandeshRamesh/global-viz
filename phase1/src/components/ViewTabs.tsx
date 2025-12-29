@@ -1,7 +1,9 @@
 /**
  * ViewTabs - Tab switcher for Global, Local, and Split views
+ * With action buttons for Reset, Clear, and Share
  */
 
+import { useState } from 'react'
 import type { ViewMode } from '../types'
 
 interface ViewTabsProps {
@@ -9,18 +11,33 @@ interface ViewTabsProps {
   onViewChange: (view: ViewMode) => void
   localTargetCount: number    // Number of targets in Local View
   onReset: () => void         // Reset view callback
+  onClear?: () => void        // Clear local view targets callback
+  onShare?: () => Promise<boolean>  // Copy shareable link callback
 }
 
 /**
- * Tab switcher component with Global/Local/Split tabs and Reset button
+ * Tab switcher component with Global/Local/Split tabs and action buttons
  */
 export function ViewTabs({
   activeView,
   onViewChange,
   localTargetCount,
-  onReset
+  onReset,
+  onClear,
+  onShare
 }: ViewTabsProps) {
   const hasTargets = localTargetCount > 0
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle')
+
+  const handleShare = async () => {
+    if (onShare) {
+      const success = await onShare()
+      if (success) {
+        setShareStatus('copied')
+        setTimeout(() => setShareStatus('idle'), 2000)
+      }
+    }
+  }
 
   return (
     <div
@@ -29,12 +46,13 @@ export function ViewTabs({
         top: 10,
         right: 10,
         display: 'flex',
-        alignItems: 'center',
-        gap: 4,
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        gap: 6,
         zIndex: 100
       }}
     >
-      {/* Tab buttons */}
+      {/* Row 1: View mode tabs */}
       <div
         style={{
           display: 'flex',
@@ -129,31 +147,124 @@ export function ViewTabs({
         </button>
       </div>
 
-      {/* Reset button */}
-      <button
-        onClick={onReset}
+      {/* Row 2: Clear and Reset buttons in shared bubble */}
+      <div
         style={{
-          padding: '8px 16px',
-          fontSize: 13,
-          fontWeight: 'bold',
-          cursor: 'pointer',
-          border: '1px solid #ccc',
-          borderRadius: 6,
+          display: 'flex',
           background: 'white',
+          borderRadius: 6,
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          color: '#555',
-          transition: 'all 0.15s ease'
-        }}
-        title="Reset view to initial state (R or Home)"
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = '#f5f5f5'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'white'
+          border: '1px solid #ddd',
+          overflow: 'hidden'
         }}
       >
-        Reset
-      </button>
+        {/* Clear button - always rendered, fades in/out smoothly */}
+        <button
+          onClick={onClear}
+          disabled={!hasTargets}
+          style={{
+            padding: '6px 12px',
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: hasTargets ? 'pointer' : 'default',
+            border: 'none',
+            background: 'white',
+            color: hasTargets ? '#E53935' : '#ccc',
+            transition: 'all 0.2s ease',
+            opacity: hasTargets ? 1 : 0.4
+          }}
+          onMouseEnter={(e) => {
+            if (hasTargets) e.currentTarget.style.background = '#FFEBEE'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'white'
+          }}
+          title={hasTargets ? "Clear all Local View targets (C)" : "No targets to clear"}
+        >
+          Clear (C)
+        </button>
+
+        {/* Reset button */}
+        <button
+          onClick={onReset}
+          style={{
+            padding: '6px 12px',
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: 'pointer',
+            border: 'none',
+            borderLeft: '1px solid #ddd',
+            background: 'white',
+            color: '#555',
+            transition: 'all 0.15s ease'
+          }}
+          title="Reset view to initial state (R or Home)"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#f5f5f5'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'white'
+          }}
+        >
+          Reset (R)
+        </button>
+      </div>
+
+      {/* Row 3: Share button */}
+      <div
+        style={{
+          display: 'flex',
+          background: 'white',
+          borderRadius: 6,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          border: '1px solid #ddd',
+          overflow: 'hidden'
+        }}
+      >
+        <button
+          onClick={handleShare}
+          style={{
+            padding: '6px 12px',
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: 'pointer',
+            border: 'none',
+            background: shareStatus === 'copied' ? '#E8F5E9' : 'white',
+            color: shareStatus === 'copied' ? '#2E7D32' : '#555',
+            transition: 'all 0.15s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+          title="Copy shareable link to clipboard"
+          onMouseEnter={(e) => {
+            if (shareStatus !== 'copied') {
+              e.currentTarget.style.background = '#f5f5f5'
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (shareStatus !== 'copied') {
+              e.currentTarget.style.background = 'white'
+            }
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+            <polyline points="16 6 12 2 8 6" />
+            <line x1="12" y1="2" x2="12" y2="15" />
+          </svg>
+          {shareStatus === 'copied' ? 'Copied!' : 'Share'}
+        </button>
+      </div>
     </div>
   )
 }

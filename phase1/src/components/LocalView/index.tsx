@@ -1,12 +1,13 @@
 /**
- * LocalView - Causal pathway visualization
+ * LocalView - Horizontal Flow Chart Visualization
  *
- * Shows inputs (causes) → targets → outputs (effects)
- * with circular nodes matching Global View appearance,
- * sector-colored outlines, and beta-based edge styling.
+ * Shows causal relationships as a flow chart:
+ *   Causes (pills) → Target (rectangle) → Effects (hexagons)
+ *
+ * Automatically switches to vertical layout for narrow containers.
  */
 
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import * as d3 from 'd3'
 import type { RawNodeV21, RawEdge } from '../../types'
 import {
@@ -19,8 +20,151 @@ import {
   calculateEdgePath,
   getEdgeStyle,
   calculateFitTransform,
+  ARROW_BASE_SIZE,
   type PositionedLocalNode
 } from '../../layouts/LocalViewLayout'
+
+// ============================================
+// Animation Constants (matching Global View)
+// ============================================
+const ANIMATION = {
+  NODE_ENTER_DURATION: 300,   // Nodes appearing: scale 0→1, opacity 0→1
+  NODE_EXIT_DURATION: 200,    // Nodes disappearing: scale 1→0, opacity 1→0
+  POSITION_DURATION: 300,     // Position/size changes
+  TEXT_FADE_DURATION: 150,    // Text fade in/out
+  EDGE_DURATION: 200,         // Edges extending (shorter, starts after node moves)
+  EDGE_ENTER_DELAY: 200,      // Wait for node to move past parent before showing edge
+  VIEWPORT_DURATION: 400,     // Viewport pan/zoom animation
+  EASING: d3.easeCubicOut,
+  EXIT_EASING: d3.easeCubicIn
+}
+
+// ============================================
+// Helper Functions
+// ============================================
+
+/**
+ * Create a muted (lighter, pastel) version of a color
+ */
+function getMutedColor(hexColor: string, lightness: number = 0.85): string {
+  const hex = hexColor.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+
+  // Blend with white to create muted version
+  const mutedR = Math.round(r + (255 - r) * lightness)
+  const mutedG = Math.round(g + (255 - g) * lightness)
+  const mutedB = Math.round(b + (255 - b) * lightness)
+
+  return `rgb(${mutedR}, ${mutedG}, ${mutedB})`
+}
+
+/**
+ * Get contrasting text color for a background color
+ */
+function getContrastColor(_hexColor: string): string {
+  // With muted backgrounds, dark text always works best
+  return '#333333'
+}
+
+/**
+ * Truncate label to fit within max chars
+ */
+function truncateLabel(label: string, maxChars: number): string {
+  if (label.length <= maxChars) return label
+  return label.substring(0, maxChars - 1) + '…'
+}
+
+// ============================================
+// Shape Rendering Functions
+// ============================================
+
+/**
+ * Render node based on shape type
+ * If prevDims is provided, animate from old dimensions to new
+ */
+function renderNodeShape(
+  group: d3.Selection<SVGGElement, unknown, null, undefined>,
+  node: PositionedLocalNode,
+  prevDims?: { width: number; height: number }
+): void {
+  // Use previous dimensions for initial render if animating
+  const startWidth = prevDims?.width ?? node.width
+  const startHeight = prevDims?.height ?? node.height
+
+  // Apply common styling
+  const canExpand = node.isTarget || node.canExpand !== false
+  const fillLightness = canExpand ? 0.75 : 0.90
+  const fill = getMutedColor(node.sectorColor, fillLightness)
+  const stroke = node.sectorColor
+  const strokeWidth = node.isTarget ? 3 : 2
+
+  if (node.shape === 'hexagon') {
+    // Octagon shape
+    const getOctagonPoints = (w: number, h: number) => {
+      const cut = h * 0.22
+      return [
+        `${-w/2 + cut},${-h/2}`,
+        `${w/2 - cut},${-h/2}`,
+        `${w/2},${-h/2 + cut}`,
+        `${w/2},${h/2 - cut}`,
+        `${w/2 - cut},${h/2}`,
+        `${-w/2 + cut},${h/2}`,
+        `${-w/2},${h/2 - cut}`,
+        `${-w/2},${-h/2 + cut}`
+      ].join(' ')
+    }
+
+    const polygon = group.append('polygon')
+      .attr('points', getOctagonPoints(startWidth, startHeight))
+      .attr('fill', fill)
+      .attr('stroke', stroke)
+      .attr('stroke-width', strokeWidth)
+      .attr('class', 'node-shape')
+
+    if (prevDims) {
+      polygon.transition()
+        .duration(300)
+        .ease(d3.easeCubicOut)
+        .attr('points', getOctagonPoints(node.width, node.height))
+    }
+  } else {
+    // Pill or rectangle shape
+    const rx = node.shape === 'pill' ? startHeight / 2 : 6
+    const ry = node.shape === 'pill' ? startHeight / 2 : 6
+    const finalRx = node.shape === 'pill' ? node.height / 2 : 6
+    const finalRy = node.shape === 'pill' ? node.height / 2 : 6
+
+    const rect = group.append('rect')
+      .attr('x', -startWidth / 2)
+      .attr('y', -startHeight / 2)
+      .attr('width', startWidth)
+      .attr('height', startHeight)
+      .attr('rx', rx)
+      .attr('ry', ry)
+      .attr('fill', fill)
+      .attr('stroke', stroke)
+      .attr('stroke-width', strokeWidth)
+      .attr('class', 'node-shape')
+
+    if (prevDims) {
+      rect.transition()
+        .duration(300)
+        .ease(d3.easeCubicOut)
+        .attr('x', -node.width / 2)
+        .attr('y', -node.height / 2)
+        .attr('width', node.width)
+        .attr('height', node.height)
+        .attr('rx', finalRx)
+        .attr('ry', finalRy)
+    }
+  }
+}
+
+// ============================================
+// Component Props
+// ============================================
 
 interface LocalViewProps {
   targetIds: string[]
@@ -31,9 +175,23 @@ interface LocalViewProps {
   onClearTargets: () => void
   onSwitchToGlobal: () => void
   onNavigateToNode?: (nodeId: string) => void
-  showGlow?: boolean  // Only show glow in split mode
-  onBetaThresholdChange?: (threshold: number) => void  // Notify parent of threshold changes
+  onShowInGlobal?: (nodeId: string) => void  // Show node in Global View with path expanded
+  onDrillDown?: (nodeId: string) => void     // Drill down: swap target for its children
+  onDrillUp?: () => void                      // Go back to previous targets
+  canDrillUp?: boolean                        // Can undo last drill-down
+  showGlow?: boolean
+  betaThreshold: number  // Controlled from parent
+  onBetaThresholdChange: (threshold: number) => void
+  inputDepth: number
+  outputDepth: number
+  onInputDepthChange?: (depth: number) => void  // Unused - layer controls use per-node expansion
+  onOutputDepthChange?: (depth: number) => void  // Unused - layer controls use per-node expansion
+  onResetLocalView?: (resetFn: () => void) => void  // Callback to register reset function
 }
+
+// ============================================
+// Main Component
+// ============================================
 
 export function LocalView({
   targetIds,
@@ -44,8 +202,16 @@ export function LocalView({
   onClearTargets,
   onSwitchToGlobal,
   onNavigateToNode,
+  onShowInGlobal,
+  onDrillDown,
+  onDrillUp,
+  canDrillUp = false,
   showGlow = false,
-  onBetaThresholdChange
+  betaThreshold,
+  onBetaThresholdChange,
+  inputDepth,
+  outputDepth,
+  onResetLocalView
 }: LocalViewProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -53,28 +219,77 @@ export function LocalView({
   const currentTransformRef = useRef<d3.ZoomTransform | null>(null)
   const prevTargetIdsRef = useRef<string[]>([])
   const prevDimensionsRef = useRef<{ width: number; height: number } | null>(null)
+  const prevTargetIdsForThresholdRef = useRef<string[]>([])
+  const prevBetaThresholdRef = useRef<number>(betaThreshold)
+  const prevLayoutRef = useRef<Map<string, { x: number; y: number; parentId?: string }>>(new Map())
+  const prevNodeDimsRef = useRef<Map<string, { width: number; height: number }>>(new Map())
+  const prevFlowDirectionRef = useRef<'horizontal' | 'vertical' | null>(null)
+  const isFirstRenderRef = useRef(true)
+  const shouldAnimateViewportRef = useRef(false)  // Flag to trigger viewport animation after expand/collapse
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
-  const [betaThreshold, setBetaThreshold] = useState(0.5)
   const [hoveredNode, setHoveredNode] = useState<PositionedLocalNode | null>(null)
   const [hoveredEdge, setHoveredEdge] = useState<{ source: string; target: string; beta: number } | null>(null)
+  const isHoveringTooltipRef = useRef(false)  // Track if mouse is over tooltip
+  const tooltipTimeoutRef = useRef<number | null>(null)  // Delay before hiding tooltip
 
-  // Target node count for auto-adjustment (show 4-8 nodes)
+  // Per-node expansion state (for adding more causal layers)
+  const [expandedInputNodes, setExpandedInputNodes] = useState<Set<string>>(new Set())
+  const [expandedOutputNodes, setExpandedOutputNodes] = useState<Set<string>>(new Set())
+
+  // Layout constants
+  const horizontalPadding = 16  // Extra padding for wide characters (W, M, etc.)
+  const verticalPadding = 10
+  const sizeMinScale = 0.5
+  const sizeMaxScale = 1.5
+
+  // Toggle expand for a node's causes
+  const toggleInputExpand = useCallback((nodeId: string) => {
+    shouldAnimateViewportRef.current = true
+    setExpandedInputNodes(prev => {
+      const next = new Set(prev)
+      if (next.has(nodeId)) {
+        next.delete(nodeId)
+      } else {
+        next.add(nodeId)
+      }
+      return next
+    })
+  }, [])
+
+  // Toggle expand for a node's effects
+  const toggleOutputExpand = useCallback((nodeId: string) => {
+    shouldAnimateViewportRef.current = true
+    setExpandedOutputNodes(prev => {
+      const next = new Set(prev)
+      if (next.has(nodeId)) {
+        next.delete(nodeId)
+      } else {
+        next.add(nodeId)
+      }
+      return next
+    })
+  }, [])
+
+  // Reset expansion when targets change
+  useEffect(() => {
+    setExpandedInputNodes(new Set())
+    setExpandedOutputNodes(new Set())
+  }, [targetIds])
+
+
   const TARGET_NODE_COUNT = 6
 
-  // Calculate optimal beta threshold to show 4-8 nodes
+  // Calculate optimal beta threshold
   const calculateOptimalThreshold = useMemo(() => {
     if (targetIds.length === 0) return 0.5
 
     const causalEdges = getCausalEdges(allEdges)
-
-    // Get all betas for edges connected to our targets
     const relevantBetas: number[] = []
+
     for (const targetId of targetIds) {
-      // Incoming edges
       causalEdges
         .filter(e => e.target === targetId)
         .forEach(e => relevantBetas.push(Math.abs(e.beta)))
-      // Outgoing edges
       causalEdges
         .filter(e => e.source === targetId)
         .forEach(e => relevantBetas.push(Math.abs(e.beta)))
@@ -82,29 +297,25 @@ export function LocalView({
 
     if (relevantBetas.length === 0) return 0.5
 
-    // Sort betas descending (strongest first)
     relevantBetas.sort((a, b) => b - a)
-
-    // Find threshold that gives us ~6 nodes (4-8 range)
-    // We want the threshold just below the Nth largest beta
     const targetIndex = Math.min(TARGET_NODE_COUNT, relevantBetas.length) - 1
-    const optimalThreshold = relevantBetas[targetIndex] * 0.99 // Slightly below to include it
+    const optimalThreshold = relevantBetas[targetIndex] * 0.99
 
-    // Clamp to reasonable range
-    return Math.max(0.1, Math.min(optimalThreshold, 10))
+    return Math.max(0.1, Math.min(optimalThreshold, 5))
   }, [targetIds, allEdges])
 
-  // Auto-adjust threshold when targets change
+  // Only auto-calculate threshold when targets actually change (not on every remount)
   useEffect(() => {
-    setBetaThreshold(calculateOptimalThreshold)
-  }, [calculateOptimalThreshold])
+    const prevTargets = prevTargetIdsForThresholdRef.current
+    const targetsChanged = JSON.stringify(targetIds) !== JSON.stringify(prevTargets)
 
-  // Notify parent of threshold changes
-  useEffect(() => {
-    onBetaThresholdChange?.(betaThreshold)
-  }, [betaThreshold, onBetaThresholdChange])
+    if (targetsChanged && targetIds.length > 0) {
+      onBetaThresholdChange(calculateOptimalThreshold)
+      prevTargetIdsForThresholdRef.current = [...targetIds]
+    }
+  }, [targetIds, calculateOptimalThreshold, onBetaThresholdChange])
 
-  // Measure container - use ResizeObserver for accurate sizing on view switches
+  // Measure container
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -117,11 +328,8 @@ export function LocalView({
       }
     }
 
-    // Use ResizeObserver for accurate container size changes (including view switches)
     const resizeObserver = new ResizeObserver(updateDimensions)
     resizeObserver.observe(containerRef.current)
-
-    // Also measure on window resize as fallback
     updateDimensions()
     window.addEventListener('resize', updateDimensions)
 
@@ -139,9 +347,13 @@ export function LocalView({
       allEdges,
       nodeById,
       domainColors,
-      betaThreshold
+      betaThreshold,
+      expandedInputNodes,
+      expandedOutputNodes,
+      inputDepth,
+      outputDepth
     )
-  }, [targetIds, allEdges, nodeById, domainColors, betaThreshold])
+  }, [targetIds, allEdges, nodeById, domainColors, betaThreshold, expandedInputNodes, expandedOutputNodes, inputDepth, outputDepth])
 
   // Compute layout
   const layout = useMemo(() => {
@@ -152,9 +364,10 @@ export function LocalView({
       localViewData.outputs,
       localViewData.edges,
       dimensions.width,
-      dimensions.height
+      dimensions.height,
+      { horizontalPadding, verticalPadding, sizeMinScale, sizeMaxScale }
     )
-  }, [localViewData, dimensions])
+  }, [localViewData, dimensions, horizontalPadding, verticalPadding, sizeMinScale, sizeMaxScale])
 
   // Get stats
   const stats = useMemo(() => {
@@ -162,20 +375,179 @@ export function LocalView({
     return getLocalViewStats(localViewData)
   }, [localViewData])
 
-  // Render SVG
+  // Expand all visible input nodes that can expand (like Global View's expandRing)
+  const expandInputLayer = useCallback(() => {
+    if (!localViewData) return
+    shouldAnimateViewportRef.current = true
+
+    // Find all input nodes that have unexpanded causes
+    const nodesToExpand = localViewData.inputs.filter(n => n.hasMoreInputs)
+    // Also check targets that have unexpanded inputs
+    const targetsToExpand = localViewData.targets.filter(n => n.hasMoreInputs)
+
+    setExpandedInputNodes(prev => {
+      const next = new Set(prev)
+      nodesToExpand.forEach(n => next.add(n.id))
+      targetsToExpand.forEach(n => next.add(n.id))
+      return next
+    })
+  }, [localViewData])
+
+  // Collapse outermost input layer (like Global View's collapseRing)
+  const collapseInputLayer = useCallback(() => {
+    if (!localViewData) return
+    shouldAnimateViewportRef.current = true
+
+    // Find the max depth among visible inputs
+    const maxDepth = Math.max(...localViewData.inputs.map(n => n.depth), 0)
+    if (maxDepth <= 1) {
+      // At minimum depth, collapse all individual expansions
+      setExpandedInputNodes(new Set())
+      return
+    }
+
+    // Find nodes at max depth (leaves) and their parents
+    const leafNodes = localViewData.inputs.filter(n => n.depth === maxDepth)
+    const parentIds = new Set(leafNodes.map(n => n.parentId).filter(Boolean) as string[])
+
+    setExpandedInputNodes(prev => {
+      const next = new Set(prev)
+      // Remove parents of leaves from expanded set
+      parentIds.forEach(id => next.delete(id))
+      return next
+    })
+  }, [localViewData])
+
+  // Expand all visible output nodes that can expand
+  const expandOutputLayer = useCallback(() => {
+    if (!localViewData) return
+    shouldAnimateViewportRef.current = true
+
+    // Find all output nodes that have unexpanded effects
+    const nodesToExpand = localViewData.outputs.filter(n => n.hasMoreOutputs)
+    // Also check targets that have unexpanded outputs
+    const targetsToExpand = localViewData.targets.filter(n => n.hasMoreOutputs)
+
+    setExpandedOutputNodes(prev => {
+      const next = new Set(prev)
+      nodesToExpand.forEach(n => next.add(n.id))
+      targetsToExpand.forEach(n => next.add(n.id))
+      return next
+    })
+  }, [localViewData])
+
+  // Collapse outermost output layer
+  const collapseOutputLayer = useCallback(() => {
+    if (!localViewData) return
+    shouldAnimateViewportRef.current = true
+
+    // Find the max depth among visible outputs
+    const maxDepth = Math.max(...localViewData.outputs.map(n => n.depth), 0)
+    if (maxDepth <= 1) {
+      // At minimum depth, collapse all individual expansions
+      setExpandedOutputNodes(new Set())
+      return
+    }
+
+    // Find nodes at max depth (leaves) and their parents
+    const leafNodes = localViewData.outputs.filter(n => n.depth === maxDepth)
+    const parentIds = new Set(leafNodes.map(n => n.parentId).filter(Boolean) as string[])
+
+    setExpandedOutputNodes(prev => {
+      const next = new Set(prev)
+      // Remove parents of leaves from expanded set
+      parentIds.forEach(id => next.delete(id))
+      return next
+    })
+  }, [localViewData])
+
+  // Reset function: collapse all expansions and fit viewport
+  const resetLocalView = useCallback(() => {
+    if (!svgRef.current || !zoomRef.current || !layout) return
+
+    // Reset all expanded nodes
+    setExpandedInputNodes(new Set())
+    setExpandedOutputNodes(new Set())
+
+    // Animate viewport to fit - will happen on next render via shouldAnimateViewportRef
+    shouldAnimateViewportRef.current = true
+  }, [layout])
+
+  // Register reset function with parent
+  useEffect(() => {
+    if (onResetLocalView) {
+      onResetLocalView(resetLocalView)
+    }
+  }, [onResetLocalView, resetLocalView])
+
+  // Keyboard shortcuts: W = Show in Global, D = Drill Down, E = Expand
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key === 'w' || e.key === 'W') {
+        if (hoveredNode && !hoveredNode.isTarget && onShowInGlobal) {
+          e.preventDefault()
+          onShowInGlobal(hoveredNode.id)
+        }
+      }
+
+      // 'd' for drill-down (destructive - replaces targets with hierarchical children)
+      if (e.key === 'd' || e.key === 'D') {
+        // If can drill up, pressing D goes back
+        if (canDrillUp && onDrillUp) {
+          e.preventDefault()
+          onDrillUp()
+          return
+        }
+        // Otherwise, drill down if possible
+        if (hoveredNode && onDrillDown) {
+          const canDrill = hoveredNode.hasChildren && hoveredNode.ring < 5
+          if (canDrill) {
+            e.preventDefault()
+            onDrillDown(hoveredNode.id)
+          }
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [hoveredNode, onShowInGlobal, onDrillDown, onDrillUp, canDrillUp])
+
+  // Helper to handle delayed tooltip hiding
+  const handleNodeMouseLeave = useCallback(() => {
+    // Clear any existing timeout
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current)
+    }
+    // Delay hiding to allow mouse to reach tooltip
+    tooltipTimeoutRef.current = window.setTimeout(() => {
+      if (!isHoveringTooltipRef.current) {
+        setHoveredNode(null)
+      }
+    }, 150)
+  }, [])
+
+  // Render SVG with animations
   useEffect(() => {
     if (!svgRef.current || !layout) return
 
     const svg = d3.select(svgRef.current)
+    const isFirstRender = isFirstRenderRef.current
+    isFirstRenderRef.current = false
 
-    // Check if targets changed (need to reset view)
+    // Check if targets changed
     const targetsChanged = JSON.stringify(targetIds) !== JSON.stringify(prevTargetIdsRef.current)
     prevTargetIdsRef.current = [...targetIds]
 
-    // Check if dimensions changed significantly (>5% change or first render triggers refit)
+    // Check if beta threshold changed significantly (causes edge filtering changes)
+    const betaChanged = Math.abs(betaThreshold - prevBetaThresholdRef.current) > 0.01
+    prevBetaThresholdRef.current = betaThreshold
+
+    // Check if dimensions changed significantly
     const prevDims = prevDimensionsRef.current
-    const isFirstRender = prevDims === null
-    let dimensionsChanged = isFirstRender
+    let dimensionsChanged = prevDims === null
     if (prevDims) {
       const widthChange = Math.abs(dimensions.width - prevDims.width) / Math.max(prevDims.width, 1)
       const heightChange = Math.abs(dimensions.height - prevDims.height) / Math.max(prevDims.height, 1)
@@ -183,17 +555,35 @@ export function LocalView({
     }
     prevDimensionsRef.current = { ...dimensions }
 
-    // Clear existing content but preserve zoom behavior
-    svg.select('g.local-view-content').remove()
+    // Check if flow direction changed (horizontal <-> vertical)
+    const flowDirectionChanged = prevFlowDirectionRef.current !== null &&
+      prevFlowDirectionRef.current !== layout.flowDirection
+    prevFlowDirectionRef.current = layout.flowDirection
 
-    // Create main group for content
-    const g = svg.append('g')
-      .attr('class', 'local-view-content')
+    // Should we animate? (not on first render, not on structural changes)
+    // When targets/beta change, the graph structure changes fundamentally - don't animate
+    // When flow direction changes, we need a clean reset - don't animate
+    const shouldAnimate = !isFirstRender && !dimensionsChanged && !targetsChanged && !betaChanged && !flowDirectionChanged
 
-    // Set up zoom behavior (only once)
+    // Create node lookup
+    const nodePositions = new Map<string, PositionedLocalNode>()
+    layout.nodes.forEach(n => nodePositions.set(n.id, n))
+
+    // Get or create persistent groups
+    let defs = svg.select<SVGDefsElement>('defs')
+    if (defs.empty()) {
+      defs = svg.append('defs')
+    }
+
+    let g = svg.select<SVGGElement>('g.local-view-content')
+    if (g.empty()) {
+      g = svg.append('g').attr('class', 'local-view-content')
+    }
+
+    // Set up zoom behavior (once)
     if (!zoomRef.current) {
       const zoom = d3.zoom<SVGSVGElement, unknown>()
-        .scaleExtent([0.2, 4])
+        .scaleExtent([0.3, 3])
         .on('zoom', (event) => {
           currentTransformRef.current = event.transform
           svg.select('g.local-view-content').attr('transform', event.transform.toString())
@@ -201,339 +591,517 @@ export function LocalView({
 
       zoomRef.current = zoom
       svg.call(zoom)
+        .on('dblclick.zoom', null)  // Disable default double-click zoom
     }
 
-    // Calculate fit transform for initial/reset view
-    const initialTransform = calculateFitTransform(
+    // Add double-click on empty space to fit all nodes
+    svg.on('dblclick', (event) => {
+      // Only trigger if clicking on SVG background (not on a node)
+      const target = event.target as Element
+      if (target.tagName === 'svg' || target.classList.contains('local-view-content')) {
+        event.preventDefault()
+        // Fit all nodes in view
+        const fitTransformNow = calculateFitTransform(layout.bounds, dimensions.width, dimensions.height, 80)
+        const resetTransform = d3.zoomIdentity
+          .translate(fitTransformNow.x, fitTransformNow.y)
+          .scale(fitTransformNow.scale)
+        currentTransformRef.current = resetTransform
+        svg.transition()
+          .duration(ANIMATION.VIEWPORT_DURATION)
+          .ease(ANIMATION.EASING)
+          .call(zoomRef.current!.transform, resetTransform)
+      }
+    })
+
+    // Calculate fit transform
+    const fitTransform = calculateFitTransform(
       layout.bounds,
       dimensions.width,
       dimensions.height,
       80
     )
+    const targetTransform = d3.zoomIdentity
+      .translate(fitTransform.x, fitTransform.y)
+      .scale(fitTransform.scale)
 
-    // Set transform: use stored transform or calculate new one if targets or dimensions changed
+    // Check if viewport animation was requested (from expand/collapse or depth change)
+    const shouldAnimateViewport = shouldAnimateViewportRef.current
+    shouldAnimateViewportRef.current = false  // Reset flag
+
+    // Set transform
     if (targetsChanged || dimensionsChanged || !currentTransformRef.current) {
-      const transform = d3.zoomIdentity
-        .translate(initialTransform.x, initialTransform.y)
-        .scale(initialTransform.scale)
-      currentTransformRef.current = transform
-      // Animate the transition when dimensions change (smoother experience)
+      currentTransformRef.current = targetTransform
       if (dimensionsChanged && !targetsChanged) {
-        svg.transition().duration(200).call(zoomRef.current!.transform, transform)
+        svg.transition().duration(200).call(zoomRef.current!.transform, targetTransform)
       } else {
-        svg.call(zoomRef.current!.transform, transform)
+        svg.call(zoomRef.current!.transform, targetTransform)
       }
+    } else if (shouldAnimateViewport) {
+      // Animate viewport to fit new layout after expand/collapse
+      currentTransformRef.current = targetTransform
+      svg.transition()
+        .duration(ANIMATION.VIEWPORT_DURATION)
+        .ease(ANIMATION.EASING)
+        .call(zoomRef.current!.transform, targetTransform)
     } else {
-      // Apply current transform to new content
       g.attr('transform', currentTransformRef.current.toString())
     }
 
-    // Create node lookup for edge rendering
-    const nodePositions = new Map<string, PositionedLocalNode>()
-    layout.nodes.forEach(n => nodePositions.set(n.id, n))
-
-    // Calculate max beta for normalization
-    const maxBeta = Math.max(...layout.edges.map(e => Math.abs(e.beta)), 1)
-
-    // === RENDER LAYER LABELS ===
-    const labelsGroup = g.append('g').attr('class', 'layer-labels')
-
-    // Find Y positions for each layer
-    const inputNodes = layout.nodes.filter(n => n.layer === 'input')
-    const targetNodes = layout.nodes.filter(n => n.layer === 'target')
-    const outputNodes = layout.nodes.filter(n => n.layer === 'output')
-
-    // Calculate left edge (minimum X minus max radius minus padding)
-    const allX = layout.nodes.map(n => n.x - n.radius)
-    const leftEdge = Math.min(...allX) - 60
-
-    // Add "Input" label if inputs exist
-    if (inputNodes.length > 0) {
-      const inputY = Math.min(...inputNodes.map(n => n.y))
-      labelsGroup.append('text')
-        .attr('x', leftEdge)
-        .attr('y', inputY)
-        .attr('text-anchor', 'start')
-        .attr('font-size', 14)
-        .attr('font-weight', 500)
-        .attr('fill', '#888')
-        .text('Input')
+    // Get or create edge/node groups
+    let edgesGroup = g.select<SVGGElement>('g.edges')
+    if (edgesGroup.empty()) {
+      edgesGroup = g.append('g').attr('class', 'edges')
     }
 
-    // Add "Target" label
-    if (targetNodes.length > 0) {
-      const targetY = Math.min(...targetNodes.map(n => n.y))
-      labelsGroup.append('text')
-        .attr('x', leftEdge)
-        .attr('y', targetY)
-        .attr('text-anchor', 'start')
-        .attr('font-size', 14)
-        .attr('font-weight', 500)
-        .attr('fill', '#888')
-        .text('Target')
+    let nodesGroup = g.select<SVGGElement>('g.nodes')
+    if (nodesGroup.empty()) {
+      nodesGroup = g.append('g').attr('class', 'nodes')
     }
 
-    // Add "Output" label if outputs exist
-    if (outputNodes.length > 0) {
-      const outputY = Math.min(...outputNodes.map(n => n.y))
-      labelsGroup.append('text')
-        .attr('x', leftEdge)
-        .attr('y', outputY)
-        .attr('text-anchor', 'start')
-        .attr('font-size', 14)
-        .attr('font-weight', 500)
-        .attr('fill', '#888')
-        .text('Output')
+    // If not animating (targets/dimensions changed), interrupt all ongoing transitions
+    // This prevents stale animations from interfering with the new state
+    if (!shouldAnimate) {
+      edgesGroup.selectAll('*').interrupt()
+      nodesGroup.selectAll('*').interrupt()
     }
 
-    // === RENDER EDGES ===
-    const edgesGroup = g.append('g').attr('class', 'edges')
-
-    for (const edge of layout.edges) {
-      const sourceNode = nodePositions.get(edge.source)
-      const targetNode = nodePositions.get(edge.target)
-      if (!sourceNode || !targetNode) continue
-
-      const path = calculateEdgePath(sourceNode, targetNode)
-      const style = getEdgeStyle(edge.beta, maxBeta)
-
-      edgesGroup.append('path')
-        .attr('d', path)
-        .attr('fill', 'none')
-        .attr('stroke', style.stroke)
-        .attr('stroke-width', style.strokeWidth)
-        .attr('stroke-opacity', style.opacity)
-        .attr('data-source', edge.source)
-        .attr('data-target', edge.target)
-        .attr('data-beta', edge.beta)
-        .style('cursor', 'pointer')
-        .on('mouseenter', function() {
-          d3.select(this).attr('stroke-opacity', 1).attr('stroke-width', style.strokeWidth + 2)
-          setHoveredEdge({ source: edge.source, target: edge.target, beta: edge.beta })
-        })
-        .on('mouseleave', function() {
-          d3.select(this).attr('stroke-opacity', style.opacity).attr('stroke-width', style.strokeWidth)
-          setHoveredEdge(null)
-        })
+    // When flow direction changes, do a full clear to prevent rendering artifacts
+    // This handles switching between horizontal (split) and vertical (local) layouts
+    if (flowDirectionChanged) {
+      edgesGroup.selectAll('*').remove()
+      nodesGroup.selectAll('*').remove()
+      prevLayoutRef.current = new Map()
     }
 
-    // === RENDER NODES (Circular) ===
-    const nodesGroup = g.append('g').attr('class', 'nodes')
+    // Use layout-computed min/max visualBeta
+    const { minBeta, maxBeta: maxVisualBeta } = layout
+    const isVertical = layout.flowDirection === 'vertical'
 
-    // Calculate label vertical offsets with overlap detection
-    const CHAR_WIDTH = 6.5 // Approximate width per character at font-size 11
-    const LABEL_PADDING = 4 // Minimum horizontal gap between labels
-    const LABEL_HEIGHT = 16 // Height of label bubble
-    const BASE_OFFSET = 22 // Base offset below node (increased for more padding)
-    const OFFSET_STEP = 18 // Vertical step between label layers
+    // === UPDATE ARROW MARKERS ===
+    // Only create arrow markers for horizontal layout
+    // Vertical layout uses line thickness only (no arrows)
+    defs.selectAll('*').remove()
+    if (!isVertical) {
+      for (const edge of layout.edges) {
+        const sourceNode = nodePositions.get(edge.source)
+        const arrowScale = sourceNode?.arrowScale ?? 1.0
+        const arrowSize = ARROW_BASE_SIZE * arrowScale
+        const isPositive = edge.beta >= 0
+        const color = isPositive ? '#4CAF50' : '#F44336'
+        const markerId = `arrow-${edge.source}-${edge.target}`
 
-    // Group nodes by layer and sort by X position
-    const nodesByLayer: Record<string, PositionedLocalNode[]> = {
-      input: layout.nodes.filter(n => n.layer === 'input').sort((a, b) => a.x - b.x),
-      target: layout.nodes.filter(n => n.layer === 'target').sort((a, b) => a.x - b.x),
-      output: layout.nodes.filter(n => n.layer === 'output').sort((a, b) => a.x - b.x)
-    }
-
-    // Calculate label bounds and assign vertical layers to avoid overlap
-    interface LabelInfo {
-      nodeId: string
-      x: number
-      baseY: number // Y position at bottom of node (node.y + node.radius)
-      width: number
-      height: number
-      verticalLayer: number // additional vertical offset layer (0, 1, 2, ...)
-    }
-
-    const labelLayers = new Map<string, number>()
-
-    // Process each horizontal layer separately
-    Object.values(nodesByLayer).forEach(nodes => {
-      const labels: LabelInfo[] = nodes.map(n => ({
-        nodeId: n.id,
-        x: n.x,
-        baseY: n.y + n.radius, // Account for node size
-        width: n.label.length * CHAR_WIDTH + 8,
-        height: LABEL_HEIGHT,
-        verticalLayer: 0
-      }))
-
-      // Greedy assignment: for each label, find lowest layer without overlap
-      for (let i = 0; i < labels.length; i++) {
-        const current = labels[i]
-        const currentNode = nodes[i]
-        let assignedLayer = 0
-        let foundFreeLayer = false
-
-        while (!foundFreeLayer) {
-          foundFreeLayer = true
-          // Calculate current label's actual Y position
-          const currentY = current.baseY + BASE_OFFSET + assignedLayer * OFFSET_STEP
-          const currentLeft = current.x - current.width / 2 - LABEL_PADDING
-          const currentRight = current.x + current.width / 2 + LABEL_PADDING
-          const currentTop = currentY - LABEL_HEIGHT / 2
-          const currentBottom = currentY + LABEL_HEIGHT / 2
-
-          // Check against ALL nodes (not just in same layer) for node-label collision
-          for (const otherNode of layout.nodes) {
-            if (otherNode.id === currentNode.id) continue
-
-            // Check if label overlaps with this node's circle
-            const nodeLeft = otherNode.x - otherNode.radius
-            const nodeRight = otherNode.x + otherNode.radius
-            const nodeTop = otherNode.y - otherNode.radius
-            const nodeBottom = otherNode.y + otherNode.radius
-
-            const hOverlap = !(currentRight < nodeLeft || currentLeft > nodeRight)
-            const vOverlap = !(currentBottom < nodeTop || currentTop > nodeBottom)
-
-            if (hOverlap && vOverlap) {
-              foundFreeLayer = false
-              assignedLayer++
-              break
-            }
-          }
-
-          if (!foundFreeLayer) continue
-
-          // Check against all previously assigned labels
-          for (let j = 0; j < i; j++) {
-            const other = labels[j]
-            const otherY = other.baseY + BASE_OFFSET + other.verticalLayer * OFFSET_STEP
-
-            const otherLeft = other.x - other.width / 2 - LABEL_PADDING
-            const otherRight = other.x + other.width / 2 + LABEL_PADDING
-            const hOverlap = !(currentRight < otherLeft || currentLeft > otherRight)
-
-            const otherTop = otherY - LABEL_HEIGHT / 2
-            const otherBottom = otherY + LABEL_HEIGHT / 2
-            const vOverlap = !(currentBottom < otherTop || currentTop > otherBottom)
-
-            if (hOverlap && vOverlap) {
-              foundFreeLayer = false
-              assignedLayer++
-              break
-            }
-          }
-        }
-        current.verticalLayer = assignedLayer
-        labelLayers.set(current.nodeId, assignedLayer)
+        defs.append('marker')
+          .attr('id', markerId)
+          .attr('viewBox', '0 0 10 10')
+          .attr('refX', 6)
+          .attr('refY', 5)
+          .attr('markerWidth', arrowSize)
+          .attr('markerHeight', arrowSize)
+          .attr('orient', 'auto')
+          .append('path')
+          .attr('d', 'M 0 0 L 10 5 L 0 10 z')
+          .attr('fill', color)
       }
+    }
+
+    // === ANIMATE EDGES ===
+    // Create edge data with unique keys
+    const edgeData = layout.edges.map((edge, i) => ({
+      ...edge,
+      key: `${edge.source}-${edge.target}`,
+      index: i,
+      sourceNode: nodePositions.get(edge.source),
+      targetNode: nodePositions.get(edge.target)
+    })).filter(e => e.sourceNode && e.targetNode)
+
+    const edgeSelection = edgesGroup
+      .selectAll<SVGPathElement, typeof edgeData[0]>('path.edge')
+      .data(edgeData, d => d.key)
+
+    // EXIT edges
+    edgeSelection.exit()
+      .classed('edge-exiting', true)
+      .transition('edge-exit')
+      .duration(shouldAnimate ? ANIMATION.NODE_EXIT_DURATION : 0)
+      .ease(ANIMATION.EXIT_EASING)
+      .style('stroke-opacity', 0)
+      .remove()
+
+    // ENTER edges
+    const enterEdges = edgeSelection.enter()
+      .append('path')
+      .attr('class', 'edge')
+      .attr('fill', 'none')
+      .attr('data-source', d => d.source)
+      .attr('data-target', d => d.target)
+      .attr('data-beta', d => d.beta)
+      .style('cursor', 'pointer')
+
+    // Track which edges are entering
+    const enteringEdgeKeys = new Set(enterEdges.data().map(d => d.key))
+
+    // Merge enter + update for shared attributes
+    const allEdges = enterEdges.merge(edgeSelection)
+
+    // Apply styles to all edges
+    allEdges.each(function(d) {
+      const edgeVisualBeta = d.targetNode!.isTarget ? d.sourceNode!.visualBeta : d.targetNode!.visualBeta
+      const style = getEdgeStyle(edgeVisualBeta, minBeta, maxVisualBeta, d.beta)
+      const el = d3.select(this)
+
+      el.attr('stroke', style.stroke)
+        .attr('stroke-width', style.strokeWidth)
+
+      // Store style and calculated path for later use
+      const arrowScale = d.sourceNode!.arrowScale ?? 1.0
+      const arrowSize = ARROW_BASE_SIZE * arrowScale
+      const finalPath = calculateEdgePath(d.sourceNode!, d.targetNode!, layout.flowDirection, arrowSize)
+
+      el.datum({ ...d, style, finalPath, arrowSize })
     })
 
-    for (const node of layout.nodes) {
-      const isTarget = node.isTarget
-      const labelVerticalLayer = labelLayers.get(node.id) || 0
+    // Handle animations differently for entering vs updating edges
+    if (shouldAnimate) {
+      allEdges.each(function(d) {
+        const el = d3.select(this)
+        const datum = el.datum() as typeof d & { style: ReturnType<typeof getEdgeStyle>; finalPath: string }
+        const isEntering = enteringEdgeKeys.has(d.key)
 
-      // Create node group centered at node position
-      const nodeGroup = nodesGroup.append('g')
-        .attr('class', `node node-${node.layer}`)
-        .attr('data-id', node.id)
-        .attr('transform', `translate(${node.x}, ${node.y})`)
+        const markerId = `arrow-${d.source}-${d.target}`
+        if (isEntering) {
+          // Entering edges: set final path immediately, fade in after delay
+          el.attr('d', datum.finalPath)
+            .attr('marker-end', null)  // Hide arrow initially
+            .style('stroke-opacity', 0)
+            .transition('edge-fade-in')
+            .delay(ANIMATION.EDGE_ENTER_DELAY)
+            .duration(ANIMATION.EDGE_DURATION)
+            .ease(ANIMATION.EASING)
+            .style('stroke-opacity', 0.7)
+            .on('end', function() {
+              // Add arrow after edge fade-in completes (only in horizontal mode)
+              if (!isVertical) {
+                d3.select(this).attr('marker-end', `url(#${markerId})`)
+              }
+            })
+        } else {
+          // Existing edges: animate path to follow moving nodes
+          el.attr('marker-end', isVertical ? null : `url(#${markerId})`)
+            .transition('edge-update')
+            .duration(ANIMATION.POSITION_DURATION)
+            .ease(ANIMATION.EASING)
+            .attr('d', datum.finalPath)
+        }
+      })
+    } else {
+      // No animation: set everything immediately
+      allEdges.each(function(d) {
+        const el = d3.select(this)
+        const datum = el.datum() as typeof d & { finalPath: string }
+        const markerId = `arrow-${d.source}-${d.target}`
+        el.attr('d', datum.finalPath)
+          .attr('marker-end', isVertical ? null : `url(#${markerId})`)
+          .style('stroke-opacity', 0.7)
+      })
+    }
 
-      // Highlight colors by node type
-      // Target: cyan, Input: orange, Output: purple
-      const GLOW_COLORS = {
-        target: '#00BCD4',  // Cyan
-        input: '#FF9800',   // Orange
-        output: '#9C27B0'   // Purple
-      }
-      const glowColor = GLOW_COLORS[node.layer]
+    // Re-apply hover handlers
+    allEdges
+      .on('mouseenter', function(_event, d) {
+        const datum = d3.select(this).datum() as typeof d & { style: ReturnType<typeof getEdgeStyle> }
+        d3.select(this)
+          .attr('stroke-opacity', 1)
+          .attr('stroke-width', datum.style.strokeWidth + 2)
+        setHoveredEdge({ source: d.source, target: d.target, beta: d.beta })
+      })
+      .on('mouseleave', function(_event, d) {
+        const datum = d3.select(this).datum() as typeof d & { style: ReturnType<typeof getEdgeStyle> }
+        d3.select(this)
+          .attr('stroke-opacity', datum.style.opacity)
+          .attr('stroke-width', datum.style.strokeWidth)
+        setHoveredEdge(null)
+      })
 
-      // Glow circle (rendered after text so it's on top)
-      // Will be appended later after text
+    // === ANIMATE NODES ===
+    const MAX_NODES_FOR_FULL_BETA = 10
+    const totalNodes = layout.nodes.length
+    // In vertical layout, always declutter (only show beta on depth 1)
+    const shouldDeclutter = isVertical || totalNodes > MAX_NODES_FOR_FULL_BETA
 
-      // Invisible larger circle for easier hovering (10px padding)
-      nodeGroup.append('circle')
-        .attr('r', node.radius + 10)
+    const nodeSelection = nodesGroup
+      .selectAll<SVGGElement, PositionedLocalNode>('g.node')
+      .data(layout.nodes, d => d.id)
+
+    // Get previous positions for exit animation
+    const prevLayout = prevLayoutRef.current
+
+    // EXIT nodes
+    nodeSelection.exit()
+      .each(function() {
+        const el = d3.select(this)
+        const nodeId = el.attr('data-id')
+        const prevPos = prevLayout.get(nodeId)
+        const parentPos = prevPos?.parentId ? prevLayout.get(prevPos.parentId) : null
+
+        if (shouldAnimate && parentPos) {
+          // Animate toward parent position
+          el.transition('node-exit')
+            .duration(ANIMATION.NODE_EXIT_DURATION)
+            .ease(ANIMATION.EXIT_EASING)
+            .attr('transform', `translate(${parentPos.x}, ${parentPos.y}) scale(0)`)
+            .style('opacity', 0)
+            .remove()
+        } else {
+          // Just fade out
+          el.transition('node-exit')
+            .duration(shouldAnimate ? ANIMATION.NODE_EXIT_DURATION : 0)
+            .style('opacity', 0)
+            .remove()
+        }
+      })
+
+    // ENTER nodes
+    const enterNodes = nodeSelection.enter()
+      .append('g')
+      .attr('class', d => `node node-${d.layer} node-${d.shape}`)
+      .attr('data-id', d => d.id)
+
+    // Track which nodes are new (for animation differentiation)
+    const enteringNodeIds = new Set(enterNodes.data().map(d => d.id))
+
+    // Set initial position for entering nodes
+    if (shouldAnimate) {
+      enterNodes.each(function(d) {
+        const el = d3.select(this)
+        // Start from parent position if available
+        const parentPos = d.parentId ? nodePositions.get(d.parentId) : null
+        const startX = parentPos?.x ?? d.x
+        const startY = parentPos?.y ?? d.y
+
+        el.attr('transform', `translate(${startX}, ${startY}) scale(0)`)
+          .style('opacity', 0)
+      })
+    } else {
+      enterNodes.attr('transform', d => `translate(${d.x}, ${d.y})`)
+    }
+
+    // Merge for shared operations
+    const allNodes = enterNodes.merge(nodeSelection)
+
+    // Get previous dimensions for animation
+    const prevNodeDims = prevNodeDimsRef.current
+
+    // Clear and rebuild node contents (shapes change based on state)
+    allNodes.selectAll('*').remove()
+
+    allNodes.each(function(d) {
+      // Cast to generic type for renderNodeShape compatibility
+      const nodeGroup = d3.select(this) as d3.Selection<SVGGElement, unknown, null, undefined>
+      const isEntering = enteringNodeIds.has(d.id)
+      const prevDims = prevNodeDims.get(d.id)
+      const dimsChanged = prevDims && (Math.abs(prevDims.width - d.width) > 1 || Math.abs(prevDims.height - d.height) > 1)
+
+      // Render shape - animate size change if dimensions changed
+      renderNodeShape(nodeGroup, d, shouldAnimate && !isEntering && dimsChanged ? prevDims : undefined)
+
+      // Invisible hit area
+      nodeGroup.append('rect')
+        .attr('x', -d.width / 2 - 5)
+        .attr('y', -d.height / 2 - 5)
+        .attr('width', d.width + 10)
+        .attr('height', d.height + 10)
         .attr('fill', 'transparent')
         .attr('pointer-events', 'all')
         .style('cursor', 'pointer')
-        .on('mouseenter', () => setHoveredNode(node))
-        .on('mouseleave', () => setHoveredNode(null))
-        .on('dblclick', () => {
-          if (!node.isTarget && onNavigateToNode) {
-            onNavigateToNode(node.id)
+        .on('mouseenter', () => {
+          // Cancel any pending hide timeout
+          if (tooltipTimeoutRef.current) {
+            clearTimeout(tooltipTimeoutRef.current)
+            tooltipTimeoutRef.current = null
           }
+          setHoveredNode(d)
+        })
+        .on('mouseleave', handleNodeMouseLeave)
+        .on('click', () => {
+          if (d.isInput) toggleInputExpand(d.id)
+          else if (d.isOutput) toggleOutputExpand(d.id)
+        })
+        .on('dblclick', () => {
+          if (!d.isTarget && onNavigateToNode) onNavigateToNode(d.id)
         })
 
-      // Visible circle with sector-colored fill
-      nodeGroup.append('circle')
-        .attr('r', node.radius)
-        .attr('fill', node.sectorColor)
-        .attr('stroke', 'none')
-        .attr('opacity', isTarget ? 1 : 0.85)
-        .attr('pointer-events', 'none') // Let invisible circle handle events
+      // === Text content ===
+      const textColor = getContrastColor(d.sectorColor)
+      const truncatedLabel = truncateLabel(d.label, d.maxLabelChars)
+      const betaFontSize = Math.max(8, d.fontSize - 1)
+      const showBetaInNode = d.betaDisplay && (!shouldDeclutter || d.depth <= 1)
 
-      // Label below circle - positioned in assigned vertical layer to avoid overlap
-      const labelOffset = BASE_OFFSET + labelVerticalLayer * OFFSET_STEP
-      const labelY = node.radius + labelOffset
+      // Create text group for fade animation
+      const textGroup = nodeGroup.append('g').attr('class', 'text-content')
 
-      nodeGroup.append('text')
+      // Primary label
+      textGroup.append('text')
         .attr('x', 0)
-        .attr('y', labelY)
+        .attr('y', showBetaInNode ? -6 : 0)
         .attr('text-anchor', 'middle')
-        .attr('font-size', 11)
-        .attr('fill', '#333')
-        .attr('stroke', 'white')
-        .attr('stroke-width', 4)
-        .attr('stroke-linejoin', 'round')
-        .style('paint-order', 'stroke fill')
-        .attr('font-weight', isTarget ? 600 : 400)
+        .attr('dominant-baseline', 'middle')
+        .attr('font-size', d.fontSize)
+        .attr('font-weight', d.isTarget ? 600 : 500)
+        .attr('fill', textColor)
         .attr('pointer-events', 'none')
-        .text(node.label)
+        .text(truncatedLabel)
 
-      // Subtle glow circle (on top of everything) - only in split mode
-      if (showGlow) {
-        nodeGroup.append('circle')
-          .attr('r', node.radius + 3)
-          .attr('fill', 'none')
-          .attr('stroke', glowColor)
-          .attr('stroke-width', 3)
-          .attr('opacity', 0.35)
-          .style('filter', 'blur(2px)')
+      // Beta value
+      if (showBetaInNode) {
+        textGroup.append('text')
+          .attr('x', 0)
+          .attr('y', 10)
+          .attr('text-anchor', 'middle')
+          .attr('dominant-baseline', 'middle')
+          .attr('font-size', betaFontSize)
+          .attr('font-weight', 600)
+          .attr('fill', d.betaColor)
           .attr('pointer-events', 'none')
+          .text(`β = ${d.betaDisplay}`)
       }
 
-      // Remove button for targets (positioned at 45° angle, top-right)
-      if (isTarget) {
-        const buttonX = node.radius * 0.7
-        const buttonY = -node.radius * 0.7
+      // Animate text fade in for entering nodes
+      if (shouldAnimate && enteringNodeIds.has(d.id)) {
+        textGroup
+          .style('opacity', 0)
+          .transition('text-fade')
+          .delay(ANIMATION.NODE_ENTER_DURATION)
+          .duration(ANIMATION.TEXT_FADE_DURATION)
+          .style('opacity', 1)
+      }
+
+      // Glow effect - only for targets and immediate (depth 1) inputs/outputs
+      const shouldShowGlow = showGlow && (d.isTarget || d.depth === 1)
+      if (shouldShowGlow) {
+        const glowColors: Record<string, string> = {
+          target: '#00BCD4',
+          input: '#FF9800',
+          output: '#9C27B0'
+        }
+        const glowColor = glowColors[d.layer]
+        const glowPadding = 4
+
+        if (d.shape === 'hexagon') {
+          // Octagon glow - match the shape
+          const w = d.width + glowPadding * 2
+          const h = d.height + glowPadding * 2
+          const cut = h * 0.22
+          const points = [
+            `${-w/2 + cut},${-h/2}`,
+            `${w/2 - cut},${-h/2}`,
+            `${w/2},${-h/2 + cut}`,
+            `${w/2},${h/2 - cut}`,
+            `${w/2 - cut},${h/2}`,
+            `${-w/2 + cut},${h/2}`,
+            `${-w/2},${h/2 - cut}`,
+            `${-w/2},${-h/2 + cut}`
+          ].join(' ')
+
+          nodeGroup.insert('polygon', ':first-child')
+            .attr('points', points)
+            .attr('fill', 'none')
+            .attr('stroke', glowColor)
+            .attr('stroke-width', 3)
+            .attr('opacity', 0.4)
+            .style('filter', 'blur(3px)')
+            .attr('pointer-events', 'none')
+        } else {
+          // Rectangle/pill glow
+          nodeGroup.insert('rect', ':first-child')
+            .attr('x', -d.width / 2 - glowPadding)
+            .attr('y', -d.height / 2 - glowPadding)
+            .attr('width', d.width + glowPadding * 2)
+            .attr('height', d.height + glowPadding * 2)
+            .attr('rx', d.shape === 'pill' ? d.height / 2 + glowPadding : 10)
+            .attr('ry', d.shape === 'pill' ? d.height / 2 + glowPadding : 10)
+            .attr('fill', 'none')
+            .attr('stroke', glowColor)
+            .attr('stroke-width', 3)
+            .attr('opacity', 0.4)
+            .style('filter', 'blur(3px)')
+            .attr('pointer-events', 'none')
+        }
+      }
+
+      // Remove button for targets
+      if (d.isTarget) {
+        const btnX = d.width / 2 - 8
+        const btnY = -d.height / 2 + 8
 
         const removeBtn = nodeGroup.append('g')
           .attr('class', 'remove-btn')
-          .attr('transform', `translate(${buttonX}, ${buttonY})`)
+          .attr('transform', `translate(${btnX}, ${btnY})`)
           .style('cursor', 'pointer')
           .on('click', (event) => {
             event.stopPropagation()
-            onRemoveTarget(node.id)
+            onRemoveTarget(d.id)
           })
 
         removeBtn.append('circle')
-          .attr('r', 7)
+          .attr('r', 8)
           .attr('fill', '#f44336')
 
-        // X mark using lines
         removeBtn.append('line')
-          .attr('x1', -3)
-          .attr('y1', -3)
-          .attr('x2', 3)
-          .attr('y2', 3)
-          .attr('stroke', '#fff')
-          .attr('stroke-width', 1.5)
+          .attr('x1', -3).attr('y1', -3)
+          .attr('x2', 3).attr('y2', 3)
+          .attr('stroke', '#fff').attr('stroke-width', 2)
 
         removeBtn.append('line')
-          .attr('x1', 3)
-          .attr('y1', -3)
-          .attr('x2', -3)
-          .attr('y2', 3)
-          .attr('stroke', '#fff')
-          .attr('stroke-width', 1.5)
+          .attr('x1', 3).attr('y1', -3)
+          .attr('x2', -3).attr('y2', 3)
+          .attr('stroke', '#fff').attr('stroke-width', 2)
       }
+    })
+
+    // Animate nodes to final position
+    if (shouldAnimate) {
+      // Animate all nodes - entering nodes scale up, existing nodes move
+      allNodes.each(function(d) {
+        const el = d3.select(this)
+        const isEntering = enteringNodeIds.has(d.id)
+
+        if (isEntering) {
+          // Entering nodes: animate from parent/initial to final with scale
+          el.transition('node-enter')
+            .duration(ANIMATION.NODE_ENTER_DURATION)
+            .ease(ANIMATION.EASING)
+            .attr('transform', `translate(${d.x}, ${d.y}) scale(1)`)
+            .style('opacity', 1)
+        } else {
+          // Updating nodes: animate position change
+          el.transition('node-update')
+            .duration(ANIMATION.POSITION_DURATION)
+            .ease(ANIMATION.EASING)
+            .attr('transform', `translate(${d.x}, ${d.y})`)
+        }
+      })
+    } else {
+      // No animation: set positions directly
+      allNodes.attr('transform', d => `translate(${d.x}, ${d.y})`)
     }
 
-  }, [layout, dimensions, targetIds, onRemoveTarget, onNavigateToNode, showGlow])
+    // Store current layout for next render's exit animations
+    const newLayoutMap = new Map<string, { x: number; y: number; parentId?: string }>()
+    layout.nodes.forEach(n => {
+      newLayoutMap.set(n.id, { x: n.x, y: n.y, parentId: n.parentId })
+    })
+    prevLayoutRef.current = newLayoutMap
 
-  // Empty state
+    // Store current node dimensions for next render's size animations
+    const newNodeDimsMap = new Map<string, { width: number; height: number }>()
+    layout.nodes.forEach(n => {
+      newNodeDimsMap.set(n.id, { width: n.width, height: n.height })
+    })
+    prevNodeDimsRef.current = newNodeDimsMap
+
+  }, [layout, dimensions, targetIds, betaThreshold, onRemoveTarget, onNavigateToNode, showGlow, toggleInputExpand, toggleOutputExpand])
+
+  // Empty state - no targets selected
   if (targetIds.length === 0) {
     return (
       <div
@@ -577,6 +1145,110 @@ export function LocalView({
     )
   }
 
+  // Empty mode - targets exist but no causal edges found
+  if (localViewData?.mode === 'empty') {
+    const firstTarget = nodeById.get(targetIds[0])
+    const targetLabel = firstTarget?.label.replace(/_/g, ' ') || 'Selected node'
+    const hasChildren = firstTarget?.children && firstTarget.children.length > 0
+    const childCount = firstTarget?.children?.length || 0
+
+    return (
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#fafafa'
+        }}
+      >
+        <div style={{ textAlign: 'center', color: '#666', maxWidth: 500, padding: 20 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
+          <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>
+            No causal relationships found
+          </div>
+          <div style={{ fontSize: 14, color: '#888', marginBottom: 16, lineHeight: 1.5 }}>
+            <strong>{targetLabel}</strong> has no causal connections at its ring level
+            {localViewData.totalChildCount !== undefined && localViewData.totalChildCount > 0 && (
+              <span> (checked {localViewData.totalChildCount} child indicators)</span>
+            )}
+          </div>
+          <div style={{
+            fontSize: 12,
+            color: '#666',
+            background: '#f5f5f5',
+            padding: 12,
+            borderRadius: 6,
+            textAlign: 'left',
+            marginBottom: 16
+          }}>
+            <div style={{ fontWeight: 500, marginBottom: 4 }}>Possible reasons:</div>
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              <li>Exogenous variable (not caused by other factors in the model)</li>
+              <li>Isolated node (no statistically significant relationships)</li>
+              <li>Data limitation (relationships not yet modeled)</li>
+            </ul>
+          </div>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {/* Go Back button - shown when there's drill history */}
+            {canDrillUp && onDrillUp && (
+              <button
+                onClick={onDrillUp}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  border: '1px solid #2196F3',
+                  borderRadius: 6,
+                  background: '#2196F3',
+                  color: 'white',
+                  fontWeight: 500
+                }}
+              >
+                ← Go Back
+              </button>
+            )}
+            {hasChildren && onDrillDown && (
+              <button
+                onClick={() => onDrillDown(targetIds[0])}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  border: '1px solid #9C27B0',
+                  borderRadius: 6,
+                  background: canDrillUp ? 'white' : '#9C27B0',
+                  color: canDrillUp ? '#9C27B0' : 'white',
+                  fontWeight: 500
+                }}
+              >
+                Drill Down ({childCount})
+              </button>
+            )}
+            <button
+              onClick={onSwitchToGlobal}
+              style={{
+                padding: '10px 20px',
+                fontSize: 14,
+                cursor: 'pointer',
+                border: '1px solid #3B82F6',
+                borderRadius: 6,
+                background: (canDrillUp || hasChildren) ? 'white' : '#3B82F6',
+                color: (canDrillUp || hasChildren) ? '#3B82F6' : 'white',
+                fontWeight: 500
+              }}
+            >
+              Global View
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       ref={containerRef}
@@ -587,11 +1259,11 @@ export function LocalView({
         background: '#fafafa'
       }}
     >
-      {/* Controls Panel - Bottom right, compact */}
+      {/* Controls Panel */}
       <div
         style={{
           position: 'absolute',
-          bottom: 40,  // Above the node tooltip area
+          bottom: 40,
           right: 10,
           background: 'rgba(255,255,255,0.95)',
           padding: '8px 12px',
@@ -601,21 +1273,100 @@ export function LocalView({
           fontSize: 11
         }}
       >
-        {/* Beta Threshold - inline */}
+        {/* Layer Controls (like Global View's ring expand/collapse) */}
+        {(() => {
+          // Compute current state for button enable/disable
+          const inputMaxDepth = localViewData ? Math.max(...localViewData.inputs.map(n => n.depth), 0) : 0
+          const outputMaxDepth = localViewData ? Math.max(...localViewData.outputs.map(n => n.depth), 0) : 0
+          const canExpandInputs = localViewData && (
+            localViewData.inputs.some(n => n.hasMoreInputs) ||
+            localViewData.targets.some(n => n.hasMoreInputs)
+          )
+          const canExpandOutputs = localViewData && (
+            localViewData.outputs.some(n => n.hasMoreOutputs) ||
+            localViewData.targets.some(n => n.hasMoreOutputs)
+          )
+          const canCollapseInputs = inputMaxDepth > 0 || expandedInputNodes.size > 0
+          const canCollapseOutputs = outputMaxDepth > 0 || expandedOutputNodes.size > 0
+
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ color: '#FF9800', fontWeight: 500 }}>Causes</span>
+                <button
+                  onClick={collapseInputLayer}
+                  disabled={!canCollapseInputs}
+                  style={{
+                    width: 18, height: 18, padding: 0, fontSize: 14, lineHeight: 1,
+                    cursor: !canCollapseInputs ? 'not-allowed' : 'pointer',
+                    border: '1px solid #ccc', borderRadius: 3,
+                    background: !canCollapseInputs ? '#f5f5f5' : 'white',
+                    color: !canCollapseInputs ? '#bbb' : '#666'
+                  }}
+                  title="Collapse outermost layer"
+                >−</button>
+                <span style={{ minWidth: 14, textAlign: 'center', color: '#666' }}>{inputMaxDepth}</span>
+                <button
+                  onClick={expandInputLayer}
+                  disabled={!canExpandInputs}
+                  style={{
+                    width: 18, height: 18, padding: 0, fontSize: 14, lineHeight: 1,
+                    cursor: !canExpandInputs ? 'not-allowed' : 'pointer',
+                    border: '1px solid #ccc', borderRadius: 3,
+                    background: !canExpandInputs ? '#f5f5f5' : 'white',
+                    color: !canExpandInputs ? '#bbb' : '#666'
+                  }}
+                  title="Expand all visible nodes"
+                >+</button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ color: '#9C27B0', fontWeight: 500 }}>Effects</span>
+                <button
+                  onClick={collapseOutputLayer}
+                  disabled={!canCollapseOutputs}
+                  style={{
+                    width: 18, height: 18, padding: 0, fontSize: 14, lineHeight: 1,
+                    cursor: !canCollapseOutputs ? 'not-allowed' : 'pointer',
+                    border: '1px solid #ccc', borderRadius: 3,
+                    background: !canCollapseOutputs ? '#f5f5f5' : 'white',
+                    color: !canCollapseOutputs ? '#bbb' : '#666'
+                  }}
+                  title="Collapse outermost layer"
+                >−</button>
+                <span style={{ minWidth: 14, textAlign: 'center', color: '#666' }}>{outputMaxDepth}</span>
+                <button
+                  onClick={expandOutputLayer}
+                  disabled={!canExpandOutputs}
+                  style={{
+                    width: 18, height: 18, padding: 0, fontSize: 14, lineHeight: 1,
+                    cursor: !canExpandOutputs ? 'not-allowed' : 'pointer',
+                    border: '1px solid #ccc', borderRadius: 3,
+                    background: !canExpandOutputs ? '#f5f5f5' : 'white',
+                    color: !canExpandOutputs ? '#bbb' : '#666'
+                  }}
+                  title="Expand all visible nodes"
+                >+</button>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Beta Threshold */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ color: '#666', whiteSpace: 'nowrap' }}>β ≥ {betaThreshold.toFixed(1)}</span>
+          <span style={{ color: '#666', whiteSpace: 'nowrap' }}>β ≥ {betaThreshold.toFixed(2)}</span>
           <input
             type="range"
-            min="0.1"
+            min="0"
             max="5"
-            step="0.1"
+            step="0.05"
             value={betaThreshold}
-            onChange={(e) => setBetaThreshold(parseFloat(e.target.value))}
-            style={{ width: 80 }}
+            onChange={(e) => onBetaThresholdChange(parseFloat(e.target.value))}
+            style={{ width: 100 }}
           />
         </div>
 
-        {/* Stats + Clear - inline */}
+        {/* Stats + Clear */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {stats && (
             <span style={{ color: '#888' }}>
@@ -625,113 +1376,216 @@ export function LocalView({
           <button
             onClick={onClearTargets}
             style={{
-              padding: '2px 8px',
-              fontSize: 10,
-              cursor: 'pointer',
-              border: '1px solid #ccc',
-              borderRadius: 3,
-              background: 'white',
-              color: '#666'
+              padding: '2px 8px', fontSize: 10,
+              cursor: 'pointer', border: '1px solid #ccc',
+              borderRadius: 3, background: 'white', color: '#666'
             }}
-          >
-            Clear
-          </button>
+          >Clear (C)</button>
         </div>
       </div>
 
       {/* SVG Canvas */}
-      <svg
-        ref={svgRef}
-        style={{ width: '100%', height: '100%' }}
-      />
+      <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
 
       {/* Node Tooltip */}
-      {hoveredNode && (() => {
-        // Find beta for this node
-        const edge = layout?.edges.find(e =>
-          (hoveredNode.isInput && e.source === hoveredNode.id) ||
-          (hoveredNode.isOutput && e.target === hoveredNode.id)
+      {hoveredNode && (
+        <div
+          onMouseEnter={() => {
+            isHoveringTooltipRef.current = true
+            // Cancel any pending hide timeout
+            if (tooltipTimeoutRef.current) {
+              clearTimeout(tooltipTimeoutRef.current)
+              tooltipTimeoutRef.current = null
+            }
+          }}
+          onMouseLeave={() => {
+            isHoveringTooltipRef.current = false
+            setHoveredNode(null)
+          }}
+          style={{
+            position: 'absolute',
+            bottom: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'white',
+            padding: '12px 16px',
+            borderRadius: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            zIndex: 20,
+            maxWidth: 400
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{hoveredNode.label}</div>
+          <div style={{ fontSize: 12, color: '#666' }}>
+            <span style={{
+              display: 'inline-block',
+              width: 8, height: 8, borderRadius: '50%',
+              background: hoveredNode.sectorColor,
+              marginRight: 6
+            }} />
+            {hoveredNode.sector} • Ring {hoveredNode.ring}
+            {hoveredNode.isTarget && <span style={{ marginLeft: 8, color: '#3B82F6', fontWeight: 500 }}>Target</span>}
+            {hoveredNode.isInput && <span style={{ marginLeft: 8, color: '#FF9800' }}>Cause</span>}
+            {hoveredNode.isOutput && <span style={{ marginLeft: 8, color: '#9C27B0' }}>Effect</span>}
+          </div>
+          {hoveredNode.beta !== undefined && (
+            <div style={{
+              fontSize: 14, fontWeight: 600, marginTop: 8,
+              color: hoveredNode.beta >= 0 ? '#4CAF50' : '#F44336'
+            }}>
+              β = {hoveredNode.beta >= 0 ? '+' : ''}{hoveredNode.beta.toFixed(3)}
+            </div>
+          )}
+          {/* Actions for non-target nodes */}
+          {!hoveredNode.isTarget && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              {/* Drill-down for non-indicator nodes with children */}
+              {hoveredNode.hasChildren && hoveredNode.ring < 5 && onDrillDown && (
+                <button
+                  onClick={() => onDrillDown(hoveredNode.id)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    border: '1px solid #9C27B0',
+                    borderRadius: 4,
+                    background: 'white',
+                    color: '#9C27B0',
+                    fontWeight: 500
+                  }}
+                >
+                  Drill Down (d)
+                </button>
+              )}
+              {onShowInGlobal && (
+                <button
+                  onClick={() => onShowInGlobal(hoveredNode.id)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    border: '1px solid #3B82F6',
+                    borderRadius: 4,
+                    background: 'white',
+                    color: '#3B82F6',
+                    fontWeight: 500
+                  }}
+                >
+                  Global (W)
+                </button>
+              )}
+              <span style={{ fontSize: 11, color: '#888' }}>
+                Double-click to explore
+              </span>
+            </div>
+          )}
+          {/* Drill-up to go back */}
+          {hoveredNode.isTarget && canDrillUp && onDrillUp && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+              <button
+                onClick={onDrillUp}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  border: '1px solid #2196F3',
+                  borderRadius: 4,
+                  background: 'white',
+                  color: '#2196F3',
+                  fontWeight: 500
+                }}
+              >
+                ← Go Back (d)
+              </button>
+              <span style={{ fontSize: 11, color: '#888' }}>
+                Return to previous view
+              </span>
+            </div>
+          )}
+          {/* Drill-down for target nodes */}
+          {hoveredNode.isTarget && !canDrillUp && hoveredNode.hasChildren && onDrillDown && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => onDrillDown(hoveredNode.id)}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  border: '1px solid #9C27B0',
+                  borderRadius: 4,
+                  background: 'white',
+                  color: '#9C27B0',
+                  fontWeight: 500
+                }}
+              >
+                Drill Down (d)
+              </button>
+              <span style={{ fontSize: 11, color: '#888' }}>
+                View {hoveredNode.childIds?.length || 0} children
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Edge Tooltip */}
+      {hoveredEdge && (() => {
+        // Find the full edge data to check for aggregation
+        const fullEdge = localViewData?.edges.find(
+          e => e.source === hoveredEdge.source && e.target === hoveredEdge.target
         )
-        const beta = edge?.beta
+        const isAggregated = fullEdge?.isAggregated
+        const pathwayCount = fullEdge?.pathwayCount
 
         return (
           <div
             style={{
               position: 'absolute',
-              bottom: 20,
-              left: '50%',
-              transform: 'translateX(-50%)',
+              top: 70,
+              right: 10,
               background: 'white',
               padding: '12px 16px',
               borderRadius: 8,
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               zIndex: 20,
-              maxWidth: 400
+              maxWidth: 300
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>{hoveredNode.label}</div>
-            <div style={{ fontSize: 12, color: '#666' }}>
-              <span style={{
-                display: 'inline-block',
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: hoveredNode.sectorColor,
-                marginRight: 6
-              }} />
-              {hoveredNode.sector} • Ring {hoveredNode.ring}
-              {hoveredNode.isTarget && <span style={{ marginLeft: 8, color: '#3B82F6', fontWeight: 500 }}>Target</span>}
-              {hoveredNode.isInput && <span style={{ marginLeft: 8, color: '#4CAF50' }}>Cause</span>}
-              {hoveredNode.isOutput && <span style={{ marginLeft: 8, color: '#F44336' }}>Effect</span>}
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+              {isAggregated ? 'Aggregated Causal Effect' : 'Causal Effect'}
             </div>
-            {beta !== undefined && (
-              <div style={{
-                fontSize: 14,
-                fontWeight: 600,
-                marginTop: 8,
-                color: beta > 0 ? '#4CAF50' : '#F44336'
-              }}>
-                β = {beta > 0 ? '+' : ''}{beta.toFixed(3)}
-              </div>
-            )}
-            {!hoveredNode.isTarget && (
-              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                Double-click to explore this node
+            <div style={{
+              fontSize: 18, fontWeight: 600,
+              color: hoveredEdge.beta >= 0 ? '#4CAF50' : '#F44336'
+            }}>
+              β = {hoveredEdge.beta >= 0 ? '+' : ''}{hoveredEdge.beta.toFixed(3)}
+              {isAggregated && <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 4 }}>(avg)</span>}
+            </div>
+            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+              {isAggregated
+                ? `${pathwayCount} pathway${pathwayCount !== 1 ? 's' : ''} through child indicators`
+                : (hoveredEdge.beta >= 0 ? 'Positive relationship' : 'Negative relationship')
+              }
+            </div>
+            {isAggregated && fullEdge?.pathways && fullEdge.pathways.length > 0 && (
+              <div style={{ fontSize: 10, color: '#666', marginTop: 8, borderTop: '1px solid #eee', paddingTop: 8 }}>
+                <div style={{ fontWeight: 500, marginBottom: 4 }}>Top pathways:</div>
+                {fullEdge.pathways.slice(0, 3).map((p, i) => {
+                  const srcNode = nodeById.get(p.childSource)
+                  return (
+                    <div key={i} style={{ marginBottom: 2 }}>
+                      {srcNode?.label.substring(0, 25) || p.childSource}
+                      <span style={{ color: p.beta >= 0 ? '#4CAF50' : '#F44336', marginLeft: 4 }}>
+                        β={p.beta.toFixed(2)}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
         )
       })()}
-
-      {/* Edge Tooltip */}
-      {hoveredEdge && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 70,
-            right: 10,
-            background: 'white',
-            padding: '12px 16px',
-            borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            zIndex: 20
-          }}
-        >
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-            Causal Effect
-          </div>
-          <div style={{
-            fontSize: 18,
-            fontWeight: 600,
-            color: hoveredEdge.beta > 0 ? '#4CAF50' : '#F44336'
-          }}>
-            β = {hoveredEdge.beta > 0 ? '+' : ''}{hoveredEdge.beta.toFixed(3)}
-          </div>
-          <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-            {hoveredEdge.beta > 0 ? 'Positive relationship' : 'Negative relationship'}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
