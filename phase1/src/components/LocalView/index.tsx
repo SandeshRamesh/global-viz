@@ -279,13 +279,16 @@ export function LocalView({
 
   const TARGET_NODE_COUNT = 6
 
-  // Calculate optimal beta threshold
-  const calculateOptimalThreshold = useMemo(() => {
-    if (targetIds.length === 0) return 0.5
+  // Calculate beta range from relevant edges for smart slider bounds
+  const betaRange = useMemo(() => {
+    if (targetIds.length === 0) {
+      return { min: 0, max: 2, step: 0.1, relevantBetas: [] as number[] }
+    }
 
     const causalEdges = getCausalEdges(allEdges)
     const relevantBetas: number[] = []
 
+    // Collect all betas for edges connected to targets
     for (const targetId of targetIds) {
       causalEdges
         .filter(e => e.target === targetId)
@@ -295,14 +298,54 @@ export function LocalView({
         .forEach(e => relevantBetas.push(Math.abs(e.beta)))
     }
 
+    if (relevantBetas.length === 0) {
+      return { min: 0, max: 2, step: 0.1, relevantBetas: [] }
+    }
+
+    relevantBetas.sort((a, b) => a - b)
+    const minBeta = relevantBetas[0]
+    const maxBeta = relevantBetas[relevantBetas.length - 1]
+    const range = maxBeta - minBeta
+
+    // Smart step: ~20 steps across the range, rounded to nice values
+    let step: number
+    if (range < 0.5) step = 0.01
+    else if (range < 2) step = 0.05
+    else if (range < 5) step = 0.1
+    else step = 0.25
+
+    return {
+      min: Math.floor(minBeta * 10) / 10,  // Round down to 0.1
+      max: Math.ceil(maxBeta * 10) / 10,   // Round up to 0.1
+      step,
+      relevantBetas
+    }
+  }, [targetIds, allEdges])
+
+  // State for slider bounds (can be expanded with +/- buttons)
+  const [sliderMin, setSliderMin] = useState(0)
+  const [sliderMax, setSliderMax] = useState(2)
+
+  // Update slider bounds when beta range changes
+  useEffect(() => {
+    setSliderMin(betaRange.min)
+    setSliderMax(Math.max(betaRange.max, 1)) // At least 1
+  }, [betaRange.min, betaRange.max])
+
+  // Calculate optimal beta threshold
+  const calculateOptimalThreshold = useMemo(() => {
+    if (targetIds.length === 0) return 0.5
+
+    const { relevantBetas } = betaRange
     if (relevantBetas.length === 0) return 0.5
 
-    relevantBetas.sort((a, b) => b - a)
-    const targetIndex = Math.min(TARGET_NODE_COUNT, relevantBetas.length) - 1
-    const optimalThreshold = relevantBetas[targetIndex] * 0.99
+    // Sort descending for threshold calculation
+    const sorted = [...relevantBetas].sort((a, b) => b - a)
+    const targetIndex = Math.min(TARGET_NODE_COUNT, sorted.length) - 1
+    const optimalThreshold = sorted[targetIndex] * 0.99
 
-    return Math.max(0.1, Math.min(optimalThreshold, 5))
-  }, [targetIds, allEdges])
+    return Math.max(0.1, Math.min(optimalThreshold, sliderMax))
+  }, [betaRange, sliderMax])
 
   // Only auto-calculate threshold when targets actually change (not on every remount)
   useEffect(() => {
@@ -1352,18 +1395,64 @@ export function LocalView({
           )
         })()}
 
-        {/* Beta Threshold */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ color: '#666', whiteSpace: 'nowrap' }}>β ≥ {betaThreshold.toFixed(2)}</span>
+        {/* Beta Threshold with +/- buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+          <span style={{ color: '#666', whiteSpace: 'nowrap', fontSize: 11 }}>β ≥ {betaThreshold.toFixed(2)}</span>
+          {/* Decrease min bound */}
+          <button
+            onClick={() => {
+              const decrement = betaRange.step * 2
+              const newMin = Math.max(0, sliderMin - decrement)
+              setSliderMin(Math.round(newMin * 100) / 100)
+            }}
+            disabled={sliderMin <= 0}
+            style={{
+              width: 16, height: 16, padding: 0, fontSize: 10, lineHeight: 1,
+              cursor: sliderMin <= 0 ? 'not-allowed' : 'pointer',
+              border: '1px solid #ccc', borderRadius: 2,
+              background: sliderMin <= 0 ? '#f5f5f5' : 'white',
+              color: sliderMin <= 0 ? '#ccc' : '#666'
+            }}
+            title={`Decrease min (${sliderMin.toFixed(2)})`}
+          >−</button>
           <input
             type="range"
-            min="0"
-            max="5"
-            step="0.05"
-            value={betaThreshold}
+            min={sliderMin}
+            max={sliderMax}
+            step={betaRange.step}
+            value={Math.min(Math.max(betaThreshold, sliderMin), sliderMax)}
             onChange={(e) => onBetaThresholdChange(parseFloat(e.target.value))}
-            style={{ width: 100 }}
+            style={{ width: 80 }}
+            title={`Range: ${sliderMin.toFixed(2)} - ${sliderMax.toFixed(2)}`}
           />
+          {/* Increase max bound */}
+          <button
+            onClick={() => {
+              const increment = betaRange.step * 2
+              const newMax = sliderMax + increment
+              setSliderMax(Math.round(newMax * 100) / 100)
+            }}
+            style={{
+              width: 16, height: 16, padding: 0, fontSize: 10, lineHeight: 1,
+              cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+              background: 'white', color: '#666'
+            }}
+            title={`Increase max (${sliderMax.toFixed(2)})`}
+          >+</button>
+          {/* Reset to auto-calculated range */}
+          <button
+            onClick={() => {
+              setSliderMin(betaRange.min)
+              setSliderMax(Math.max(betaRange.max, 1))
+              onBetaThresholdChange(calculateOptimalThreshold)
+            }}
+            style={{
+              width: 16, height: 16, padding: 0, fontSize: 9, lineHeight: 1,
+              cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+              background: 'white', color: '#888'
+            }}
+            title="Reset to auto range"
+          >↺</button>
         </div>
 
         {/* Stats + Clear */}
