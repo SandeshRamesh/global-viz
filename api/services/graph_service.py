@@ -116,6 +116,63 @@ class GraphService:
 
         return self._shap_cache[country]
 
+    def get_historical_timeline(
+        self,
+        country: str,
+        start_year: Optional[int] = None,
+        end_year: Optional[int] = None
+    ) -> Dict:
+        """
+        Get historical indicator values across multiple years.
+
+        Args:
+            country: Country name
+            start_year: Start year (default: 10 years before end)
+            end_year: End year (default: most recent)
+
+        Returns:
+            {
+                'years': [2015, 2016, ...],
+                'values': { '2015': { indicator: value, ... }, ... },
+                'indicators': [list of indicator IDs with data]
+            }
+        """
+        if self._panel_df is None:
+            self._panel_df = pd.read_parquet(PANEL_PATH)
+
+        country_data = self._panel_df[self._panel_df['country'] == country]
+        if country_data.empty:
+            return {'years': [], 'values': {}, 'indicators': []}
+
+        # Determine year range
+        available_years = sorted(country_data['year'].unique())
+        if not available_years:
+            return {'years': [], 'values': {}, 'indicators': []}
+
+        if end_year is None:
+            end_year = int(available_years[-1])
+        if start_year is None:
+            start_year = max(int(available_years[0]), end_year - 10)
+
+        # Filter to year range
+        years = [int(y) for y in available_years if start_year <= y <= end_year]
+
+        # Build values dict
+        values = {}
+        all_indicators = set()
+
+        for year in years:
+            year_data = country_data[country_data['year'] == year]
+            year_values = dict(zip(year_data['indicator_id'], year_data['value']))
+            values[str(year)] = year_values
+            all_indicators.update(year_values.keys())
+
+        return {
+            'years': years,
+            'values': values,
+            'indicators': sorted(list(all_indicators))
+        }
+
     def get_graph_stats(self) -> dict:
         """Get aggregate statistics across all graphs."""
         countries = self.get_available_countries()

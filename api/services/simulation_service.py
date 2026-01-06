@@ -79,6 +79,10 @@ class SimulationService:
             year=year
         )
 
+        # Check for simulation errors
+        if result.get('status') == 'error':
+            raise ValueError(result.get('message', 'Simulation failed'))
+
         # Format response
         return self._format_instant_result(country, interventions, result, baseline)
 
@@ -178,6 +182,7 @@ class SimulationService:
             'status': 'success',
             'country': country,
             'horizon_years': horizon_years,
+            'base_year': result.get('base_year'),
             'interventions': interventions,
             'timeline': timeline,
             'effects': effects,

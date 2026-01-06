@@ -68,39 +68,93 @@ def build_lagged_adjacency(graph: dict) -> dict:
     return dict(adj)
 
 
+def find_best_year_for_indicators(
+    panel_path: str,
+    country_code: str,
+    indicators: list
+) -> tuple:
+    """
+    Find the most recent year where all intervention indicators have data.
+    Returns (best_year, missing_indicators).
+    """
+    df = pd.read_parquet(panel_path)
+
+    # Handle long format
+    if 'indicator_id' in df.columns:
+        country_data = df[df['country'] == country_code]
+    else:
+        country_data = df[df['country'] == country_code]
+
+    if country_data.empty:
+        return None, indicators
+
+    years = sorted(country_data['year'].unique(), reverse=True)
+
+    for year in years:
+        year_data = country_data[country_data['year'] == year]
+        if 'indicator_id' in df.columns:
+            year_indicators = set(year_data['indicator_id'].unique())
+        else:
+            year_indicators = set(year_data.columns) - {'country', 'year', 'country_text_id', 'iso3'}
+
+        missing = [ind for ind in indicators if ind not in year_indicators]
+        if not missing:
+            return int(year), []
+
+    # No year has all - return year with most coverage
+    best_year = None
+    min_missing = len(indicators) + 1
+    best_missing = indicators
+
+    for year in years:
+        year_data = country_data[country_data['year'] == year]
+        if 'indicator_id' in df.columns:
+            year_indicators = set(year_data['indicator_id'].unique())
+        else:
+            year_indicators = set(year_data.columns) - {'country', 'year', 'country_text_id', 'iso3'}
+
+        missing = [ind for ind in indicators if ind not in year_indicators]
+        if len(missing) < min_missing:
+            min_missing = len(missing)
+            best_year = int(year)
+            best_missing = missing
+
+    return best_year, best_missing
+
+
 def load_baseline_values(
     panel_path: str,
     country_code: str,
     year: Optional[int] = None
-) -> dict:
-    """Load baseline values for a country."""
+) -> tuple:
+    """Load baseline values for a country. Returns (baseline_dict, actual_year)."""
     df = pd.read_parquet(panel_path)
 
     # Handle long format
     if 'indicator_id' in df.columns:
         country_data = df[df['country'] == country_code]
         if country_data.empty:
-            return {}
+            return {}, None
 
         if year is None:
-            year = country_data['year'].max()
+            year = int(country_data['year'].max())
 
         year_data = country_data[country_data['year'] == year]
-        return dict(zip(year_data['indicator_id'], year_data['value']))
+        return dict(zip(year_data['indicator_id'], year_data['value'])), year
 
     # Handle wide format
     country_data = df[df['country'] == country_code]
     if country_data.empty:
-        return {}
+        return {}, None
 
     if year is None:
-        year = country_data['year'].max()
+        year = int(country_data['year'].max())
 
     row = country_data[country_data['year'] == year]
     if row.empty:
-        return {}
+        return {}, None
 
-    return row.drop(columns=['country', 'year'], errors='ignore').iloc[0].to_dict()
+    return row.drop(columns=['country', 'year'], errors='ignore').iloc[0].to_dict(), year
 
 
 # =============================================================================
@@ -300,17 +354,34 @@ def run_temporal_simulation(
     if panel_path is None:
         panel_path = PROJECT_ROOT / 'data' / 'raw' / 'v21_panel_data_for_v3.parquet'
 
+    # Extract intervention indicator IDs
+    intervention_indicators = [iv['indicator'] for iv in interventions]
+
+    # If no year specified, find the best year where all interventions have data
+    if base_year is None:
+        best_year, missing = find_best_year_for_indicators(
+            str(panel_path), country_code, intervention_indicators
+        )
+        if missing:
+            return {
+                'status': 'error',
+                'message': f'Indicators not found in any year for {country_code}: {missing}',
+                'missing_indicators': missing
+            }
+        base_year = best_year
+
     # Load graph
     graph = load_country_graph(country_code, graphs_dir)
     adjacency = build_lagged_adjacency(graph)
 
-    # Load baseline
-    baseline = load_baseline_values(panel_path, country_code, base_year)
+    # Load baseline for the determined year
+    baseline, actual_base_year = load_baseline_values(str(panel_path), country_code, base_year)
     if not baseline:
         return {
             'status': 'error',
             'message': f'No baseline data for {country_code}'
         }
+    base_year = actual_base_year  # Use the actual year from data
 
     # Convert interventions to absolute deltas
     intervention_deltas = {}
@@ -341,8 +412,17 @@ def run_temporal_simulation(
 
     # Count affected indicators per year
     affected_per_year = {
-        year: len([e for e in eff.values() if abs(e['percent_change']) > 0.1])
+        f'year_{year}': len([e for e in eff.values() if abs(e['percent_change']) > 0.1])
         for year, eff in effects.items()
+    }
+
+    # Convert integer year keys to 'year_N' format for frontend
+    formatted_timeline = {
+        f'year_{year}': {k: v for k, v in values.items() if k in effects.get(year, {})}
+        for year, values in result['timeline'].items()
+    }
+    formatted_effects = {
+        f'year_{year}': eff for year, eff in effects.items()
     }
 
     return {
@@ -351,11 +431,8 @@ def run_temporal_simulation(
         'base_year': base_year,
         'horizon_years': horizon_years,
         'interventions': interventions,
-        'timeline': {
-            year: {k: v for k, v in values.items() if k in effects.get(year, {})}
-            for year, values in result['timeline'].items()
-        },
-        'effects': effects,
+        'timeline': formatted_timeline,
+        'effects': formatted_effects,
         'affected_per_year': affected_per_year,
         'metadata': {
             'n_edges': graph['n_edges'],

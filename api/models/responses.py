@@ -64,6 +64,7 @@ class IndicatorInfo(BaseModel):
     id: str
     label: Optional[str] = None
     domain: Optional[str] = None
+    importance: Optional[float] = Field(None, description="SHAP importance score for sorting")
 
 
 class IndicatorDetailResponse(BaseModel):
@@ -121,18 +122,19 @@ class TemporalSimulationResponse(BaseModel):
     status: str
     country: str
     horizon_years: int
+    base_year: Optional[int] = Field(None, description="Base year for simulation data")
     interventions: List[Dict[str, Any]]
-    timeline: Dict[int, Dict[str, float]] = Field(
+    timeline: Dict[str, Dict[str, float]] = Field(
         ...,
-        description="Values at each year"
+        description="Values at each year (keys: year_0, year_1, ...)"
     )
-    effects: Dict[int, Dict[str, Any]] = Field(
+    effects: Dict[str, Dict[str, Any]] = Field(
         ...,
-        description="Effects at each year"
+        description="Effects at each year (keys: year_0, year_1, ...)"
     )
-    affected_per_year: Dict[int, int] = Field(
+    affected_per_year: Dict[str, int] = Field(
         ...,
-        description="Number of affected indicators per year"
+        description="Number of affected indicators per year (keys: year_0, year_1, ...)"
     )
     metadata: Dict[str, Any]
 

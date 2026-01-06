@@ -13,6 +13,42 @@ from ..models import GraphResponse
 router = APIRouter(prefix="/graph", tags=["graphs"])
 
 
+@router.get("/{country}/timeline")
+async def get_country_timeline(
+    country: str,
+    start_year: Optional[int] = Query(None, description="Start year (default: 10 years before end)"),
+    end_year: Optional[int] = Query(None, description="End year (default: most recent)")
+):
+    """
+    Get historical timeline of indicator values for a country.
+
+    Returns multi-year panel data for historical playback visualization.
+    Default returns last 10 years of data.
+    """
+    if not graph_service.country_exists(country):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Country '{country}' not found"
+        )
+
+    timeline = graph_service.get_historical_timeline(country, start_year, end_year)
+
+    if not timeline['years']:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No timeline data found for '{country}'"
+        )
+
+    return {
+        'country': country,
+        'start_year': timeline['years'][0] if timeline['years'] else None,
+        'end_year': timeline['years'][-1] if timeline['years'] else None,
+        'years': timeline['years'],
+        'values': timeline['values'],
+        'n_indicators': len(timeline['indicators'])
+    }
+
+
 @router.get("/{country}", response_model=GraphResponse)
 async def get_country_graph(
     country: str,

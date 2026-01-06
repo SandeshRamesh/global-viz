@@ -33,6 +33,59 @@ from intervention_propagation import (
 # DATA LOADING
 # =============================================================================
 
+def find_best_year_for_indicators(
+    country_code: str,
+    indicators: list[str],
+    panel_path: str = 'data/raw/v21_panel_data_for_v3.parquet'
+) -> tuple[int, list[str]]:
+    """
+    Find the most recent year where all intervention indicators have data.
+
+    Args:
+        country_code: Country identifier
+        indicators: List of indicator IDs to check
+        panel_path: Path to panel data
+
+    Returns:
+        (best_year, missing_indicators) - missing_indicators is empty if all found
+    """
+    panel = pd.read_parquet(panel_path)
+    country_col = 'country' if 'country' in panel.columns else 'country_text_id'
+    country_data = panel[panel[country_col] == country_code]
+
+    if country_data.empty:
+        raise ValueError(f"No data found for country: {country_code}")
+
+    # Get years sorted descending (most recent first)
+    years = sorted(country_data['year'].unique(), reverse=True)
+
+    # For each year, check if all indicators have data
+    for year in years:
+        year_data = country_data[country_data['year'] == year]
+        year_indicators = set(year_data['indicator_id'].unique())
+
+        missing = [ind for ind in indicators if ind not in year_indicators]
+        if not missing:
+            return int(year), []
+
+    # No year has all indicators - find the year with most coverage
+    best_year = None
+    min_missing = len(indicators) + 1
+    best_missing = indicators
+
+    for year in years:
+        year_data = country_data[country_data['year'] == year]
+        year_indicators = set(year_data['indicator_id'].unique())
+        missing = [ind for ind in indicators if ind not in year_indicators]
+
+        if len(missing) < min_missing:
+            min_missing = len(missing)
+            best_year = int(year)
+            best_missing = missing
+
+    return best_year, best_missing
+
+
 def load_baseline_values(
     country_code: str,
     panel_path: str = 'data/raw/v21_panel_data_for_v3.parquet',
@@ -135,14 +188,37 @@ def run_simulation(
         interventions: List of {indicator, change_percent} or {indicator, change_absolute}
         graphs_dir: Path to country graphs
         panel_path: Path to panel data
-        year: Base year for simulation
+        year: Base year for simulation (auto-detects best year if None)
         max_iterations: Max propagation iterations
         top_n_effects: Number of top effects to return
 
     Returns:
         Simulation result dict with baseline, simulated, effects, metadata
     """
-    # Load data
+    # Extract intervention indicator IDs
+    intervention_indicators = [intv['indicator'] for intv in interventions]
+
+    # If no year specified, find the best year where all interventions have data
+    if year is None:
+        best_year, missing = find_best_year_for_indicators(
+            country_code, intervention_indicators, panel_path
+        )
+
+        if missing:
+            # Some indicators have no data in any year
+            return {
+                'status': 'error',
+                'message': f'Indicators not found in any year for {country_code}: {missing}',
+                'missing_indicators': missing,
+                'interventions': [
+                    {'indicator': ind, 'status': 'error', 'reason': 'no data available'}
+                    for ind in missing
+                ]
+            }
+
+        year = best_year
+
+    # Load data for the determined year
     graph, adjacency, baseline, data_year = load_country_data(
         country_code, graphs_dir, panel_path, year
     )
@@ -158,7 +234,7 @@ def run_simulation(
             intervention_details.append({
                 'indicator': indicator,
                 'status': 'skipped',
-                'reason': 'indicator not in baseline data'
+                'reason': f'indicator not in baseline data for year {data_year}'
             })
             continue
 
@@ -190,7 +266,7 @@ def run_simulation(
     if not intervention_deltas:
         return {
             'status': 'error',
-            'message': 'No valid interventions to apply',
+            'message': f'No valid interventions to apply for {country_code} in year {data_year}',
             'interventions': intervention_details
         }
 

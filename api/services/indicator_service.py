@@ -107,7 +107,7 @@ class IndicatorService:
                 continue
 
     def get_all_indicators(self) -> List[dict]:
-        """Get list of all indicators with basic metadata."""
+        """Get list of all indicators with basic metadata, sorted by importance."""
         self._load_indicators()
 
         if self._indicator_list is None:
@@ -115,11 +115,13 @@ class IndicatorService:
                 {
                     'id': ind['id'],
                     'label': ind.get('label'),
-                    'domain': ind.get('domain')
+                    'domain': ind.get('domain'),
+                    'importance': ind.get('shap_importance') or 0
                 }
                 for ind in self._indicators.values()
             ]
-            self._indicator_list.sort(key=lambda x: x['id'])
+            # Sort by importance descending (most important first)
+            self._indicator_list.sort(key=lambda x: (-(x['importance'] or 0), x['id']))
 
         return self._indicator_list
 
