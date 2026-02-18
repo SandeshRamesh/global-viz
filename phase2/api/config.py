@@ -30,7 +30,7 @@ V31_BASELINES_DIR = V31_DATA_ROOT / "v3_1_baselines"
 # Country graphs now come from V3.1 temporal graphs (use latest year by default)
 GRAPHS_DIR = V31_TEMPORAL_GRAPHS_DIR / "countries"
 COUNTRY_SHAP_DIR = V31_TEMPORAL_SHAP_DIR / "countries"
-DEFAULT_GRAPH_YEAR = 2020  # Default year for non-temporal country graph requests
+DEFAULT_GRAPH_YEAR = 2024  # Default year for non-temporal country graph requests
 
 # Panel data for simulations (still from v3.0 raw - needed for baseline values)
 RAW_DIR = Path(os.getenv("V30_RAW_DATA_ROOT", REPO_ROOT / "v3.0" / "data" / "raw"))
@@ -102,7 +102,7 @@ TEMPORAL_TIMEOUT = int(os.getenv("TEMPORAL_TIMEOUT", "60"))
 
 # Simulation limits
 DEFAULT_HORIZON_YEARS = 10
-MAX_HORIZON_YEARS = 20
+MAX_HORIZON_YEARS = 40
 MAX_INTERVENTIONS = 20
 
 # Logging

@@ -300,7 +300,8 @@ function App() {
     countryLoading,
     selectedStratum,
     setStratum,
-    loadAllClassifications
+    loadAllClassifications,
+    interventions: storeInterventions
   } = useSimulationStore()
   const isPanelOpen = useIsPanelOpen()
 
@@ -1108,6 +1109,38 @@ function App() {
     })
   }, [rawData])
 
+  // Auto-expand only the branches containing the actual intervened indicators.
+  // Uses the store's intervention list (not propagated effects) so only the exact threads expand.
+  useEffect(() => {
+    if (!temporalResults || !rawData || storeInterventions.length === 0) return
+
+    // Get the indicator IDs that were actually intervened on
+    const interventionIds = storeInterventions
+      .map(i => i.indicator)
+      .filter(Boolean)
+
+    if (interventionIds.length === 0) return
+
+    // Build parent lookup
+    const parentOf = new Map<string, string>()
+    for (const n of rawData.nodes) {
+      if (n.parent) parentOf.set(String(n.id), String(n.parent))
+    }
+
+    // Walk up from each intervened indicator, expand only those ancestors
+    const toExpand = new Set<string>()
+    for (const id of interventionIds) {
+      let current = parentOf.get(id)
+      while (current) {
+        toExpand.add(current)
+        current = parentOf.get(current)
+      }
+    }
+
+    if (toExpand.size === 0) return
+    setExpandedNodes(toExpand)
+  }, [temporalResults, rawData, storeInterventions])
+
   // Compute visible nodes based on expansion state
   const visibleNodes = useMemo(() => {
     if (allNodes.length === 0) return []
@@ -1707,6 +1740,7 @@ function App() {
       // Create layer groups in correct z-order (first = back, last = front)
       g.append('g').attr('class', 'layer-rings')
       g.append('g').attr('class', 'layer-glow-local')  // Cyan glow for Local View nodes
+      g.append('g').attr('class', 'layer-glow-sim')    // Simulation effect glow (green/red)
       g.append('g').attr('class', 'layer-glow')  // Glow layer for search highlights (yellow)
       g.append('g').attr('class', 'layer-edges')
       g.append('g').attr('class', 'layer-nodes')
@@ -1716,6 +1750,7 @@ function App() {
     // Get layer references
     const ringsLayer = g.select<SVGGElement>('g.layer-rings')
     const localGlowLayer = g.select<SVGGElement>('g.layer-glow-local')
+    const simGlowLayer = g.select<SVGGElement>('g.layer-glow-sim')
     const glowLayer = g.select<SVGGElement>('g.layer-glow')
     const edgesLayer = g.select<SVGGElement>('g.layer-edges')
     const nodesLayer = g.select<SVGGElement>('g.layer-nodes')
@@ -1841,8 +1876,44 @@ function App() {
     }
 
     // === HELPER FUNCTIONS ===
+
+    // Pre-compute simulation effect lookup for node coloring
+    const simEffectLookup = new Map<string, number>()
+    if (temporalResults?.effects) {
+      const yk = Object.keys(temporalResults.effects).sort()
+      const fyk = yk[yk.length - 1]
+      const fe = fyk ? temporalResults.effects[fyk] : {}
+      for (const [id, eff] of Object.entries(fe)) {
+        const e = eff as { percent_change?: number }
+        if (e.percent_change !== undefined && Math.abs(e.percent_change) > 0.05) {
+          simEffectLookup.set(id, e.percent_change)
+        }
+      }
+    }
+
     const getColor = (n: ExpandableNode): string => {
       if (n.ring === 0) return '#78909C'
+
+      // Tint node fill when simulation effects are active
+      if (simEffectLookup.size > 0) {
+        const pct = simEffectLookup.get(n.id)
+        if (pct !== undefined) {
+          // Blend: stronger effect = more saturated green/red
+          const intensity = Math.min(1, Math.abs(pct) / 50) // 50% change = full color
+          const base = pct >= 0 ? [76, 175, 80] : [244, 67, 54] // green : red
+          const domain = DOMAIN_COLORS[n.semanticPath.domain] || '#9E9E9E'
+          // Parse domain hex
+          const dR = parseInt(domain.slice(1, 3), 16)
+          const dG = parseInt(domain.slice(3, 5), 16)
+          const dB = parseInt(domain.slice(5, 7), 16)
+          // Lerp toward effect color
+          const r = Math.round(dR + (base[0] - dR) * intensity * 0.6)
+          const g = Math.round(dG + (base[1] - dG) * intensity * 0.6)
+          const b = Math.round(dB + (base[2] - dB) * intensity * 0.6)
+          return `rgb(${r},${g},${b})`
+        }
+      }
+
       return DOMAIN_COLORS[n.semanticPath.domain] || '#9E9E9E'
     }
 
@@ -2465,6 +2536,106 @@ function App() {
         .transition()
         .duration(200)
         .attr('opacity', 0.35)
+    }
+
+    // === SIMULATION EFFECT GLOW (green/red per node) ===
+    // When temporalResults exist, highlight every affected node proportional to change
+    {
+      // Build effect map from final year of temporal results
+      const simEffectMap = new Map<string, number>()  // nodeId -> percent_change
+
+      if (temporalResults?.effects) {
+        const yearKeys = Object.keys(temporalResults.effects).sort()
+        const finalYearKey = yearKeys[yearKeys.length - 1]
+        const finalEffects = finalYearKey ? temporalResults.effects[finalYearKey] : {}
+
+        for (const [indicatorId, effect] of Object.entries(finalEffects)) {
+          const e = effect as { percent_change?: number }
+          if (e.percent_change !== undefined && Math.abs(e.percent_change) > 0.05) {
+            simEffectMap.set(indicatorId, e.percent_change)
+          }
+        }
+      }
+
+      // Resolve visible nodes: if indicator node isn't visible, glow its visible ancestor
+      type SimGlowData = ExpandableNode & { percentChange: number }
+      const simGlowTargets = new Map<string, SimGlowData>()
+
+      for (const [indicatorId, pctChange] of simEffectMap.entries()) {
+        if (visibleNodeIds.has(indicatorId)) {
+          const node = visibleNodes.find(n => n.id === indicatorId)
+          if (node) {
+            // If already mapped (ancestor aggregation), use strongest effect
+            const existing = simGlowTargets.get(indicatorId)
+            if (!existing || Math.abs(pctChange) > Math.abs(existing.percentChange)) {
+              simGlowTargets.set(indicatorId, { ...node, percentChange: pctChange })
+            }
+          }
+        } else {
+          // Walk up to find visible ancestor
+          let currentId = indicatorId
+          let foundAncestor: ExpandableNode | null = null
+          while (!foundAncestor && currentId) {
+            const rawNode = rawData?.nodes.find(n => String(n.id) === currentId)
+            if (rawNode?.parent) {
+              const parentId = String(rawNode.parent)
+              if (visibleNodeIds.has(parentId)) {
+                foundAncestor = visibleNodes.find(n => n.id === parentId) || null
+              }
+              currentId = parentId
+            } else {
+              break
+            }
+          }
+          if (foundAncestor) {
+            const existing = simGlowTargets.get(foundAncestor.id)
+            if (!existing || Math.abs(pctChange) > Math.abs(existing.percentChange)) {
+              simGlowTargets.set(foundAncestor.id, { ...foundAncestor, percentChange: pctChange })
+            }
+          }
+        }
+      }
+
+      const simGlowNodes = Array.from(simGlowTargets.values())
+
+      // Max percent change for normalizing opacity
+      const maxAbsPct = simGlowNodes.length > 0
+        ? Math.max(...simGlowNodes.map(n => Math.abs(n.percentChange)))
+        : 1
+
+      const simGlowSelection = simGlowLayer
+        .selectAll<SVGCircleElement, SimGlowData>('circle.glow-sim')
+        .data(simGlowNodes, d => d.id)
+
+      // Remove old
+      simGlowSelection.exit()
+        .transition().duration(300).attr('opacity', 0).remove()
+
+      // Update existing
+      simGlowSelection
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 4)
+        .attr('stroke', d => d.percentChange >= 0 ? '#4CAF50' : '#f44336')
+        .attr('opacity', d => 0.15 + 0.55 * (Math.abs(d.percentChange) / maxAbsPct))
+
+      // Enter new
+      simGlowSelection.enter()
+        .append('circle')
+        .attr('class', 'glow-sim')
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 4)
+        .attr('fill', 'none')
+        .attr('stroke', d => d.percentChange >= 0 ? '#4CAF50' : '#f44336')
+        .attr('stroke-width', d => 2 + 3 * (Math.abs(d.percentChange) / maxAbsPct))
+        .attr('opacity', 0)
+        .style('filter', 'blur(3px)')
+        .style('pointer-events', 'none')
+        .transition()
+        .duration(600)
+        .ease(d3.easeCubicOut)
+        .attr('opacity', d => 0.15 + 0.55 * (Math.abs(d.percentChange) / maxAbsPct))
     }
 
     // === EDGES with enter/update/exit ===

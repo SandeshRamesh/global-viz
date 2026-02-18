@@ -27,6 +27,39 @@ import {
 } from '../services/api';
 
 // ============================================
+// Saved Scenarios (localStorage)
+// ============================================
+
+const SCENARIOS_STORAGE_KEY = 'globalviz_saved_scenarios';
+
+export interface SavedScenario {
+  id: string;
+  name: string;
+  country: string;
+  interventions: Intervention[];
+  simulationStartYear: number;
+  simulationEndYear: number;
+  savedAt: number; // timestamp
+}
+
+function loadScenariosFromStorage(): SavedScenario[] {
+  try {
+    const raw = localStorage.getItem(SCENARIOS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveScenariosToStorage(scenarios: SavedScenario[]): void {
+  try {
+    localStorage.setItem(SCENARIOS_STORAGE_KEY, JSON.stringify(scenarios));
+  } catch {
+    // Storage full or unavailable — silent fail
+  }
+}
+
+// ============================================
 // State Interface
 // ============================================
 
@@ -89,6 +122,13 @@ interface SimulationState {
   horizonYears: number;
   baseYear: number;
 
+  // Simulation timeline range (user-configurable)
+  simulationStartYear: number;
+  simulationEndYear: number;
+
+  // Saved scenarios
+  savedScenarios: SavedScenario[];
+
   // Error handling
   error: string | null;
 
@@ -124,7 +164,7 @@ interface SimulationState {
 
   // Actions - Simulation
   runSimulation: () => Promise<void>;
-  runTemporalSimulation: (horizonYears?: number) => Promise<void>;
+  runTemporalSimulation: (horizonYears?: number | undefined) => Promise<void>;
   clearResults: () => void;
 
   // Actions - Temporal Playback
@@ -134,6 +174,15 @@ interface SimulationState {
   pause: () => void;
   resetPlayback: () => void;
   setPlaybackMode: (mode: PlaybackMode) => void;
+
+  // Actions - Simulation Timeline
+  setSimulationStartYear: (year: number) => void;
+  setSimulationEndYear: (year: number) => void;
+
+  // Actions - Scenarios
+  saveScenario: (name: string) => void;
+  loadScenario: (id: string) => void;
+  deleteScenario: (id: string) => void;
 
   // Actions - Error
   clearError: () => void;
@@ -180,8 +229,11 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   currentYearIndex: 0,
   isPlaying: false,
   currentYear: 0,
-  horizonYears: 10,
+  horizonYears: 5,
   baseYear: 2024,
+  simulationStartYear: 2024,
+  simulationEndYear: 2029,
+  savedScenarios: loadScenariosFromStorage(),
   error: null,
 
   // Panel actions
@@ -600,8 +652,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     }
   },
 
-  runTemporalSimulation: async (horizonYears: number = 10) => {
-    const { selectedCountry, interventions, isSimulating } = get();
+  runTemporalSimulation: async (horizonYears?: number) => {
+    const { selectedCountry, interventions, isSimulating, historicalTimeline, currentYearIndex, simulationStartYear, simulationEndYear } = get();
 
     if (isSimulating) return;
 
@@ -612,11 +664,22 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
     set({ isSimulating: true, error: null });
 
+    // Default intervention year = simulationStartYear (user-set), fallback to timeline position
+    const fallbackYear = historicalTimeline?.years[currentYearIndex] ?? 2024;
+    const defaultYear = simulationStartYear ?? fallbackYear;
+    const interventionsWithYear = interventions.map(intv => ({
+      ...intv,
+      year: intv.year ?? defaultYear
+    }));
+
+    // Compute horizon from user-set start/end years
+    const effectiveHorizon = horizonYears ?? Math.max(1, simulationEndYear - simulationStartYear);
+
     try {
       const results = await simulationAPI.runTemporalSimulation(
         selectedCountry,
-        interventions,
-        horizonYears
+        interventionsWithYear,
+        effectiveHorizon
       );
       set({
         temporalResults: results,
@@ -688,6 +751,66 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         isPlaying: false
       });
     }
+  },
+
+  // Simulation timeline actions
+  setSimulationStartYear: (year: number) => {
+    const { simulationEndYear } = get();
+    const clamped = Math.max(1990, Math.min(simulationEndYear - 1, year));
+    set({ simulationStartYear: clamped });
+  },
+
+  setSimulationEndYear: (year: number) => {
+    const { simulationStartYear } = get();
+    const clamped = Math.max(simulationStartYear + 1, Math.min(2030, year));
+    set({ simulationEndYear: clamped });
+  },
+
+  // Scenario save/load actions
+  saveScenario: (name: string) => {
+    const { selectedCountry, interventions, simulationStartYear, simulationEndYear, savedScenarios } = get();
+    if (!selectedCountry || interventions.length === 0) return;
+
+    const scenario: SavedScenario = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      country: selectedCountry,
+      interventions: interventions.map(({ indicator, change_percent, year, indicatorLabel, domain }) => ({
+        indicator, change_percent, year, indicatorLabel, domain
+      })),
+      simulationStartYear,
+      simulationEndYear,
+      savedAt: Date.now()
+    };
+
+    const updated = [scenario, ...savedScenarios];
+    saveScenariosToStorage(updated);
+    set({ savedScenarios: updated });
+  },
+
+  loadScenario: (id: string) => {
+    const { savedScenarios, setCountry } = get();
+    const scenario = savedScenarios.find(s => s.id === id);
+    if (!scenario) return;
+
+    // Restore interventions and range immediately
+    set({
+      interventions: scenario.interventions,
+      simulationStartYear: scenario.simulationStartYear,
+      simulationEndYear: scenario.simulationEndYear,
+      simulationResults: null,
+      temporalResults: null
+    });
+
+    // Load country (async — triggers graph + timeline fetch)
+    setCountry(scenario.country);
+  },
+
+  deleteScenario: (id: string) => {
+    const { savedScenarios } = get();
+    const updated = savedScenarios.filter(s => s.id !== id);
+    saveScenariosToStorage(updated);
+    set({ savedScenarios: updated });
   },
 
   // Error actions

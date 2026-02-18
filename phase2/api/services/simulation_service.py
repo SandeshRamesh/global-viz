@@ -283,9 +283,18 @@ class SimulationService:
         """
         run_temporal = self._get_v31_temporal_runner()
 
+        # Inject per-intervention year into each intervention dict
+        enriched_interventions = []
+        for intv in interventions:
+            enriched = dict(intv)
+            # If intervention has a 'year' field, pass it as 'intervention_year'
+            if 'year' in enriched and enriched['year'] is not None:
+                enriched['intervention_year'] = enriched.pop('year')
+            enriched_interventions.append(enriched)
+
         result = run_temporal(
             country=country,
-            interventions=interventions,
+            interventions=enriched_interventions,
             base_year=base_year,
             horizon_years=horizon_years,
             view_type=view_type,

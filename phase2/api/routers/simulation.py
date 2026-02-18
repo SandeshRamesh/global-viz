@@ -107,11 +107,12 @@ async def run_temporal_simulation(request: TemporalSimulationRequest):
     Never cache - always compute fresh.
     """
     try:
-        # Convert interventions to dict format
+        # Convert interventions to dict format (include per-intervention year)
         interventions = [
             {
                 'indicator': i.indicator,
-                'change_percent': i.change_percent
+                'change_percent': i.change_percent,
+                **(({'year': i.year} if i.year is not None else {}))
             }
             for i in request.interventions
         ]
@@ -148,9 +149,10 @@ async def run_temporal_simulation(request: TemporalSimulationRequest):
     except HTTPException:
         raise
     except ValueError as e:
+        logger.error(f"Temporal simulation ValueError: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Temporal simulation error: {e}")
+        logger.error(f"Temporal simulation error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Temporal simulation error: {str(e)}"

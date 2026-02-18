@@ -66,6 +66,7 @@ export function ResultsPanel() {
   const [sortField, setSortField] = useState<SortField>('magnitude')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [showAll, setShowAll] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   // Build indicator name map
   const indicatorNames = useMemo(() => {
@@ -133,77 +134,110 @@ export function ResultsPanel() {
     return sortDirection === 'desc' ? ' ▼' : ' ▲'
   }
 
+  // Top movers summary (always visible)
+  const topMovers = useMemo(() => sortedRows.slice(0, 3), [sortedRows])
+
   if (!simulationResults) return null
 
   return (
     <div className="results-panel">
-      <div className="results-header">
-        <h3>Simulation Results</h3>
+      {/* Clickable header — always visible */}
+      <div
+        className="results-header"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="results-header-left">
+          <span className={`results-chevron ${isExpanded ? 'expanded' : ''}`}>▶</span>
+          <h3>Simulation Results</h3>
+        </div>
         <span className="results-count">
-          {sortedRows.length} indicators affected
+          {sortedRows.length} affected
         </span>
       </div>
 
-      {/* Results Table */}
-      <div className="results-table-wrapper">
-        <table className="results-table">
-          <thead>
-            <tr>
-              <th
-                className="sortable"
-                onClick={() => handleSort('name')}
-              >
-                Indicator{getSortIndicator('name')}
-              </th>
-              <th>Baseline</th>
-              <th>Simulated</th>
-              <th
-                className="sortable"
-                onClick={() => handleSort('change')}
-              >
-                Change{getSortIndicator('change')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleRows.map(row => (
-              <tr key={row.id}>
-                <td className="indicator-name" title={row.name}>
-                  {row.name}
-                </td>
-                <td className="value">{formatValue(row.baseline)}</td>
-                <td className="value">{formatValue(row.simulated)}</td>
-                <td className={`change ${row.percentChange >= 0 ? 'positive' : 'negative'}`}>
-                  {formatPercent(row.percentChange)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Show More / Show Less */}
-      {hiddenCount > 0 && (
-        <button
-          className="show-more-btn"
-          onClick={() => setShowAll(!showAll)}
-        >
-          {showAll ? 'Show Less' : `Show All ${sortedRows.length} Indicators`}
-        </button>
-      )}
-
-      {/* Propagation Info */}
-      {simulationResults.propagation && (
-        <div className="propagation-info">
-          <span>
-            Propagation: {simulationResults.propagation.iterations} iterations
-          </span>
-          {simulationResults.propagation.converged ? (
-            <span className="converged">✓ Converged</span>
-          ) : (
-            <span className="not-converged">⚠ Max iterations reached</span>
+      {/* Summary — visible when collapsed */}
+      {!isExpanded && topMovers.length > 0 && (
+        <div className="results-summary">
+          {topMovers.map(row => (
+            <div key={row.id} className="summary-row">
+              <span className="summary-name" title={row.name}>{row.name}</span>
+              <span className={`summary-change ${row.percentChange >= 0 ? 'positive' : 'negative'}`}>
+                {formatPercent(row.percentChange)}
+              </span>
+            </div>
+          ))}
+          {sortedRows.length > 3 && (
+            <div className="summary-more" onClick={() => setIsExpanded(true)}>
+              +{sortedRows.length - 3} more...
+            </div>
           )}
         </div>
+      )}
+
+      {/* Full table — visible when expanded */}
+      {isExpanded && (
+        <>
+          <div className="results-table-wrapper">
+            <table className="results-table">
+              <thead>
+                <tr>
+                  <th
+                    className="sortable"
+                    onClick={() => handleSort('name')}
+                  >
+                    Indicator{getSortIndicator('name')}
+                  </th>
+                  <th>Baseline</th>
+                  <th>Simulated</th>
+                  <th
+                    className="sortable"
+                    onClick={() => handleSort('change')}
+                  >
+                    Change{getSortIndicator('change')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRows.map(row => (
+                  <tr key={row.id}>
+                    <td className="indicator-name" title={row.name}>
+                      {row.name}
+                    </td>
+                    <td className="value">{formatValue(row.baseline)}</td>
+                    <td className="value">{formatValue(row.simulated)}</td>
+                    <td className={`change ${row.percentChange >= 0 ? 'positive' : 'negative'}`}>
+                      {formatPercent(row.percentChange)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Show More / Show Less */}
+          {hiddenCount > 0 && (
+            <button
+              className="show-more-btn"
+              onClick={() => setShowAll(!showAll)}
+            >
+              {showAll ? 'Show Top 20' : `Show All ${sortedRows.length}`}
+            </button>
+          )}
+
+          {/* Propagation Info */}
+          {simulationResults.propagation && (
+            <div className="propagation-info">
+              <span>
+                {simulationResults.propagation.iterations} iterations
+              </span>
+              {simulationResults.propagation.converged ? (
+                <span className="converged">converged</span>
+              ) : (
+                <span className="not-converged">max iterations</span>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       <style>{`
@@ -214,7 +248,31 @@ export function ResultsPanel() {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
+          cursor: pointer;
+          user-select: none;
+          padding: 2px 0;
+        }
+
+        .results-header:hover h3 {
+          color: #3B82F6;
+        }
+
+        .results-header-left {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .results-chevron {
+          font-size: 9px;
+          color: #999;
+          transition: transform 0.2s;
+          display: inline-block;
+        }
+
+        .results-chevron.expanded {
+          transform: rotate(90deg);
         }
 
         .results-header h3 {
@@ -222,6 +280,7 @@ export function ResultsPanel() {
           font-size: 12px;
           font-weight: 600;
           color: #333;
+          transition: color 0.15s;
         }
 
         .results-count {
@@ -229,10 +288,53 @@ export function ResultsPanel() {
           color: #888;
         }
 
+        .results-summary {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .summary-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 11px;
+          padding: 2px 0;
+        }
+
+        .summary-name {
+          color: #555;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          max-width: 170px;
+        }
+
+        .summary-change {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          font-weight: 600;
+          white-space: nowrap;
+        }
+
+        .summary-change.positive { color: #4caf50; }
+        .summary-change.negative { color: #f44336; }
+
+        .summary-more {
+          font-size: 10px;
+          color: #3B82F6;
+          cursor: pointer;
+          padding: 2px 0;
+        }
+
+        .summary-more:hover {
+          text-decoration: underline;
+        }
+
         .results-table-wrapper {
           overflow-x: auto;
           margin-bottom: 10px;
-          max-height: 180px;
+          max-height: 300px;
         }
 
         .results-table {

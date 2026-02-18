@@ -17,12 +17,19 @@ class InterventionInput(BaseModel):
         ge=-100,
         le=1000
     )
+    year: Optional[int] = Field(
+        None,
+        description="Year to apply this intervention (1990-2024). If None, uses request-level base_year.",
+        ge=1990,
+        le=2024
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "indicator": "v2elvotbuy",
-                "change_percent": 20.0
+                "change_percent": 20.0,
+                "year": 2024
             }
         }
 
@@ -63,9 +70,9 @@ class TemporalSimulationRequest(BaseModel):
     )
     horizon_years: int = Field(
         10,
-        description="Years to project forward (1-30)",
+        description="Years to project forward (1-40)",
         ge=1,
-        le=30
+        le=40
     )
     year: Optional[int] = Field(
         None,
@@ -196,9 +203,9 @@ class TemporalSimulationRequestV31(BaseModel):
     )
     horizon_years: int = Field(
         10,
-        description="Years to project forward (1-30)",
+        description="Years to project forward (1-40)",
         ge=1,
-        le=30
+        le=40
     )
     view_type: ViewType = Field(
         'country',

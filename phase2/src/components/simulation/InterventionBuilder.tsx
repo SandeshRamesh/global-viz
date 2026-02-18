@@ -166,8 +166,13 @@ export function InterventionBuilder() {
     interventions,
     addIntervention,
     updateIntervention,
-    removeIntervention
+    removeIntervention,
+    historicalTimeline,
+    currentYearIndex
   } = useSimulationStore()
+
+  // Current timeline year (used as default for new interventions)
+  const currentTimelineYear = historicalTimeline?.years[currentYearIndex] ?? 2024
 
   // Load indicators on mount
   useEffect(() => {
@@ -241,11 +246,12 @@ export function InterventionBuilder() {
       id: `intervention-${Date.now()}`,
       indicator: '',
       change_percent: 20,
+      year: currentTimelineYear,
       indicatorLabel: '',
       domain: ''
     }
     addIntervention(newIntervention)
-  }, [interventions.length, addIntervention])
+  }, [interventions.length, addIntervention, currentTimelineYear])
 
   // Update intervention indicator
   const handleIndicatorChange = useCallback((index: number, indicatorId: string) => {
@@ -272,6 +278,11 @@ export function InterventionBuilder() {
   // Update intervention change percent
   const handleChangePercent = useCallback((index: number, change_percent: number) => {
     updateIntervention(index, { change_percent })
+  }, [updateIntervention])
+
+  // Update intervention year
+  const handleYearChange = useCallback((index: number, year: number) => {
+    updateIntervention(index, { year })
   }, [updateIntervention])
 
   // Format change percent for display
@@ -325,13 +336,33 @@ export function InterventionBuilder() {
           {/* Card header */}
           <div style={styles.cardHeader}>
             <span style={styles.cardNumber}>Intervention {index + 1}</span>
-            <button
-              style={styles.removeBtn}
-              onClick={() => removeIntervention(index)}
-              title="Remove intervention"
-            >
-              ×
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="number"
+                min={1990}
+                max={2024}
+                value={intervention.year ?? currentTimelineYear}
+                onChange={(e) => handleYearChange(index, Number(e.target.value))}
+                style={{
+                  width: 56,
+                  padding: '2px 4px',
+                  borderRadius: 3,
+                  border: '1px solid #ddd',
+                  background: 'white',
+                  color: '#555',
+                  fontSize: 11,
+                  textAlign: 'center' as const
+                }}
+                title="Intervention year"
+              />
+              <button
+                style={styles.removeBtn}
+                onClick={() => removeIntervention(index)}
+                title="Remove intervention"
+              >
+                ×
+              </button>
+            </div>
           </div>
 
           {/* Indicator selector with domain color */}

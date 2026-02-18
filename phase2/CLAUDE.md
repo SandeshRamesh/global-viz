@@ -62,19 +62,22 @@ api/
 | `/api/simulate/v31` | V3.1 instant simulation |
 | `/api/simulate/v31/temporal` | V3.1 temporal simulation |
 
-## Current Work: Week 8 - Simulation Enhancement
+## Current Work: Phase 3 (Weeks 9-11)
 
-**P0 - Critical:**
-- [ ] Node glow effects from `temporalResults.effects` -> D3 rendering (App.tsx:~2243)
-- [ ] Scenario save/load to LocalStorage
-- [ ] Scenario comparison (overlay mode)
+Phase 2 is complete as of 2026-02-18. Active development has moved to Phase 3.
 
-**P1 - Important:**
-- [ ] Click-node-to-intervene flow
-- [ ] Top N quick filter for indicators
+**P0 - Critical (Phase 3):**
+- [ ] Scenario comparison (overlay mode) - deferred from Phase 2
+- [ ] Methodology panel (explain causal discovery approach)
+- [ ] Sensitivity analysis (perturb edge weights, observe outcome variance)
 
-**P2 - Nice-to-have:**
-- [ ] Pre-built scenario templates (WHO, Education, Infrastructure)
+**P1 - Important (Phase 3):**
+- [ ] Click-node-to-intervene flow - deferred from Phase 2
+- [ ] Top N quick filter for indicators - deferred from Phase 2
+- [ ] Export suite (PNG, CSV, shareable URL)
+
+**P2 - Nice-to-have (Phase 3):**
+- [ ] Pre-built scenario templates (WHO, Education, Infrastructure) - deferred from Phase 2
 
 ## Key Constants
 
@@ -94,18 +97,31 @@ API_MODE = 'local' | 'public'
 - **Income Strata**: Unified, Developing (<$4.5k), Emerging ($4.5k-$14k), Advanced (>$14k)
 - **Graph edges**: Year-specific, country-specific, stratum-specific variants
 
-## Completed (Weeks 5-7)
+## Completed: Phase 2 (Weeks 5-8)
 
+**Weeks 5-6:**
 - Income stratification (StrataTabs with dynamic counts)
 - Timeline player (1990-2024 scrubbing, auto-collapse)
 - Country selector (178 countries, region grouping, autocomplete)
 - Temporal SHAP caching (smooth playback, no flash)
+
+**Week 7:**
 - Data Quality Panel (coverage, confidence, transitions)
 - Local View temporal edges (year-aware edge updates)
 
+**Week 8 - Simulation Enhancement:**
+- Per-intervention year support: each intervention targets a specific year (staggered interventions)
+- Timeline scrubber feeds default intervention year
+- Simulation range control: dual-thumb slider for start/end year (1990-2030)
+- Node glow effects: green/red proportional to simulation effect intensity on the radial viz
+- Auto-expand: only branches containing intervened indicators expand after simulation
+- Scenario save/load to localStorage (save name, country, interventions, year range; load restores full state)
+- Backend: staggered intervention support via `interventions_by_year` in `temporal_simulation_v31.py`
+- V3.1 API integration with year-specific temporal graphs
+
 ## Roadmap (See ROADMAP.md)
 
-- Phase 3 (Weeks 9-11): Methodology panel, sensitivity analysis, export suite
+- Phase 3 (Weeks 9-11): Scenario comparison, methodology panel, sensitivity analysis, export suite
 - Phase 4 (Weeks 12-14): Multi-target, country comparison, Pareto optimization
 - Phase 5 (Weeks 15-18): Map overlay, 3D visualization
 - Phase 6 (Weeks 19-24): Education mode, accessibility, PWA

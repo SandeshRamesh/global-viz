@@ -43,7 +43,7 @@ export function SimulationPanel() {
         bottom: 70,
         right: 100,
         width: 300,
-        maxHeight: 420,
+        maxHeight: 560,
         background: 'rgba(255,255,255,0.98)',
         borderRadius: 8,
         boxShadow: '0 2px 12px rgba(0,0,0,0.15)',

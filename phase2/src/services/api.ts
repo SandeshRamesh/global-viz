@@ -118,6 +118,7 @@ export interface CountriesResponse {
 export interface Intervention {
   indicator: string;
   change_percent: number;
+  year?: number;  // Year to apply this intervention (1990-2024). If undefined, uses base_year.
   // UI-only fields (not sent to API)
   id?: string;
   indicatorLabel?: string;
@@ -542,14 +543,21 @@ export const simulationAPI = {
   runTemporalSimulation: async (
     country: string,
     interventions: Intervention[],
-    horizonYears: number = 10
+    horizonYears: number = 5
   ): Promise<TemporalResults> => {
+    // Include per-intervention year in payload (strip UI-only fields)
+    const apiInterventions = interventions.map(({ indicator, change_percent, year }) => ({
+      indicator,
+      change_percent,
+      ...(year !== undefined ? { year } : {})
+    }));
+
     const res = await fetchWithPerf(`${API_BASE}/api/simulate/temporal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         country,
-        interventions,
+        interventions: apiInterventions,
         horizon_years: horizonYears
       })
     });
