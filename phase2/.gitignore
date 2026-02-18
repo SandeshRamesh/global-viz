@@ -3,9 +3,10 @@ node_modules/
 
 # Build output
 dist/
-build/
+dist-ssr/
+*.local
 
-# Environment files
+# Environment
 .env
 .env.local
 .env.*.local
@@ -14,19 +15,22 @@ build/
 *.log
 npm-debug.log*
 
-# Editor directories
+# Editor
+.vscode/*
+!.vscode/extensions.json
 .idea/
-.vscode/
 *.swp
 *.swo
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
-# Cache
-.cache/
-.eslintcache
+# Data (large files)
+export/
+_archive/
+
+# TypeScript
 *.tsbuildinfo
 
 # Python

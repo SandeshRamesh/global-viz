@@ -1,0 +1,4086 @@
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import * as d3 from 'd3'
+import Fuse from 'fuse.js'
+import './styles/App.css'
+import { debug } from './utils/debug'
+import {
+  getStateFromBrowserURL,
+  updateBrowserURL,
+  copyURLToClipboard,
+  type URLState
+} from './utils/urlState'
+import type {
+  RawNodeV21,
+  GraphDataV21,
+  PositionedNode,
+  StructuralEdge,
+  ViewMode
+} from './types'
+import { ViewTabs } from './components/ViewTabs'
+import { StrataTabs } from './components/StrataTabs'
+import { LocalView } from './components/LocalView'
+import { CountrySelector, SimulationPanel, TimelinePlayer, DataQualityPanel } from './components/simulation'
+import { useSimulationStore, useIsPanelOpen } from './stores/simulationStore'
+import { simulationAPI, type CountryGraphEdge } from './services/api'
+import { getCausalEdges, countryGraphToRawEdges } from './utils/causalEdges'
+import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
+import {
+  computeRadialLayout,
+  detectOverlaps,
+  computeLayoutStats,
+  resolveOverlaps,
+  type LayoutConfig,
+  type LayoutNode,
+  type TextConfig
+} from './layouts/RadialLayout'
+import {
+  ViewportAwareLayout,
+  createViewportLayout
+} from './layouts/ViewportScales'
+
+/**
+ * Semantic hierarchy visualization with concentric rings - v2.1 only
+ * 6 rings: Root → Outcomes → Coarse Domains → Fine Domains → Indicator Groups → Indicators
+ *
+ * Features:
+ * - Click to expand/collapse node children
+ * - Hover to see node details
+ * - Starts with only root visible, expand to explore hierarchy
+ * - Adjustable ring radii via sliders
+ * - Node sizes represent SHAP importance directly (area ∝ importance)
+ */
+
+// Ring labels
+const RING_LABELS = [
+  'Quality of Life',
+  'Outcomes',
+  'Coarse Domains',
+  'Fine Domains',
+  'Indicator Groups',
+  'Indicators'
+]
+
+/**
+ * Loading spinner with delay to avoid flash for fast loads.
+ * Positioned at specified x, y coordinates (follows QoL node).
+ */
+function LoadingSpinner({ show, delay = 200, x, y }: { show: boolean; delay?: number; x?: number; y?: number }) {
+  const [visible, setVisible] = useState(false)
+  const timeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (show) {
+      // Delay showing spinner to avoid flash for fast loads
+      timeoutRef.current = window.setTimeout(() => {
+        setVisible(true)
+      }, delay)
+    } else {
+      // Hide immediately when loading completes
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      setVisible(false)
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [show, delay])
+
+  if (!visible) return null
+
+  // Use provided position or default to center
+  const positionStyle = (x !== undefined && y !== undefined)
+    ? { position: 'absolute' as const, left: x, top: y, transform: 'translate(-50%, -50%)' }
+    : { position: 'absolute' as const, top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+
+  return (
+    <div style={{
+      ...positionStyle,
+      zIndex: 100,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      <div style={{
+        width: 28,
+        height: 28,
+        border: '2.5px solid rgba(120, 144, 156, 0.2)',
+        borderTopColor: '#78909C',
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite'
+      }} />
+    </div>
+  )
+}
+
+// Average character width as fraction of font size (for text width estimation)
+const AVG_CHAR_WIDTH_RATIO = 0.55
+
+// Note: getAdaptiveSpacing, calculateDynamicRadii, getNodeRadius, isNodeFloored
+// are now provided by ViewportAwareLayout instance
+
+/**
+ * Generate ring configs from individual radii
+ * nodeSize is a placeholder - actual sizing uses viewport-aware calculations
+ */
+function generateRingConfigs(radii: number[], maxNodeRadius: number = 20) {
+  return RING_LABELS.map((label, i) => ({
+    radius: radii[i] || i * 150,
+    nodeSize: maxNodeRadius,  // Placeholder, actual sizing is viewport-aware
+    label
+  }))
+}
+
+/** Extended PositionedNode with parent reference for expansion logic */
+interface ExpandableNode extends PositionedNode {
+  parentId: string | null
+  childIds: string[]
+  hasChildren: boolean
+  importance: number  // Normalized SHAP importance (0-1) for node sizing
+}
+
+/** Searchable node for fuzzy search (all 2,583 nodes) */
+interface SearchableNode {
+  id: string
+  label: string
+  domain: string
+  subdomain: string
+  ring: number
+  importance: number
+  parentId: string | null
+  hasChildren: boolean
+}
+
+const DOMAIN_COLORS: Record<string, string> = {
+  'Health': '#E91E63',
+  'Education': '#FF9800',
+  'Economic': '#4CAF50',
+  'Governance': '#9C27B0',
+  'Environment': '#00BCD4',
+  'Demographics': '#795548',
+  'Security': '#F44336',
+  'Development': '#3F51B5',
+  'Research': '#009688'
+}
+
+// Use Vite's base URL for correct path in GitHub Pages
+const DATA_FILE = `${import.meta.env.BASE_URL}data/v2_1_visualization_final.json`
+
+// Node padding for layout (used by RadialLayout, but actual spacing is adaptive)
+const DEFAULT_NODE_PADDING = 2  // Base padding, actual spacing is adaptive
+
+/**
+ * Converts a LayoutNode to an ExpandableNode for rendering
+ */
+function toExpandableNode(layoutNode: LayoutNode): ExpandableNode {
+  const raw = layoutNode.rawNode
+  return {
+    id: layoutNode.id,
+    label: raw.node_type === 'root' ? 'Quality of Life' : raw.label.replace(/_/g, ' '),
+    description: raw.description || getDefaultDescription(raw),
+    semanticPath: {
+      domain: raw.domain || '',
+      subdomain: raw.subdomain || '',
+      fine_cluster: '',
+      full_path: raw.label
+    },
+    isDriver: raw.node_type === 'indicator' && raw.out_degree > 0,
+    isOutcome: raw.node_type === 'outcome_category',
+    shapImportance: 0,  // Deprecated - using temporal SHAP only
+    importance: 0,  // Always 0 - sizing comes from temporal SHAP (v3.1)
+    degree: raw.in_degree + raw.out_degree,
+    ring: layoutNode.ring,
+    x: layoutNode.x,
+    y: layoutNode.y,
+    parentId: layoutNode.parent?.id || null,
+    childIds: (raw.children || []).map(c => String(c)),  // Use raw data for all children
+    hasChildren: (raw.children?.length || 0) > 0  // Use raw data to check if expandable
+  }
+}
+
+/**
+ * Generates default description based on node type
+ */
+function getDefaultDescription(node: RawNodeV21): string {
+  switch (node.node_type) {
+    case 'root':
+      return 'Root'
+    case 'outcome_category':
+      return `${node.indicator_count || 0} indicators`
+    case 'coarse_domain':
+      return `Coarse Domain: ${node.label}`
+    case 'fine_domain':
+      return `Fine Domain: ${node.label}`
+    case 'indicator':
+      return ''
+    default:
+      return ''
+  }
+}
+
+function App() {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const currentTransformRef = useRef<d3.ZoomTransform | null>(null)
+  const prevVisibleNodeIdsRef = useRef<Set<string>>(new Set())
+  const prevViewModeForVizRef = useRef<ViewMode>('global')  // Track view mode changes in visualization
+  const prevSplitRatioRef = useRef<number>(0.67)  // Track split ratio changes
+  const nodePositionsRef = useRef<Map<string, { x: number; y: number; parentId: string | null }>>(new Map())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [_stats, setStats] = useState<{
+    nodes: number
+    structuralEdges: number
+    outcomes: number
+    drivers: number
+    overlaps: number
+  } | null>(null)
+  const [domainCounts, setDomainCounts] = useState<Record<string, number>>({})
+  const [qolNodePosition, setQolNodePosition] = useState<{ x: number; y: number } | null>(null)  // QoL node screen position for loading spinner
+  const [hoveredNode, setHoveredNode] = useState<ExpandableNode | null>(null)
+  const [simulateBtnHovered, setSimulateBtnHovered] = useState(false)
+  const [dataQualityOpen, setDataQualityOpen] = useState(false)
+  const [dataQualityBtnHovered, setDataQualityBtnHovered] = useState(false)
+  const tooltipNodeRef = useRef<ExpandableNode | null>(null)  // Caches last hovered node for smooth tooltip fade
+  const [ringStats, setRingStats] = useState<Array<{ label: string; count: number; minDistance: number }>>([])
+  const [fps, setFps] = useState<number>(0)
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchableNode[]>([])
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const [domainFilter] = useState<string>('')  // Domain filter removed from UI for space
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [showRecentSearches, setShowRecentSearches] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const recentSearchesTimeoutRef = useRef<number | null>(null)
+  const [highlightedPath, setHighlightedPath] = useState<Set<string>>(new Set())
+  const [highlightedTarget, setHighlightedTarget] = useState<string | null>(null)  // The searched node itself
+
+  // View mode state (Global vs Local)
+  const [viewMode, setViewMode] = useState<ViewMode>('global')
+  const [localViewTargets, setLocalViewTargets] = useState<string[]>([])
+  const [localViewBetaThreshold, setLocalViewBetaThreshold] = useState(0.5)  // Synced from LocalView
+  const [localViewInputDepth, setLocalViewInputDepth] = useState(1)  // Global depth for causes
+  const [localViewOutputDepth, setLocalViewOutputDepth] = useState(1)  // Global depth for effects
+  const [splitRatio, setSplitRatio] = useState(0.67) // 0-1, percentage for left pane (2/3 global, 1/3 local)
+  const [drillDownHistory, setDrillDownHistory] = useState<{ prevTargets: string[]; prevBeta: number } | null>(null)
+  const isDraggingRef = useRef(false)
+  const localViewResetRef = useRef<(() => void) | null>(null)  // Store LocalView's reset function
+  const urlStateRestoredRef = useRef(false)  // Track if URL state has been restored
+  const pendingExpandedNodesRef = useRef<string[] | null>(null)  // Expanded nodes from URL, applied after SHAP cache ready
+  const clickTimeoutRef = useRef<number | null>(null)  // For delayed single-click to allow double-click
+
+  // Temporal edges cache for Local View timeline playback
+  // Maps year → country edges for the currently selected country/stratum
+  const temporalEdgesCacheRef = useRef<Map<number, CountryGraphEdge[]>>(new Map())
+  const [temporalEdgesLoading, setTemporalEdgesLoading] = useState(false)
+  const [temporalEdgesCacheKey, setTemporalEdgesCacheKey] = useState<string | null>(null)  // Track cache key (triggers re-render)
+  const temporalEdgesCountryRef = useRef<string | null>(null)  // Track which country/stratum the cache is for
+
+  // Country-specific data from simulation store
+  const {
+    countryGraph,
+    selectedCountry,
+    clearCountry,
+    togglePanel,
+    temporalResults,
+    currentYear,
+    historicalTimeline,
+    temporalShapTimeline,
+    stratifiedShapTimeline,
+    playbackMode,
+    currentYearIndex,
+    loadUnifiedTimeline,
+    shapTimelineLoading,
+    countryLoading,
+    selectedStratum,
+    setStratum,
+    loadAllClassifications
+  } = useSimulationStore()
+  const isPanelOpen = useIsPanelOpen()
+
+  // Load all classifications once at startup (cached for other features)
+  useEffect(() => {
+    loadAllClassifications()
+  }, [loadAllClassifications])
+
+  // Handle split divider drag
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isDraggingRef.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingRef.current) return
+      const container = document.querySelector('.split-container') as HTMLElement
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const newRatio = Math.max(0.2, Math.min(0.8, (moveEvent.clientX - rect.left) / rect.width))
+      setSplitRatio(newRatio)
+    }
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [])
+
+  // Add a node to Local View targets
+  const addToLocalView = useCallback((nodeId: string) => {
+    setLocalViewTargets(prev => {
+      if (prev.includes(nodeId)) return prev
+      return [...prev, nodeId]
+    })
+    // Switch to local view when double-clicking from global view
+    // Stay in local view if already there
+    setViewMode(prev => prev === 'global' ? 'local' : prev)
+    // Clear drill-down history (manual change invalidates undo)
+    setDrillDownHistory(null)
+  }, [])
+
+  // Remove a node from Local View targets
+  const removeFromLocalView = useCallback((nodeId: string) => {
+    setLocalViewTargets(prev => prev.filter(id => id !== nodeId))
+    // Clear drill-down history (manual change invalidates undo)
+    setDrillDownHistory(null)
+  }, [])
+
+  // Clear all Local View targets
+  const clearLocalViewTargets = useCallback(() => {
+    setLocalViewTargets([])
+    setViewMode('global')
+    setDrillDownHistory(null)
+  }, [])
+
+  // Viewport-aware layout engine
+  const viewportLayoutRef = useRef<ViewportAwareLayout | null>(null)
+  const [layoutValues, setLayoutValues] = useState<ReturnType<ViewportAwareLayout['getLayoutValues']> | null>(null)
+
+  // Initialize viewport layout on mount
+  useEffect(() => {
+    const width = window.innerWidth
+    const height = window.innerHeight
+    const dpr = window.devicePixelRatio || 1
+
+    viewportLayoutRef.current = createViewportLayout(width, height, dpr, 1, 100)
+    viewportLayoutRef.current.logParameters()
+    setLayoutValues(viewportLayoutRef.current.getLayoutValues())
+  }, [])
+
+  // Load unified temporal SHAP timeline on mount (for global view playback)
+  useEffect(() => {
+    loadUnifiedTimeline()
+  }, [loadUnifiedTimeline])
+
+  // Load temporal graphs for Local View timeline playback
+  // This pre-fetches all years' edges so timeline scrubbing is instant
+  // Works for country-specific, stratified, AND unified views
+  useEffect(() => {
+    // Only load when in local/split view
+    if (viewMode === 'global') {
+      return
+    }
+
+    // Determine cache key: country > stratum > 'unified'
+    const cacheKey = selectedCountry || (selectedStratum !== 'unified' ? selectedStratum : 'unified')
+
+    // Check if cache is already populated for this key
+    if (temporalEdgesCountryRef.current === cacheKey && temporalEdgesCacheRef.current.size > 0) {
+      debug.log('cache', `Temporal edges cache already populated for ${cacheKey}`)
+      return
+    }
+
+    // Fetch all available years, then load each year's graph
+    const loadTemporalEdges = async () => {
+      setTemporalEdgesLoading(true)
+
+      try {
+        // Get available years based on selection type
+        const yearsData = await simulationAPI.getCountryGraphYears(selectedCountry || 'unified')
+        debug.log('cache', `Loading temporal edges for ${cacheKey}: ${yearsData.total} years`)
+
+        // Clear cache and set new key
+        temporalEdgesCacheRef.current = new Map()
+        temporalEdgesCountryRef.current = cacheKey
+        setTemporalEdgesCacheKey(null)  // Clear state to prevent using stale data during load
+
+        // Fetch graphs for all years in parallel (batched to avoid overwhelming the API)
+        const BATCH_SIZE = 5
+        for (let i = 0; i < yearsData.years.length; i += BATCH_SIZE) {
+          const batch = yearsData.years.slice(i, i + BATCH_SIZE)
+          const results = await Promise.all(
+            batch.map(year => {
+              // Choose the right API based on selection
+              if (selectedCountry) {
+                return simulationAPI.getCountryTemporalGraph(selectedCountry, year)
+              } else if (selectedStratum !== 'unified') {
+                return simulationAPI.getStratifiedGraph(selectedStratum, year)
+              } else {
+                return simulationAPI.getUnifiedGraph(year)
+              }
+            }).map(p => p.catch(err => {
+              debug.log('error', `Failed to load ${cacheKey}/${err}:`, err)
+              return null
+            }))
+          )
+
+          // Store successful results in cache
+          results.forEach((result, idx) => {
+            if (result) {
+              temporalEdgesCacheRef.current.set(batch[idx], result.edges)
+            }
+          })
+        }
+
+        debug.log('cache', `Temporal edges cache populated: ${temporalEdgesCacheRef.current.size} years for ${cacheKey}`)
+        // Update state to trigger re-render of effectiveEdges
+        setTemporalEdgesCacheKey(cacheKey)
+      } catch (err) {
+        debug.log('error', 'Failed to load temporal edges:', err)
+      } finally {
+        setTemporalEdgesLoading(false)
+      }
+    }
+
+    loadTemporalEdges()
+  }, [selectedCountry, selectedStratum, viewMode])
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (!viewportLayoutRef.current) return
+
+      const width = window.innerWidth
+      const height = window.innerHeight
+
+      viewportLayoutRef.current.updateContext({ width, height })
+      setLayoutValues(viewportLayoutRef.current.getLayoutValues())
+
+      debug.viewport('[Viewport Resize] New dimensions:', width, 'x', height)
+      viewportLayoutRef.current.logParameters()
+    }
+
+    // Debounce resize handler
+    let resizeTimeout: ReturnType<typeof setTimeout>
+    const debouncedResize = () => {
+      clearTimeout(resizeTimeout)
+      resizeTimeout = setTimeout(handleResize, 300)
+    }
+
+    window.addEventListener('resize', debouncedResize)
+    return () => {
+      window.removeEventListener('resize', debouncedResize)
+      clearTimeout(resizeTimeout)
+    }
+  }, [])
+
+  // Layout configuration
+  const nodePadding = DEFAULT_NODE_PADDING
+  // Ring radii are calculated dynamically based on visible nodes
+  // Initial values are placeholders that get replaced on first layout computation
+  const [ringRadii, setRingRadii] = useState<number[]>([0, 100, 180, 260, 340, 420])
+
+  const ringConfigs = useMemo(
+    () => generateRingConfigs(ringRadii),
+    [ringRadii]
+  )
+
+  // Expansion state - tracks which nodes have their children visible
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+
+  // Track if initial expansion after data load has happened
+  const initialExpansionDoneRef = useRef(false)
+
+  // Cache last valid SHAP importance values (used during loading to maintain node sizes)
+  const lastValidShapRef = useRef<Map<string, number>>(new Map())
+
+  // Track last expansion action for auto-zoom
+  const pendingZoomRef = useRef<{ nodeId: string; action: 'expand' | 'collapse' } | null>(null)
+  const isAnimatingZoomRef = useRef(false)
+
+  // Track collapse animation to prevent second render from overriding delayed rotation
+  const collapseAnimationRef = useRef<{ inProgress: boolean; endTime: number }>({ inProgress: false, endTime: 0 })
+
+  // Raw data (fetched once, cached)
+  const [rawData, setRawData] = useState<GraphDataV21 | null>(null)
+
+  // Memoized node lookup map for Local View
+  const nodeByIdMap = useMemo(() => {
+    if (!rawData) return new Map<string, RawNodeV21>()
+    return new Map(rawData.nodes.map(n => [String(n.id), n]))
+  }, [rawData])
+
+  // Effective edges for Local View: uses year-specific edges when in local view with timeline
+  // Works for country-specific, stratified, AND unified views
+  const effectiveEdges = useMemo(() => {
+    if (!rawData) return []
+
+    // Get hierarchical edges from unified model (always needed)
+    const hierarchicalEdges = rawData.edges.filter(e => e.relationship === 'hierarchical')
+
+    // Determine current year from timeline
+    const currentYear = temporalShapTimeline?.years?.[currentYearIndex]
+
+    // Check if we're in local/split view with temporal edges available
+    if ((viewMode === 'local' || viewMode === 'split') && currentYear && !temporalEdgesLoading) {
+      // Cache key matches the loading logic: country > stratum > unified
+      const cacheKey = selectedCountry || (selectedStratum !== 'unified' ? selectedStratum : 'unified')
+      const cachedEdges = temporalEdgesCacheRef.current.get(currentYear)
+
+      // Use cached edges if available and cache key matches
+      if (cachedEdges && temporalEdgesCacheKey === cacheKey) {
+        // Use year-specific edges from cache
+        const causalEdges = countryGraphToRawEdges(cachedEdges, true)
+        debug.log('localview', `Using temporal edges for ${cacheKey}/${currentYear}: ${cachedEdges.length} edges`)
+        return [...hierarchicalEdges, ...causalEdges]
+      }
+    }
+
+    // If a country is selected, use static countryGraph edges as fallback
+    if (selectedCountry && countryGraph?.edges) {
+      const countryCausalEdges = countryGraphToRawEdges(countryGraph.edges, true)
+      return [...hierarchicalEdges, ...countryCausalEdges]
+    }
+
+    // No country selected or no cached edges: use static unified model edges
+    return rawData.edges
+  }, [rawData, selectedCountry, selectedStratum, countryGraph, viewMode, temporalShapTimeline, currentYearIndex, temporalEdgesLoading, temporalEdgesCacheKey])
+
+  /**
+   * Pre-compute aggregated SHAP for ALL years on timeline load.
+   * This runs once when temporalShapTimeline/stratifiedShapTimeline changes.
+   * Returns Map<year, Map<nodeId, normalizedImportance>>
+   *
+   * Uses stratified SHAP when a stratum is selected (and no country),
+   * otherwise uses unified/country temporal SHAP.
+   */
+  const precomputedShapCache = useMemo((): Map<number, Map<string, number>> => {
+    const cache = new Map<number, Map<string, number>>()
+
+    // Choose the right timeline based on stratum selection
+    // When stratum != 'unified' and no country selected, use stratified timeline
+    const effectiveTimeline = (selectedStratum !== 'unified' && !selectedCountry && stratifiedShapTimeline)
+      ? stratifiedShapTimeline
+      : temporalShapTimeline
+
+    if (!effectiveTimeline || !rawData) return cache
+
+    // Build parent-child map once (shared across all years)
+    const childrenMap = new Map<string | number, (string | number)[]>()
+    for (const node of rawData.nodes) {
+      if (node.children) {
+        childrenMap.set(node.id, node.children.map(c => String(c)))
+      }
+    }
+
+    // Pre-compute for each year in the timeline
+    for (const year of effectiveTimeline.years) {
+      const shapValues = effectiveTimeline.shap_by_year[String(year)]
+      if (!shapValues) continue
+
+      const yearImportance = new Map<string, number>()
+
+      // First pass: assign SHAP to Ring 5 indicators
+      for (const node of rawData.nodes) {
+        if (node.layer === 5) {
+          const shapValue = shapValues[String(node.id)]
+          if (shapValue !== undefined && shapValue !== null) {
+            const importance = typeof shapValue === 'object' && 'mean' in shapValue
+              ? shapValue.mean
+              : shapValue
+            yearImportance.set(String(node.id), importance)
+          }
+        }
+      }
+
+      // Second pass: aggregate up the hierarchy (Ring 4 → Ring 0)
+      for (let ring = 4; ring >= 0; ring--) {
+        for (const node of rawData.nodes) {
+          if (node.layer !== ring) continue
+          const childIds = childrenMap.get(node.id) || []
+          const childShaps: number[] = []
+          for (const childId of childIds) {
+            const childShap = yearImportance.get(String(childId))
+            if (childShap !== undefined) {
+              childShaps.push(childShap)
+            }
+          }
+          if (childShaps.length > 0) {
+            const sumShap = childShaps.reduce((a, b) => a + b, 0)
+            yearImportance.set(String(node.id), sumShap)
+          }
+        }
+      }
+
+      // Third pass: normalize so root = 1.0
+      const rootNode = rawData.nodes.find(n => n.layer === 0)
+      const rootShap = rootNode ? (yearImportance.get(String(rootNode.id)) || 1) : 1
+      if (rootShap > 0) {
+        for (const [nodeId, shap] of yearImportance.entries()) {
+          yearImportance.set(nodeId, shap / rootShap)
+        }
+      }
+
+      cache.set(year, yearImportance)
+    }
+
+    debug.log('cache', `Pre-computed SHAP for ${cache.size} years (stratum: ${selectedStratum})`)
+    return cache
+  }, [temporalShapTimeline, stratifiedShapTimeline, selectedStratum, selectedCountry, rawData])
+
+  /**
+   * Pre-compute full CI data (mean, std, ci_lower, ci_upper) for each year in the timeline.
+   * This includes proper uncertainty propagation when aggregating to parent nodes.
+   *
+   * For aggregation: when summing SHAP values, uncertainties propagate as:
+   * - mean_parent = sum(mean_children)
+   * - std_parent = sqrt(sum(std_children^2))  (assuming independence)
+   * - CI computed from propagated mean and std
+   */
+  interface NodeCIData {
+    mean: number
+    std: number
+    ci_lower: number
+    ci_upper: number
+    n_children?: number  // For aggregated nodes
+    child_coverage?: number  // Fraction of children with data
+  }
+
+  const precomputedCICache = useMemo((): Map<number, Map<string, NodeCIData>> => {
+    const cache = new Map<number, Map<string, NodeCIData>>()
+
+    const effectiveTimeline = (selectedStratum !== 'unified' && !selectedCountry && stratifiedShapTimeline)
+      ? stratifiedShapTimeline
+      : temporalShapTimeline
+
+    if (!effectiveTimeline || !rawData) return cache
+
+    // Build parent-child map
+    const childrenMap = new Map<string | number, (string | number)[]>()
+    for (const node of rawData.nodes) {
+      if (node.children) {
+        childrenMap.set(node.id, node.children.map(c => String(c)))
+      }
+    }
+
+    for (const year of effectiveTimeline.years) {
+      const shapValues = effectiveTimeline.shap_by_year[String(year)]
+      if (!shapValues) continue
+
+      const yearCI = new Map<string, NodeCIData>()
+
+      // First pass: extract CI for Ring 5 indicators
+      for (const node of rawData.nodes) {
+        if (node.layer === 5) {
+          const shapValue = shapValues[String(node.id)]
+          if (shapValue !== undefined && shapValue !== null) {
+            if (typeof shapValue === 'object' && 'mean' in shapValue) {
+              yearCI.set(String(node.id), {
+                mean: shapValue.mean,
+                std: shapValue.std,
+                ci_lower: shapValue.ci_lower,
+                ci_upper: shapValue.ci_upper
+              })
+            } else {
+              // Legacy format - no CI
+              yearCI.set(String(node.id), {
+                mean: shapValue as number,
+                std: 0,
+                ci_lower: shapValue as number,
+                ci_upper: shapValue as number
+              })
+            }
+          }
+        }
+      }
+
+      // Second pass: aggregate CI up the hierarchy (Ring 4 → Ring 0)
+      for (let ring = 4; ring >= 0; ring--) {
+        for (const node of rawData.nodes) {
+          if (node.layer !== ring) continue
+          const childIds = childrenMap.get(node.id) || []
+          const childCIs: NodeCIData[] = []
+
+          for (const childId of childIds) {
+            const childCI = yearCI.get(String(childId))
+            if (childCI) {
+              childCIs.push(childCI)
+            }
+          }
+
+          if (childCIs.length > 0) {
+            // Aggregate: sum means, propagate variance (sqrt of sum of squares)
+            const sumMean = childCIs.reduce((acc, c) => acc + c.mean, 0)
+            const sumVariance = childCIs.reduce((acc, c) => acc + c.std * c.std, 0)
+            const propagatedStd = Math.sqrt(sumVariance)
+
+            // 95% CI: mean ± 1.96 * std
+            yearCI.set(String(node.id), {
+              mean: sumMean,
+              std: propagatedStd,
+              ci_lower: sumMean - 1.96 * propagatedStd,
+              ci_upper: sumMean + 1.96 * propagatedStd,
+              n_children: childIds.length,
+              child_coverage: childCIs.length / childIds.length
+            })
+          }
+        }
+      }
+
+      // Third pass: normalize so root mean = 1.0 (same as precomputedShapCache)
+      const rootNode = rawData.nodes.find(n => n.layer === 0)
+      const rootCI = rootNode ? yearCI.get(String(rootNode.id)) : null
+      const rootMean = rootCI?.mean || 1
+
+      if (rootMean > 0) {
+        for (const [nodeId, ci] of yearCI.entries()) {
+          yearCI.set(nodeId, {
+            ...ci,
+            mean: ci.mean / rootMean,
+            std: ci.std / rootMean,
+            ci_lower: ci.ci_lower / rootMean,
+            ci_upper: ci.ci_upper / rootMean
+          })
+        }
+      }
+
+      cache.set(year, yearCI)
+    }
+
+    return cache
+  }, [temporalShapTimeline, stratifiedShapTimeline, selectedStratum, selectedCountry, rawData])
+
+  /**
+   * Compute effective nodes with country-specific SHAP importance values.
+   *
+   * When a country is selected:
+   * 1. Uses country-specific SHAP importance for Ring 5 indicators (already 0-1 normalized)
+   * 2. Aggregates SHAP up the hierarchy (mean of children) for Ring 0-4
+   * 3. Filters out nodes without SHAP data coverage
+   *
+   * The importance field is used by the Phase 1 sizing pipeline (vLayout.getNodeRadius)
+   */
+  const effectiveNodes = useMemo((): RawNodeV21[] | null => {
+    if (!rawData) return null
+
+    // No country selected - use original nodes with their global SHAP-based importance
+    if (!selectedCountry || !countryGraph?.shap_importance || !countryGraph?.edges) {
+      return rawData.nodes
+    }
+
+    const countryShap = countryGraph.shap_importance
+
+    // If no SHAP data for this country, fall back to global
+    if (Object.keys(countryShap).length === 0) {
+      return rawData.nodes
+    }
+
+    // Get coverage info (nodes that have edges in country graph)
+    const countryIndicators = extractIndicatorsFromGraph(countryGraph.edges)
+    const coveredNodeIds = computeCountryCoverage(countryIndicators, rawData.nodes)
+
+    // Build parent-child map for aggregation
+    const childrenMap = new Map<string | number, (string | number)[]>()
+    for (const node of rawData.nodes) {
+      if (node.children) {
+        childrenMap.set(node.id, node.children.map(c => String(c)))
+      }
+    }
+
+    // First pass: assign SHAP to Ring 5 indicators
+    const nodeShapMap = new Map<string | number, number>()
+    for (const node of rawData.nodes) {
+      if (node.layer === 5) {
+        const shap = countryShap[String(node.id)]
+        if (shap !== undefined && !isNaN(shap)) {
+          nodeShapMap.set(node.id, shap)
+        }
+      }
+    }
+
+    // Second pass: aggregate up the hierarchy (Ring 4 → Ring 0)
+    // Bottom-up: compute parent SHAP as SUM of children's SHAP
+    // This preserves hierarchy: parents are always >= any individual child
+    for (let ring = 4; ring >= 0; ring--) {
+      for (const node of rawData.nodes) {
+        if (node.layer !== ring) continue
+
+        const childIds = childrenMap.get(node.id) || []
+        const childShaps: number[] = []
+
+        for (const childId of childIds) {
+          const childShap = nodeShapMap.get(childId)
+          if (childShap !== undefined) {
+            childShaps.push(childShap)
+          }
+        }
+
+        if (childShaps.length > 0) {
+          // Use SUM of children's SHAP for parent importance (preserves hierarchy)
+          const sumShap = childShaps.reduce((a, b) => a + b, 0)
+          nodeShapMap.set(node.id, sumShap)
+        }
+      }
+    }
+
+    // Third pass: normalize so root = 1.0 (matches unified model approach)
+    const rootNode = rawData.nodes.find(n => n.layer === 0)
+    const rootShap = rootNode ? (nodeShapMap.get(rootNode.id) || 1) : 1
+
+    // Normalize all values by root (so root = 1.0, others are proportional)
+    if (rootShap > 0) {
+      for (const [nodeId, shap] of nodeShapMap.entries()) {
+        nodeShapMap.set(nodeId, shap / rootShap)
+      }
+    }
+
+    // Create nodes with country-specific SHAP importance, filtered to covered only
+    const nodesWithCountryImportance: RawNodeV21[] = []
+
+    for (const node of rawData.nodes) {
+      const nodeId = String(node.id)
+
+      // Skip nodes without coverage (remove them, don't dim)
+      // Root is always kept
+      if (!coveredNodeIds.has(nodeId) && node.layer !== 0) {
+        continue
+      }
+
+      const countryImportance = nodeShapMap.get(node.id)
+      let importance: number
+
+      if (countryImportance !== undefined && !isNaN(countryImportance)) {
+        importance = countryImportance
+      } else if (node.layer === 0) {
+        // Root always gets max importance
+        importance = 1.0
+      } else {
+        // Fallback to small floor for nodes without SHAP
+        importance = 0.01
+      }
+
+      nodesWithCountryImportance.push({
+        ...node,
+        importance
+      })
+    }
+
+    return nodesWithCountryImportance
+  }, [rawData, selectedCountry, countryGraph])
+
+  // Drill down: replace targets with children (works for targets and non-targets)
+  // Also handles undo (drill up) when history exists
+  const drillDownTarget = useCallback((nodeId: string) => {
+    const node = nodeByIdMap.get(nodeId)
+    if (!node?.children || node.children.length === 0) return
+
+    const childIds = node.children.map(c => String(c))
+    const prevBeta = localViewBetaThreshold
+    const prevTargets = [...localViewTargets]
+    const isCurrentTarget = localViewTargets.includes(nodeId)
+
+    if (isCurrentTarget) {
+      // Replace the target with its children
+      setLocalViewTargets(prev => {
+        const filtered = prev.filter(id => id !== nodeId)
+        return [...filtered, ...childIds]
+      })
+    } else {
+      // For non-target nodes: replace ALL targets with just the children
+      // This drills into that branch of the hierarchy
+      setLocalViewTargets(childIds)
+    }
+
+    // Always save history for undo (can go back one step)
+    setDrillDownHistory({ prevTargets, prevBeta })
+
+    // Auto-adjust beta threshold based on number of new targets
+    const childCount = childIds.length
+    if (childCount > 10) {
+      setLocalViewBetaThreshold(prev => Math.max(prev, 1.0))
+    } else if (childCount > 5) {
+      setLocalViewBetaThreshold(prev => Math.max(prev, 0.7))
+    }
+  }, [nodeByIdMap, localViewTargets, localViewBetaThreshold])
+
+  // Drill up: restore previous targets from history
+  const drillUpTarget = useCallback(() => {
+    if (!drillDownHistory) return
+    setLocalViewTargets(drillDownHistory.prevTargets)
+    setLocalViewBetaThreshold(drillDownHistory.prevBeta)
+    setDrillDownHistory(null)
+  }, [drillDownHistory])
+
+  // All nodes from layout (stored for filtering)
+  const [allNodes, setAllNodes] = useState<ExpandableNode[]>([])
+  const [allEdges, setAllEdges] = useState<StructuralEdge[]>([])
+  const [computedRingsState, setComputedRingsState] = useState<Array<{ radius: number; nodeSize: number; label?: string }>>([])
+
+  // Share current state via URL
+  const shareCurrentState = useCallback(async (): Promise<boolean> => {
+    const state: URLState = {
+      view: viewMode,
+      expanded: Array.from(expandedNodes),
+      targets: localViewTargets,
+      beta: localViewBetaThreshold !== 0.5 ? localViewBetaThreshold : undefined,
+      highlight: highlightedTarget || undefined,
+      zoom: currentTransformRef.current ? {
+        k: currentTransformRef.current.k,
+        x: currentTransformRef.current.x,
+        y: currentTransformRef.current.y
+      } : undefined
+    }
+    return copyURLToClipboard(state)
+  }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
+
+  // Toggle expansion of a node
+  const toggleExpansion = useCallback((nodeId: string) => {
+    if (!rawData) return
+    const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
+
+    setExpandedNodes(prev => {
+      const next = new Set(prev)
+      const wasExpanded = next.has(nodeId)
+
+      if (wasExpanded) {
+        // Collapse: remove this node and all descendants from expanded set
+        next.delete(nodeId)
+        // Also collapse all descendants (use rawData for full tree)
+        const collapseDescendants = (id: string) => {
+          const node = nodeById.get(id)
+          if (node?.children) {
+            for (const childId of node.children) {
+              const childIdStr = String(childId)
+              next.delete(childIdStr)
+              collapseDescendants(childIdStr)
+            }
+          }
+        }
+        collapseDescendants(nodeId)
+        // Record collapse for auto-zoom
+        pendingZoomRef.current = { nodeId, action: 'collapse' }
+      } else {
+        next.add(nodeId)
+        // Record expansion for auto-zoom
+        pendingZoomRef.current = { nodeId, action: 'expand' }
+      }
+      return next
+    })
+  }, [rawData])
+
+  // Expand all nodes
+  const expandAll = useCallback(() => {
+    if (!rawData) return
+    // Use rawData to get ALL nodes (not just visible ones)
+    const allExpandable = rawData.nodes
+      .filter(n => n.children && n.children.length > 0)
+      .map(n => String(n.id))
+    setExpandedNodes(new Set(allExpandable))
+  }, [rawData])
+
+  // Collapse all nodes
+  const collapseAll = useCallback(() => {
+    setExpandedNodes(new Set())
+  }, [])
+
+  // Calculate initial zoom transform to fit content tightly
+  const calculateInitialTransform = useCallback((nodes: ExpandableNode[], containerWidth?: number, containerHeight?: number) => {
+    // Use provided dimensions or calculate from viewMode and splitRatio
+    const fullWidth = window.innerWidth
+    const fullHeight = window.innerHeight
+    const width = containerWidth ?? (viewMode === 'split' ? fullWidth * splitRatio : fullWidth)
+    const height = containerHeight ?? fullHeight
+
+    // Calculate bounding box of all nodes (including root at 0,0)
+    const allXs = nodes.map(n => n.x)
+    const allYs = nodes.map(n => n.y)
+
+    if (allXs.length === 0) {
+      return d3.zoomIdentity.translate(width / 2, height / 2).scale(1)
+    }
+
+    const boundsMinX = Math.min(...allXs)
+    const boundsMaxX = Math.max(...allXs)
+    const boundsMinY = Math.min(...allYs)
+    const boundsMaxY = Math.max(...allYs)
+
+    const boundsWidth = Math.max(boundsMaxX - boundsMinX, 50)
+    const boundsHeight = Math.max(boundsMaxY - boundsMinY, 50)
+
+    const centerX = (boundsMinX + boundsMaxX) / 2
+    const centerY = (boundsMinY + boundsMaxY) / 2
+
+    // Tight padding (5% margin) to fill the screen
+    const padding = 0.05
+    const scaleX = width * (1 - 2 * padding) / boundsWidth
+    const scaleY = height * (1 - 2 * padding) / boundsHeight
+    const scale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
+
+    const translateX = width / 2 - centerX * scale
+    const translateY = height / 2 - centerY * scale
+
+    return d3.zoomIdentity.translate(translateX, translateY).scale(scale)
+  }, [viewMode, splitRatio])
+
+  // FPS counter (dev mode only)
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+
+    let frameCount = 0
+    let lastTime = performance.now()
+    let animationId: number
+
+    const measureFps = () => {
+      frameCount++
+      const currentTime = performance.now()
+      const elapsed = currentTime - lastTime
+
+      // Update FPS every 500ms
+      if (elapsed >= 500) {
+        setFps(Math.round((frameCount * 1000) / elapsed))
+        frameCount = 0
+        lastTime = currentTime
+      }
+
+      animationId = requestAnimationFrame(measureFps)
+    }
+
+    animationId = requestAnimationFrame(measureFps)
+    return () => cancelAnimationFrame(animationId)
+  }, [])
+
+  // Expand all nodes in a specific ring (that are currently visible)
+  const expandRing = useCallback((ring: number) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev)
+      // Find nodes in this ring that are visible (parent is expanded or is root) and have children
+      allNodes
+        .filter(n => {
+          if (n.ring !== ring || !n.hasChildren) return false
+          // Check if visible: root is always visible, others need parent expanded
+          if (n.ring === 0) return true
+          return n.parentId && prev.has(n.parentId)
+        })
+        .forEach(n => next.add(n.id))
+      return next
+    })
+  }, [allNodes])
+
+  // Collapse all nodes in a specific ring
+  const collapseRing = useCallback((ring: number) => {
+    if (!rawData) return
+    const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
+
+    setExpandedNodes(prev => {
+      const next = new Set(prev)
+      // Remove all nodes in this ring and their descendants (use rawData for full tree)
+      rawData.nodes
+        .filter(n => n.layer === ring)
+        .forEach(n => {
+          const nodeId = String(n.id)
+          next.delete(nodeId)
+          // Also collapse descendants
+          const collapseDescendants = (id: string) => {
+            const node = nodeById.get(id)
+            if (node?.children) {
+              for (const childId of node.children) {
+                const childIdStr = String(childId)
+                next.delete(childIdStr)
+                collapseDescendants(childIdStr)
+              }
+            }
+          }
+          collapseDescendants(nodeId)
+        })
+      return next
+    })
+  }, [rawData])
+
+  // Compute visible nodes based on expansion state
+  const visibleNodes = useMemo(() => {
+    if (allNodes.length === 0) return []
+
+    const visible = new Set<string>()
+
+    // Root is always visible
+    const rootNode = allNodes.find(n => n.ring === 0)
+    if (rootNode) {
+      visible.add(rootNode.id)
+
+      // For each expanded node, its children are visible
+      const addVisibleChildren = (nodeId: string) => {
+        if (expandedNodes.has(nodeId)) {
+          const node = allNodes.find(n => n.id === nodeId)
+          if (node) {
+            node.childIds.forEach(childId => {
+              visible.add(childId)
+              addVisibleChildren(childId)
+            })
+          }
+        }
+      }
+
+      addVisibleChildren(rootNode.id)
+    }
+
+    return allNodes.filter(n => visible.has(n.id))
+  }, [allNodes, expandedNodes])
+
+  // Compute visible edges based on visible nodes
+  const visibleEdges = useMemo(() => {
+    const visibleIds = new Set(visibleNodes.map(n => n.id))
+    return allEdges.filter(e => visibleIds.has(e.sourceId) && visibleIds.has(e.targetId))
+  }, [allEdges, visibleNodes])
+
+  // Memoized map of nodes by ring for percentile calculations (avoids recreation in render)
+  const nodesByRingMemo = useMemo(() => {
+    const map = new Map<number, ExpandableNode[]>()
+    visibleNodes.forEach(n => {
+      if (!map.has(n.ring)) map.set(n.ring, [])
+      map.get(n.ring)!.push(n)
+    })
+    return map
+  }, [visibleNodes])
+
+  // Compute all node IDs visible in Local View (targets + inputs + outputs)
+  // Used for glow highlighting in Global View
+  // Track node roles for glow colors: target=cyan, input=orange, output=purple
+  // Supports multi-depth (causes of causes, effects of effects)
+  const localViewNodeRoles = useMemo(() => {
+    const roles = new Map<string, 'target' | 'input' | 'output'>()
+    if (localViewTargets.length === 0 || !rawData) return roles
+
+    const causalEdges = getCausalEdges(rawData.edges)
+
+    // Mark targets
+    for (const targetId of localViewTargets) {
+      roles.set(targetId, 'target')
+    }
+
+    // Collect input nodes (causes) up to inputDepth levels
+    let currentInputSources = new Set(localViewTargets)
+    for (let depth = 1; depth <= localViewInputDepth; depth++) {
+      const nextSources = new Set<string>()
+      for (const nodeId of currentInputSources) {
+        causalEdges
+          .filter(e => e.target === nodeId && Math.abs(e.beta) >= localViewBetaThreshold)
+          .forEach(e => {
+            if (!roles.has(e.source)) {
+              roles.set(e.source, 'input')
+              nextSources.add(e.source)
+            }
+          })
+      }
+      currentInputSources = nextSources
+    }
+
+    // Collect output nodes (effects) up to outputDepth levels
+    let currentOutputSources = new Set(localViewTargets)
+    for (let depth = 1; depth <= localViewOutputDepth; depth++) {
+      const nextSources = new Set<string>()
+      for (const nodeId of currentOutputSources) {
+        causalEdges
+          .filter(e => e.source === nodeId && Math.abs(e.beta) >= localViewBetaThreshold)
+          .forEach(e => {
+            if (!roles.has(e.target)) {
+              roles.set(e.target, 'output')
+              nextSources.add(e.target)
+            }
+          })
+      }
+      currentOutputSources = nextSources
+    }
+
+    return roles
+  }, [localViewTargets, rawData, localViewBetaThreshold, localViewInputDepth, localViewOutputDepth])
+
+  // Flat set of all Local View node IDs (for filtering)
+  const localViewNodeIds = useMemo(() => {
+    return new Set(localViewNodeRoles.keys())
+  }, [localViewNodeRoles])
+
+  // Reset view: handles both Global and Local views based on current viewMode
+  const resetView = useCallback(() => {
+    // Reset country selection to unified model
+    clearCountry()
+
+    // Reset Local View if in local or split mode
+    if ((viewMode === 'local' || viewMode === 'split') && localViewResetRef.current) {
+      localViewResetRef.current()
+    }
+
+    // Reset Global View if in global or split mode
+    if (viewMode === 'global' || viewMode === 'split') {
+      if (!zoomRef.current || !svgRef.current) return
+
+      const svg = d3.select(svgRef.current)
+
+      // Always collapse all expanded nodes
+      setExpandedNodes(new Set())
+      currentTransformRef.current = null
+
+      // Zoom to show root and ring 1 (outcomes)
+      const rootAndOutcomes = allNodes.filter(n => n.ring <= 1)
+      const initialTransform = calculateInitialTransform(rootAndOutcomes.length > 0 ? rootAndOutcomes : allNodes.filter(n => n.ring === 0))
+      svg.transition().duration(300).call(zoomRef.current.transform, initialTransform)
+    }
+  }, [allNodes, calculateInitialTransform, viewMode, clearCountry])
+
+  // Fit view to all visible nodes (for double-click on empty space)
+  const fitToVisibleNodes = useCallback(() => {
+    if (!zoomRef.current || !svgRef.current || visibleNodes.length === 0) return
+
+    const svg = d3.select(svgRef.current)
+    const width = viewMode === 'split' ? window.innerWidth * splitRatio : window.innerWidth
+    const height = window.innerHeight
+
+    // Calculate bounding box of all visible nodes
+    const allXs = visibleNodes.map(n => n.x)
+    const allYs = visibleNodes.map(n => n.y)
+
+    const boundsMinX = Math.min(...allXs)
+    const boundsMaxX = Math.max(...allXs)
+    const boundsMinY = Math.min(...allYs)
+    const boundsMaxY = Math.max(...allYs)
+
+    const boundsWidth = boundsMaxX - boundsMinX
+    const boundsHeight = boundsMaxY - boundsMinY
+
+    // Calculate center
+    const centerX = (boundsMinX + boundsMaxX) / 2
+    const centerY = (boundsMinY + boundsMaxY) / 2
+
+    // Calculate scale to fit with padding
+    const padding = 0.1
+    const scaleX = width * (1 - 2 * padding) / Math.max(boundsWidth, 1)
+    const scaleY = height * (1 - 2 * padding) / Math.max(boundsHeight, 1)
+    const fitScale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
+
+    const newX = width / 2 - centerX * fitScale
+    const newY = height / 2 - centerY * fitScale
+    const newTransform = d3.zoomIdentity.translate(newX, newY).scale(fitScale)
+
+    svg.transition().duration(300).call(zoomRef.current.transform, newTransform)
+    currentTransformRef.current = newTransform
+  }, [visibleNodes, viewMode, splitRatio])
+
+  // Keyboard shortcuts for reset view (R or Home) and view switching (G, L, S)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key === 'r' || e.key === 'R' || e.key === 'Home') {
+        e.preventDefault()
+        resetView()
+      } else if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault()
+        setViewMode('global')
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault()
+        // Only switch to local if there are targets
+        if (localViewTargets.length > 0) {
+          setViewMode('local')
+        }
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault()
+        // Only switch to split if there are targets
+        if (localViewTargets.length > 0) {
+          setViewMode('split')
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [resetView, localViewTargets.length])
+
+  // All nodes for search (derived from rawData, not just visible nodes)
+  const searchableNodes = useMemo(() => {
+    if (!rawData) return []
+    return rawData.nodes.map(n => ({
+      id: String(n.id),
+      label: n.node_type === 'root' ? 'Quality of Life' : n.label.replace(/_/g, ' '),
+      domain: n.domain || '',
+      subdomain: n.subdomain || '',
+      ring: n.layer,
+      importance: n.importance ?? 0,
+      parentId: n.parent ? String(n.parent) : null,
+      hasChildren: (n.children?.length || 0) > 0
+    }))
+  }, [rawData])
+
+  // Node map for breadcrumb navigation
+  const breadcrumbNodeMap = useMemo(() => {
+    return new Map(searchableNodes.map(n => [n.id, n]))
+  }, [searchableNodes])
+
+  // Fuse.js index for fuzzy search (searches ALL nodes, not just visible)
+  const fuseIndex = useMemo(() => {
+    if (searchableNodes.length === 0) return null
+    return new Fuse(searchableNodes, {
+      keys: [
+        { name: 'label', weight: 0.7 },
+        { name: 'domain', weight: 0.2 },
+        { name: 'subdomain', weight: 0.1 }
+      ],
+      threshold: 0.4,
+      includeScore: true,
+      minMatchCharLength: 2
+    })
+  }, [searchableNodes])
+
+  // Search handler
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query)
+    if (!fuseIndex || query.length < 2) {
+      setSearchResults([])
+      setShowSearchResults(false)
+      return
+    }
+
+    let results = fuseIndex.search(query)
+
+    // Apply domain filter if set
+    if (domainFilter) {
+      results = results.filter(r => r.item.domain === domainFilter)
+    }
+
+    // Take top 5 results
+    const topResults = results.slice(0, 5).map(r => r.item)
+    setSearchResults(topResults)
+    setShowSearchResults(topResults.length > 0)
+  }, [fuseIndex, domainFilter])
+
+  // Get path from root to node (list of node IDs to expand)
+  const getPathToNode = useCallback((nodeId: string): string[] => {
+    const path: string[] = []
+    const nodeMap = new Map(searchableNodes.map(n => [n.id, n]))
+
+    let current = nodeMap.get(nodeId)
+    while (current && current.parentId) {
+      path.unshift(current.parentId)
+      current = nodeMap.get(current.parentId)
+    }
+    return path
+  }, [searchableNodes])
+
+  // Jump to node: expand path and zoom to frame
+  const jumpToNode = useCallback((node: SearchableNode) => {
+    // Add to recent searches (keep last 5, no duplicates)
+    setRecentSearches(prev => {
+      const filtered = prev.filter(s => s !== node.label)
+      return [node.label, ...filtered].slice(0, 5)
+    })
+
+    // Clear search
+    setSearchQuery('')
+    setSearchResults([])
+    setShowSearchResults(false)
+
+    // Get path from root to target node
+    const pathToExpand = getPathToNode(node.id)
+
+    // Calculate highlight path: from target node up to Ring 1 ancestor
+    // Include the target node + all ancestors up to and including Ring 1
+    const nodeMap = new Map(searchableNodes.map(n => [n.id, n]))
+    const highlightPath = new Set<string>()
+    highlightPath.add(node.id)
+
+    let current = nodeMap.get(node.id)
+    while (current && current.parentId) {
+      const parent = nodeMap.get(current.parentId)
+      if (parent) {
+        highlightPath.add(parent.id)
+        // Stop at Ring 1 (outcome level)
+        if (parent.ring <= 1) break
+      }
+      current = parent
+    }
+
+    // Expand all nodes in path first
+    setExpandedNodes(prev => {
+      const next = new Set(prev)
+      pathToExpand.forEach(id => next.add(id))
+      return next
+    })
+
+    // Set pending zoom to frame the target node
+    pendingZoomRef.current = { nodeId: node.id, action: 'expand' }
+
+    // Delay highlight to ensure nodes are rendered first
+    setTimeout(() => {
+      setHighlightedPath(highlightPath)
+      setHighlightedTarget(node.id)  // Track which node is the actual search target
+    }, 350)
+  }, [getPathToNode, searchableNodes])
+
+  // Show node in Global View (from Local View)
+  // Expands path to node, switches to Global View, highlights and zooms to node
+  const showInGlobalView = useCallback((nodeId: string) => {
+    // Get path from root to target node
+    const pathToExpand = getPathToNode(nodeId)
+
+    // Calculate highlight path: from target node up to Ring 1 ancestor
+    const nodeMap = new Map(searchableNodes.map(n => [n.id, n]))
+    const highlightPath = new Set<string>()
+    highlightPath.add(nodeId)
+
+    let current = nodeMap.get(nodeId)
+    while (current && current.parentId) {
+      const parent = nodeMap.get(current.parentId)
+      if (parent) {
+        highlightPath.add(parent.id)
+        // Stop at Ring 1 (outcome level)
+        if (parent.ring <= 1) break
+      }
+      current = parent
+    }
+
+    // Expand all nodes in path
+    setExpandedNodes(prev => {
+      const next = new Set(prev)
+      pathToExpand.forEach(id => next.add(id))
+      return next
+    })
+
+    // Switch to Global View
+    setViewMode('global')
+
+    // Set pending zoom to frame the target node
+    pendingZoomRef.current = { nodeId, action: 'expand' }
+
+    // Delay highlight to ensure nodes are rendered first
+    setTimeout(() => {
+      setHighlightedPath(highlightPath)
+      setHighlightedTarget(nodeId)
+    }, 350)
+  }, [getPathToNode, searchableNodes])
+
+  // Close search results when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.search-container')) {
+        setShowSearchResults(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
+
+  // Keyboard shortcut for search (Ctrl/Cmd + K or /)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key === 'k')) {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+
+      // Escape to close search
+      if (e.key === 'Escape') {
+        setShowSearchResults(false)
+        searchInputRef.current?.blur()
+      }
+
+      // C to clear Local View targets
+      if (e.key === 'c' || e.key === 'C') {
+        if (localViewTargets.length > 0) {
+          e.preventDefault()
+          clearLocalViewTargets()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [localViewTargets.length, clearLocalViewTargets])
+
+  // Fetch data once on mount
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(DATA_FILE)
+      if (!response.ok) throw new Error(`Failed to load: ${response.status}`)
+      const data: GraphDataV21 = await response.json()
+      setRawData(data)
+
+      // Count domains for legend (from indicators, layer 5)
+      const counts: Record<string, number> = {}
+      data.nodes.forEach(n => {
+        if (n.layer === 5 && n.domain) {
+          counts[n.domain] = (counts[n.domain] || 0) + 1
+        }
+      })
+      setDomainCounts(counts)
+
+      setLoading(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+      setLoading(false)
+    }
+  }, [])
+
+  // Compute layout whenever expansion state or country selection changes
+  // Layout is computed on VISIBLE nodes only, so nodes spread when siblings are collapsed
+  // Ring radii are calculated DYNAMICALLY based on visible node count
+  // Country selection affects node importance values and filters out uncovered nodes
+  const computeLayout = useCallback(() => {
+    if (!effectiveNodes || !viewportLayoutRef.current) return
+
+    const vLayout = viewportLayoutRef.current
+
+    // Use effectiveNodes which has country-specific importance and filters uncovered nodes
+    const nodeById = new Map(effectiveNodes.map(n => [String(n.id), n]))
+
+    // Determine which nodes are visible based on expansion state
+    const visibleNodeIds = new Set<string>()
+
+    // Root is always visible
+    const rootNode = effectiveNodes.find(n => n.layer === 0)
+    if (rootNode) {
+      visibleNodeIds.add(String(rootNode.id))
+
+      // Recursively add visible children (only if they exist in effectiveNodes)
+      const addVisibleChildren = (nodeId: string) => {
+        if (expandedNodes.has(nodeId)) {
+          const node = nodeById.get(nodeId)
+          if (node?.children) {
+            for (const childId of node.children) {
+              const childIdStr = String(childId)
+              // Only add if node exists in effectiveNodes (may be filtered out for country)
+              if (nodeById.has(childIdStr)) {
+                visibleNodeIds.add(childIdStr)
+                addVisibleChildren(childIdStr)
+              }
+            }
+          }
+        }
+      }
+      addVisibleChildren(String(rootNode.id))
+    }
+
+    // Filter to visible nodes only (from effectiveNodes which already has country importance)
+    const visibleRawNodes = effectiveNodes.filter(n => visibleNodeIds.has(String(n.id)))
+
+    // Update viewport layout with current visible node count
+    vLayout.updateContext({ visibleNodes: visibleRawNodes.length })
+    const currentLayoutValues = vLayout.getLayoutValues()
+    setLayoutValues(currentLayoutValues)
+
+    // Group nodes by ring for radius calculation
+    const nodesByRing = new Map<number, Array<{ importance?: number }>>()
+    visibleRawNodes.forEach(n => {
+      if (!nodesByRing.has(n.layer)) nodesByRing.set(n.layer, [])
+      nodesByRing.get(n.layer)!.push({ importance: n.importance })
+    })
+
+    // Calculate DYNAMIC ring radii using viewport-aware layout
+    const dynamicRadii = vLayout.calculateRingRadii(nodesByRing, 6)
+
+    // Update ringRadii state so sliders reflect current values
+    setRingRadii(dynamicRadii)
+
+    // Generate ring configs from dynamic radii
+    const dynamicRingConfigs = generateRingConfigs(dynamicRadii)
+
+    // Count expanded Ring 1 branches for text boost calculation
+    const expandedBranchCount = visibleRawNodes.filter(
+      n => n.layer === 1 && expandedNodes.has(String(n.id))
+    ).length
+
+    // Build text config for text-aware spacing
+    const textConfig: TextConfig = {
+      expandedBranchCount,
+      minReadableSize: 3,
+      maxBoostedSize: 5,
+      minFontSize: currentLayoutValues.textMinSize,
+      maxFontSize: currentLayoutValues.textMaxSize
+    }
+
+    // Build layout config with dynamic radii and viewport-aware sizing
+    const layoutConfig: LayoutConfig = {
+      rings: dynamicRingConfigs,
+      nodePadding,
+      startAngle: -Math.PI / 2,
+      totalAngle: 2 * Math.PI,
+      minRingGap: currentLayoutValues.ringGap,
+      useFixedRadii: true,
+      // Pass viewport-aware sizing parameters
+      sizeRange: currentLayoutValues.sizeRange,
+      baseSpacing: currentLayoutValues.baseSpacing,
+      spacingScaleFactor: 0.3,  // Scale factor remains constant
+      maxSpacing: currentLayoutValues.maxSpacing,
+      // Pass text config for text-aware spacing
+      textConfig
+    }
+
+    // Compute layout using ring-independent angular positioning algorithm
+    // Each ring positions independently - children spread to fill available space
+    // Pass expandedNodes for smart lateral-first sector filling of outcomes
+    const layoutResult = computeRadialLayout(visibleRawNodes, layoutConfig, expandedNodes)
+    const { computedRings } = layoutResult
+
+    // Post-process: resolve any remaining overlaps by pushing nodes apart
+    resolveOverlaps(layoutResult.nodes, computedRings, nodePadding, 50)
+
+    // Detect any remaining overlaps for stats
+    const overlaps = detectOverlaps(layoutResult.nodes, computedRings, nodePadding)
+
+    // Compute layout statistics
+    const layoutStats = computeLayoutStats(layoutResult.nodes, computedRings, nodePadding)
+
+    // Convert to ExpandableNodes
+    const expandableNodes: ExpandableNode[] = layoutResult.nodes.map(toExpandableNode)
+
+    // Build structural edges
+    const structuralEdges: StructuralEdge[] = []
+    for (const layoutNode of layoutResult.nodes) {
+      if (layoutNode.parent) {
+        structuralEdges.push({
+          sourceId: layoutNode.parent.id,
+          targetId: layoutNode.id,
+          sourceRing: layoutNode.parent.ring,
+          targetRing: layoutNode.ring
+        })
+      }
+    }
+
+    // Store data for rendering
+    setAllNodes(expandableNodes)
+    setAllEdges(structuralEdges)
+    setComputedRingsState(computedRings)
+
+    // Compute ring stats using dynamicRingConfigs
+    const computedRingStats = dynamicRingConfigs.map((ring, i) => ({
+      label: ring.label,
+      count: layoutStats.nodesPerRing.get(i) || 0,
+      minDistance: layoutStats.minDistancePerRing.get(i) || 0
+    }))
+    setRingStats(computedRingStats)
+
+    // Compute outcome count
+    const outcomeCount = expandableNodes.filter(n => n.isOutcome).length
+    const driverCount = expandableNodes.filter(n => n.isDriver).length
+
+    setStats({
+      nodes: expandableNodes.length,
+      structuralEdges: structuralEdges.length,
+      outcomes: outcomeCount,
+      drivers: driverCount,
+      overlaps: overlaps.length
+    })
+  }, [effectiveNodes, nodePadding, expandedNodes])  // Uses effectiveNodes for country-specific importance
+
+  // Render visible nodes and edges (called when expansion state changes)
+  const renderVisualization = useCallback(() => {
+    if (!svgRef.current || visibleNodes.length === 0 || !viewportLayoutRef.current || !layoutValues) return
+
+    const vLayout = viewportLayoutRef.current
+    const svg = d3.select(svgRef.current)
+    // In split mode, Global View only takes the left portion
+    const width = viewMode === 'split' ? window.innerWidth * splitRatio : window.innerWidth
+    const height = window.innerHeight
+    svg.attr('width', width).attr('height', height)
+
+    // Get or create persistent container with layered groups for z-ordering
+    let g = svg.select<SVGGElement>('g.graph-container')
+    if (g.empty()) {
+      g = svg.append('g')
+        .attr('class', 'graph-container')
+        .style('will-change', 'transform')
+      // Create layer groups in correct z-order (first = back, last = front)
+      g.append('g').attr('class', 'layer-rings')
+      g.append('g').attr('class', 'layer-glow-local')  // Cyan glow for Local View nodes
+      g.append('g').attr('class', 'layer-glow')  // Glow layer for search highlights (yellow)
+      g.append('g').attr('class', 'layer-edges')
+      g.append('g').attr('class', 'layer-nodes')
+      g.append('g').attr('class', 'layer-labels')
+    }
+
+    // Get layer references
+    const ringsLayer = g.select<SVGGElement>('g.layer-rings')
+    const localGlowLayer = g.select<SVGGElement>('g.layer-glow-local')
+    const glowLayer = g.select<SVGGElement>('g.layer-glow')
+    const edgesLayer = g.select<SVGGElement>('g.layer-edges')
+    const nodesLayer = g.select<SVGGElement>('g.layer-nodes')
+    const labelsLayer = g.select<SVGGElement>('g.layer-labels')
+
+    // Zoom level thresholds for CSS-based label visibility
+    const getZoomClass = (scale: number): string => {
+      if (scale < 1.0) return 'zoom-xs'
+      if (scale < 1.6) return 'zoom-sm'
+      if (scale < 2.5) return 'zoom-md'
+      if (scale < 4.0) return 'zoom-lg'
+      return 'zoom-xl'
+    }
+
+    // Helper to update QoL node screen position from transform
+    const updateQolPosition = (transform: d3.ZoomTransform) => {
+      // QoL node is at (0, 0) in data coordinates
+      // Screen position = transform translation
+      setQolNodePosition({ x: transform.x, y: transform.y })
+    }
+
+    // Setup zoom behavior (only once)
+    if (!zoomRef.current) {
+      const zoom = d3.zoom<SVGSVGElement, unknown>()
+        .scaleExtent([0.05, 20])
+        .on('zoom', (event) => {
+          g.attr('transform', event.transform)
+          currentTransformRef.current = event.transform
+          const zoomClass = getZoomClass(event.transform.k)
+          g.attr('class', `graph-container ${zoomClass}`)
+          updateQolPosition(event.transform)
+        })
+      zoomRef.current = zoom
+      svg.call(zoom)
+
+      // Initial view - use shared calculation
+      const initialTransform = calculateInitialTransform(visibleNodes)
+      svg.call(zoom.transform, initialTransform)
+      currentTransformRef.current = initialTransform
+      updateQolPosition(initialTransform)
+    }
+
+    // Check if we need to recalculate zoom based on view mode or split ratio changes
+    const prevViewMode = prevViewModeForVizRef.current
+    const prevSplitRatio = prevSplitRatioRef.current
+
+    // Helper: Calculate transform to fit highlighted nodes (Local View nodes) tightly
+    const calculateHighlightedFitTransform = (containerWidth: number, containerHeight: number): d3.ZoomTransform | null => {
+      if (localViewNodeIds.size === 0) return null
+
+      const highlightedNodes = visibleNodes.filter(n => localViewNodeIds.has(n.id))
+      if (highlightedNodes.length === 0) return null
+
+      // Calculate bounding box of highlighted nodes + root (0,0)
+      const allXs = highlightedNodes.map(n => n.x)
+      const allYs = highlightedNodes.map(n => n.y)
+
+      const boundsMinX = Math.min(0, ...allXs)
+      const boundsMaxX = Math.max(0, ...allXs)
+      const boundsMinY = Math.min(0, ...allYs)
+      const boundsMaxY = Math.max(0, ...allYs)
+
+      const boundsWidth = boundsMaxX - boundsMinX
+      const boundsHeight = boundsMaxY - boundsMinY
+
+      const centerX = (boundsMinX + boundsMaxX) / 2
+      const centerY = (boundsMinY + boundsMaxY) / 2
+
+      // Tight padding (5% margin) to fill the screen
+      const padding = 0.05
+      const scaleX = containerWidth * (1 - 2 * padding) / Math.max(boundsWidth, 1)
+      const scaleY = containerHeight * (1 - 2 * padding) / Math.max(boundsHeight, 1)
+      const fitScale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
+
+      const newX = containerWidth / 2 - centerX * fitScale
+      const newY = containerHeight / 2 - centerY * fitScale
+
+      return d3.zoomIdentity.translate(newX, newY).scale(fitScale)
+    }
+
+    // Case 1: Switched TO global-only mode from split/local - fit to highlighted nodes or all
+    const wasInSplitOrLocal = prevViewMode === 'split' || prevViewMode === 'local'
+    const nowInGlobalOnly = viewMode === 'global'
+    if (wasInSplitOrLocal && nowInGlobalOnly && zoomRef.current) {
+      const containerWidth = window.innerWidth
+      const containerHeight = window.innerHeight
+      const highlightedTransform = calculateHighlightedFitTransform(containerWidth, containerHeight)
+      const resetTransform = highlightedTransform || calculateInitialTransform(visibleNodes)
+      svg.transition().duration(300).call(zoomRef.current.transform, resetTransform)
+      currentTransformRef.current = resetTransform
+    }
+
+    // Case 2: Switched TO split view - fit to highlighted nodes in reduced width
+    const nowInSplit = viewMode === 'split'
+    const wasNotInSplit = prevViewMode !== 'split'
+    if (nowInSplit && wasNotInSplit && zoomRef.current) {
+      const containerWidth = window.innerWidth * splitRatio
+      const containerHeight = window.innerHeight
+      const highlightedTransform = calculateHighlightedFitTransform(containerWidth, containerHeight)
+      const resetTransform = highlightedTransform || calculateInitialTransform(visibleNodes, containerWidth, containerHeight)
+      svg.transition().duration(300).call(zoomRef.current.transform, resetTransform)
+      currentTransformRef.current = resetTransform
+    }
+
+    // Case 3: Split ratio changed significantly while in split view (>5% change)
+    const splitRatioChanged = Math.abs(splitRatio - prevSplitRatio) > 0.05
+    if (nowInSplit && splitRatioChanged && zoomRef.current) {
+      const containerWidth = window.innerWidth * splitRatio
+      const containerHeight = window.innerHeight
+      const highlightedTransform = calculateHighlightedFitTransform(containerWidth, containerHeight)
+      const resetTransform = highlightedTransform || calculateInitialTransform(visibleNodes, containerWidth, containerHeight)
+      svg.transition().duration(200).call(zoomRef.current.transform, resetTransform)
+      currentTransformRef.current = resetTransform
+    }
+
+    // Update refs for next render
+    prevViewModeForVizRef.current = viewMode
+    prevSplitRatioRef.current = splitRatio
+
+    // Restore transform if not animating
+    if (!isAnimatingZoomRef.current && currentTransformRef.current) {
+      g.attr('transform', currentTransformRef.current.toString())
+    }
+
+    // === HELPER FUNCTIONS ===
+    const getColor = (n: ExpandableNode): string => {
+      if (n.ring === 0) return '#78909C'
+      return DOMAIN_COLORS[n.semanticPath.domain] || '#9E9E9E'
+    }
+
+    // Node sizing uses importance (0-1) mapped to area
+    // Historical playback: use pre-cached temporal SHAP values (V3.1 data)
+    // Simulation mode: apply temporal effects
+
+    // Get pre-cached SHAP for current year (O(1) lookup from pre-computed cache)
+    const currentYearForShap = historicalTimeline?.years[currentYearIndex]
+    let timelineImportance = (playbackMode === 'historical' && currentYearForShap)
+      ? (precomputedShapCache.get(currentYearForShap) || new Map<string, number>())
+      : new Map<string, number>()
+
+    // Cache valid SHAP data; use cache during loading to maintain node sizes
+    if (timelineImportance.size > 0) {
+      lastValidShapRef.current = timelineImportance
+    } else if (lastValidShapRef.current.size > 0) {
+      // Use cached SHAP during loading (prevents nodes shrinking to 0)
+      timelineImportance = lastValidShapRef.current
+    }
+
+    const getSize = (n: ExpandableNode): number => {
+      // Ring 0 (QoL) always has fixed size - root of the hierarchy
+      if (n.ring === 0) {
+        return vLayout.getNodeRadius(1.0)  // Always max size for root
+      }
+
+      const nodeId = String(n.id)
+
+      // For all other rings, use temporal SHAP (v3.1 data)
+      if (playbackMode === 'historical' && timelineImportance.size > 0) {
+        const historicalImp = timelineImportance.get(nodeId)
+        if (historicalImp !== undefined) {
+          return vLayout.getNodeRadius(historicalImp)
+        }
+        // Fallback to cache if node not in current year's data
+        const cachedImp = lastValidShapRef.current.get(nodeId)
+        if (cachedImp !== undefined) {
+          return vLayout.getNodeRadius(cachedImp)
+        }
+      }
+      // Simulation mode: apply temporal effects
+      else if (playbackMode === 'simulation' && temporalResults && currentYear > 0) {
+        const yearKey = `year_${currentYear}`
+        const yearEffects = temporalResults.effects[yearKey]
+        if (yearEffects && yearEffects[n.id]) {
+          const effect = yearEffects[n.id]
+          const importance = n.importance || 0
+          const scaleFactor = 1 + Math.max(-1, Math.min(1, effect.percent_change / 100))
+          return vLayout.getNodeRadius(Math.max(0, Math.min(1, importance * scaleFactor)))
+        }
+      }
+
+      // Last resort: check cache before using floor
+      const cachedImp = lastValidShapRef.current.get(nodeId)
+      if (cachedImp !== undefined) {
+        return vLayout.getNodeRadius(cachedImp)
+      }
+
+      // Absolute fallback - use minimum visible size (smaller than typical SHAP values)
+      return vLayout.getNodeRadius(0.0001)
+    }
+
+    const isNodeFloored = (importance: number): boolean => {
+      return vLayout.isNodeFloored(importance)
+    }
+
+    const getPercentileInRing = (node: ExpandableNode): number => {
+      const ringNodes = nodesByRingMemo.get(node.ring) || []
+      if (ringNodes.length <= 1) return 1
+      const sorted = ringNodes.map(n => n.importance).sort((a, b) => b - a)
+      const rank = sorted.findIndex(imp => imp <= node.importance)
+      return 1 - (rank / sorted.length)
+    }
+
+    const getBorderWidth = (node: ExpandableNode): number => {
+      const percentile = getPercentileInRing(node)
+      let baseWidth: number
+      if (percentile >= 0.95) baseWidth = 2
+      else if (percentile >= 0.75) baseWidth = 1.5
+      else if (percentile >= 0.50) baseWidth = 1
+      else baseWidth = 0.75
+      const radius = getSize(node)
+      return Math.min(baseWidth, radius * 0.5)
+    }
+
+    const getParentPosition = (node: ExpandableNode): { x: number; y: number } => {
+      if (node.parentId) {
+        // Check NEW positions first (from current layout) so enter nodes
+        // start from parent's final position after rotation
+        const parent = visibleNodes.find(n => n.id === node.parentId)
+        if (parent) return { x: parent.x, y: parent.y }
+        // Fall back to previous positions for edge cases
+        const parentPos = nodePositionsRef.current.get(node.parentId)
+        if (parentPos) return parentPos
+      }
+      return { x: 0, y: 0 }
+    }
+
+    // Detect new vs existing vs exiting nodes
+    const prevVisibleIds = prevVisibleNodeIdsRef.current
+    const currentVisibleIds = new Set(visibleNodes.map(n => n.id))
+    const newNodeIds = new Set<string>()
+    const existingNodeIds = new Set<string>()  // Nodes that existed before and still exist
+    const actuallyMovingNodeIds = new Set<string>()  // Nodes whose position actually changed
+    const exitingNodeIds = new Set<string>()
+
+    // Threshold for considering a position "changed" (in pixels)
+    const POSITION_CHANGE_THRESHOLD = 1
+
+    currentVisibleIds.forEach(id => {
+      if (!prevVisibleIds.has(id)) {
+        newNodeIds.add(id)
+      } else {
+        existingNodeIds.add(id)
+        // Check if position actually changed
+        const prevPos = nodePositionsRef.current.get(id)
+        const node = visibleNodes.find(n => n.id === id)
+        if (prevPos && node) {
+          const dx = Math.abs(node.x - prevPos.x)
+          const dy = Math.abs(node.y - prevPos.y)
+          if (dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD) {
+            actuallyMovingNodeIds.add(id)
+          }
+        }
+      }
+    })
+    prevVisibleIds.forEach(id => {
+      if (!currentVisibleIds.has(id)) {
+        exitingNodeIds.add(id)
+      }
+    })
+
+    // Determine animation timing based on expand vs collapse:
+    // EXPAND sequence: Rotation → Nodes/Edges enter → Text appears
+    // COLLAPSE sequence: Text disappears → Nodes/Edges exit → Rotation
+    const isCollapsing = exitingNodeIds.size > 0
+    const hasRotation = actuallyMovingNodeIds.size > 0
+
+    const rotationDuration = 300
+    const enterExitDuration = 300
+    const textFadeDuration = 150
+    const exitDuration = 200  // Duration for nodes/edges collapsing
+
+    // Timing for EXPAND: rotation first, then enter, then text
+    const expandEnterDelay = hasRotation ? rotationDuration : 0
+    const expandTextDelay = expandEnterDelay + enterExitDuration
+
+    // Timing for COLLAPSE: text first, then exit, then rotation
+    // Sequence: Text fades (0-150ms) → Nodes collapse (150-350ms) → Rotation starts after collapse complete
+    const collapseTextDelay = 0  // Text disappears immediately
+    const collapseExitDelay = textFadeDuration  // Exit after text fades (150ms)
+    const collapseExitEndTime = collapseExitDelay + exitDuration  // When collapse finishes (350ms)
+    const collapseRotationDelay = collapseExitEndTime + 50  // Start rotation after collapse + buffer (400ms)
+
+    // Build node map
+    const nodeMap = new Map<string, ExpandableNode>()
+    visibleNodes.forEach(n => nodeMap.set(n.id, n))
+
+    // === RING CIRCLES (data join pattern) ===
+    const visibleRings = new Set(visibleNodes.map(n => n.ring))
+    const ringData = computedRingsState
+      .map((ring, i) => ({ ...ring, index: i }))
+      .slice(1)
+      .filter(ring => visibleRings.has(ring.index))
+
+    // Ring outlines
+    ringsLayer.selectAll<SVGCircleElement, typeof ringData[0]>('circle.ring-outline')
+      .data(ringData, d => d.index)
+      .join(
+        enter => enter.append('circle')
+          .attr('class', 'ring-outline')
+          .attr('cx', 0)
+          .attr('cy', 0)
+          .attr('fill', 'none')
+          .attr('stroke', '#e5e5e5')
+          .attr('stroke-width', 1.5)
+          .attr('r', d => d.radius),
+        update => update.attr('r', d => d.radius),
+        exit => exit.remove()
+      )
+
+    // Ring labels
+    ringsLayer.selectAll<SVGTextElement, typeof ringData[0]>('text.ring-label')
+      .data(ringData, d => d.index)
+      .join(
+        enter => enter.append('text')
+          .attr('class', 'ring-label')
+          .attr('x', 0)
+          .attr('text-anchor', 'middle')
+          .attr('font-size', 12)
+          .attr('font-weight', 'bold')
+          .attr('fill', '#888')
+          .attr('y', d => -d.radius - 12)
+          .text(d => d.label || ringConfigs[d.index]?.label || ''),
+        update => update
+          .attr('y', d => -d.radius - 12)
+          .text(d => d.label || ringConfigs[d.index]?.label || ''),
+        exit => exit.remove()
+      )
+
+    // === GLOW ANIMATION TIMING ===
+    // Glows must wait until nodes finish ALL animation before appearing
+    const isAnimating = isCollapsing || newNodeIds.size > 0 || actuallyMovingNodeIds.size > 0
+
+    // Calculate when all node animations complete
+    // COLLAPSE: text fade → exit → rotation
+    // EXPAND: rotation → enter → text fade
+    const nodeAnimationEndTime = isCollapsing
+      ? (hasRotation ? collapseRotationDelay + rotationDuration : collapseExitEndTime)
+      : (hasRotation ? expandEnterDelay + enterExitDuration : enterExitDuration)
+
+    // Glows appear after ALL node animations complete
+    const glowReappearDelay = isAnimating ? nodeAnimationEndTime + 50 : 0
+
+    // For collapse: glows follow nodes during rotation phase
+    // For expand: glows wait until nodes finish entering before appearing
+    const glowRotationDelay = isCollapsing ? collapseRotationDelay : 0
+    const expandGlowDelay = hasRotation ? expandEnterDelay + enterExitDuration : enterExitDuration
+
+    // === GLOW CIRCLES for search highlight ===
+    const highlightedNodes = visibleNodes.filter(n => highlightedPath.has(n.id))
+    const glowSelection = glowLayer.selectAll<SVGCircleElement, ExpandableNode>('circle.glow')
+      .data(highlightedNodes, d => d.id)
+
+    // Remove old glows immediately
+    glowSelection.exit().remove()
+
+    // Only animate glows for nodes that ACTUALLY move - stationary nodes keep their glow visible
+    const glowsToAnimate = glowSelection.filter(d => actuallyMovingNodeIds.has(d.id))
+    const glowsToKeepVisible = glowSelection.filter(d => !actuallyMovingNodeIds.has(d.id))
+
+    // Stationary glows - just update position immediately, stay visible
+    glowsToKeepVisible.each(function(d) {
+      const isTarget = d.id === highlightedTarget
+      d3.select(this)
+        .attr('cx', d.x)
+        .attr('cy', d.y)
+        .attr('r', getSize(d) + 3)
+        .attr('stroke', isTarget ? '#D32F2F' : '#FFCDD2')  // Dark red for target, light pink for parents
+        .attr('stroke-width', 3)
+        .attr('opacity', 0.5)
+    })
+
+    // Moving glows - check actual DOM position vs target to determine if animation needed
+    if (actuallyMovingNodeIds.size > 0) {
+      // Check each glow's node's ACTUAL DOM position vs target
+      glowsToAnimate.each(function(d) {
+        const glowEl = d3.select(this)
+        const nodeEl = nodesLayer.select<SVGCircleElement>(`circle.node[data-id="${d.id}"]`)
+        const isTarget = d.id === highlightedTarget
+        const glowColor = isTarget ? '#D32F2F' : '#FFCDD2'
+
+        if (!nodeEl.empty()) {
+          const nodeCx = parseFloat(nodeEl.attr('cx') || '0')
+          const nodeCy = parseFloat(nodeEl.attr('cy') || '0')
+          const targetX = d.x
+          const targetY = d.y
+
+          // Check if node actually needs to move (compare DOM position to target)
+          const dx = Math.abs(targetX - nodeCx)
+          const dy = Math.abs(targetY - nodeCy)
+          const nodeActuallyMoves = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
+
+          if (nodeActuallyMoves) {
+            // Sync glow to node's current DOM position, then animate
+            glowEl
+              .attr('cx', nodeCx)
+              .attr('cy', nodeCy)
+              .attr('opacity', 0)
+              .attr('stroke', glowColor)
+              .transition('glow-move')
+              .delay(glowRotationDelay)
+              .duration(rotationDuration)
+              .ease(d3.easeCubicOut)
+              .attr('cx', targetX)
+              .attr('cy', targetY)
+              .attr('r', getSize(d) + 3)
+
+            glowEl
+              .transition('glow-show')
+              .delay(glowReappearDelay)
+              .duration(200)
+              .attr('opacity', 0.5)
+          } else {
+            // Node isn't actually moving - just update glow position, keep visible
+            glowEl
+              .attr('cx', targetX)
+              .attr('cy', targetY)
+              .attr('r', getSize(d) + 3)
+              .attr('stroke', glowColor)
+              .attr('opacity', 0.5)
+          }
+        }
+      })
+    }
+
+    // Add new glows - RED for search (dark red for target, light pink for parents)
+    // During collapse: start at OLD position, animate with nodes, then fade in
+    // During expand: wait until node finishes entering, then fade in at final position
+    const hasAnyAnimation = isCollapsing || actuallyMovingNodeIds.size > 0 || newNodeIds.size > 0
+
+    const newSearchGlows = glowSelection.enter()
+      .append('circle')
+      .attr('class', 'glow')
+      .attr('cx', d => {
+        // During collapse, start at old position so glow follows node
+        if (isCollapsing) {
+          const prevPos = nodePositionsRef.current.get(d.id)
+          return prevPos?.x ?? d.x
+        }
+        // During expand, start at final position (will fade in after node enters)
+        return d.x
+      })
+      .attr('cy', d => {
+        if (isCollapsing) {
+          const prevPos = nodePositionsRef.current.get(d.id)
+          return prevPos?.y ?? d.y
+        }
+        return d.y
+      })
+      .attr('r', d => getSize(d) + 3)
+      .attr('fill', 'none')
+      .attr('stroke', d => d.id === highlightedTarget ? '#D32F2F' : '#FFCDD2')  // Dark red for target, light pink for parents
+      .attr('stroke-width', 3)
+      .attr('opacity', 0)  // Start hidden
+      .style('filter', 'blur(2px)')
+      .style('pointer-events', 'none')
+
+    // Animate glows based on whether their SPECIFIC node's DOM position differs from target
+    if (isCollapsing) {
+      // COLLAPSE: check each glow's node's actual DOM position
+      newSearchGlows.each(function(d) {
+        const glowEl = d3.select(this)
+        const nodeEl = nodesLayer.select<SVGCircleElement>(`circle.node[data-id="${d.id}"]`)
+
+        if (!nodeEl.empty()) {
+          const nodeCx = parseFloat(nodeEl.attr('cx') || '0')
+          const nodeCy = parseFloat(nodeEl.attr('cy') || '0')
+          const targetX = d.x
+          const targetY = d.y
+
+          // Check if node actually needs to move
+          const dx = Math.abs(targetX - nodeCx)
+          const dy = Math.abs(targetY - nodeCy)
+          const nodeActuallyMoves = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
+
+          if (nodeActuallyMoves) {
+            // Node is moving: animate from current position to target
+            glowEl
+              .attr('cx', nodeCx)
+              .attr('cy', nodeCy)
+              .transition('new-glow-position')
+              .delay(glowRotationDelay)
+              .duration(rotationDuration)
+              .ease(d3.easeCubicOut)
+              .attr('cx', targetX)
+              .attr('cy', targetY)
+              .transition()
+              .duration(200)
+              .attr('opacity', 0.5)
+          } else {
+            // Node is stationary: snap to position, fade in after exit
+            glowEl
+              .attr('cx', targetX)
+              .attr('cy', targetY)
+              .transition()
+              .delay(collapseExitEndTime + 50)
+              .duration(200)
+              .attr('opacity', 0.5)
+          }
+        } else {
+          // Node not found, just fade in at target position
+          glowEl
+            .attr('cx', d.x)
+            .attr('cy', d.y)
+            .transition()
+            .delay(collapseExitEndTime + 50)
+            .duration(200)
+            .attr('opacity', 0.5)
+        }
+      })
+    } else if (hasAnyAnimation) {
+      // EXPAND: wait until nodes finish entering, then fade in
+      newSearchGlows
+        .transition('new-glow-expand')
+        .delay(expandGlowDelay + 50)
+        .duration(200)
+        .attr('opacity', 0.5)
+    } else {
+      // No animation - just fade in
+      newSearchGlows
+        .transition()
+        .duration(200)
+        .attr('opacity', 0.5)
+    }
+
+    // === GLOW for Local View nodes (different colors by role) ===
+    // Target: cyan, Input: orange, Output: purple
+    const LOCAL_GLOW_COLORS = {
+      target: '#00BCD4',  // Cyan
+      input: '#FF9800',   // Orange
+      output: '#9C27B0'   // Purple
+    }
+
+    // Create set of visible node IDs for quick lookup
+    const visibleNodeIds = new Set(visibleNodes.map(n => n.id))
+
+    // For nodes not visible, find their visible ancestor and glow that instead
+    // Map: visible node ID -> { node, role } (may aggregate multiple roles)
+    const glowTargets = new Map<string, { node: ExpandableNode; role: 'target' | 'input' | 'output' }>()
+
+    for (const [nodeId, role] of localViewNodeRoles.entries()) {
+      if (visibleNodeIds.has(nodeId)) {
+        // Node is visible, glow it directly
+        const node = visibleNodes.find(n => n.id === nodeId)
+        if (node) {
+          glowTargets.set(nodeId, { node, role })
+        }
+      } else {
+        // Node not visible, find visible ancestor
+        let currentId = nodeId
+        let foundAncestor: ExpandableNode | null = null
+
+        // Walk up the tree to find visible parent
+        while (!foundAncestor && currentId) {
+          const rawNode = rawData?.nodes.find(n => String(n.id) === currentId)
+          if (rawNode?.parent) {
+            const parentId = String(rawNode.parent)
+            if (visibleNodeIds.has(parentId)) {
+              foundAncestor = visibleNodes.find(n => n.id === parentId) || null
+            }
+            currentId = parentId
+          } else {
+            break
+          }
+        }
+
+        if (foundAncestor) {
+          // Use highest priority role (target > input > output)
+          const existing = glowTargets.get(foundAncestor.id)
+          if (!existing || (role === 'target') || (role === 'input' && existing.role === 'output')) {
+            glowTargets.set(foundAncestor.id, { node: foundAncestor, role })
+          }
+        }
+      }
+    }
+
+    const nodesToGlow = Array.from(glowTargets.values()).map(g => ({ ...g.node, glowRole: g.role }))
+
+    // Performance limit: max 50 nodes to prevent FPS drops
+    const MAX_GLOW_NODES = 50
+    const limitedNodesToGlow = nodesToGlow.length > MAX_GLOW_NODES
+      ? nodesToGlow.slice(0, MAX_GLOW_NODES)
+      : nodesToGlow
+
+    // Type for glow nodes with role
+    type GlowNode = ExpandableNode & { glowRole: 'target' | 'input' | 'output' }
+
+    const localGlowSelection = localGlowLayer
+      .selectAll<SVGCircleElement, GlowNode>('circle.glow-local')
+      .data(limitedNodesToGlow as GlowNode[], d => d.id)
+
+    // Remove old local glows immediately
+    localGlowSelection.exit().remove()
+
+    // Only animate glows for nodes that ACTUALLY move - stationary nodes keep their glow visible
+    const localGlowsToAnimate = localGlowSelection.filter(d => actuallyMovingNodeIds.has(d.id))
+    const localGlowsToKeepVisible = localGlowSelection.filter(d => !actuallyMovingNodeIds.has(d.id))
+
+    // Stationary local glows - just update position immediately, stay visible
+    localGlowsToKeepVisible
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y)
+      .attr('r', d => getSize(d) + 3)
+      .attr('stroke', d => LOCAL_GLOW_COLORS[d.glowRole])
+
+    // Moving local glows - check actual DOM position vs target to determine if animation needed
+    if (actuallyMovingNodeIds.size > 0) {
+      localGlowsToAnimate.each(function(d) {
+        const glowEl = d3.select(this)
+        const nodeEl = nodesLayer.select<SVGCircleElement>(`circle.node[data-id="${d.id}"]`)
+
+        if (!nodeEl.empty()) {
+          const nodeCx = parseFloat(nodeEl.attr('cx') || '0')
+          const nodeCy = parseFloat(nodeEl.attr('cy') || '0')
+          const targetX = d.x
+          const targetY = d.y
+
+          // Check if node actually needs to move (compare DOM position to target)
+          const dx = Math.abs(targetX - nodeCx)
+          const dy = Math.abs(targetY - nodeCy)
+          const nodeActuallyMoves = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
+
+          if (nodeActuallyMoves) {
+            // Sync glow to node's current DOM position, then animate
+            glowEl
+              .attr('cx', nodeCx)
+              .attr('cy', nodeCy)
+              .attr('opacity', 0)
+              .transition('local-glow-move')
+              .delay(glowRotationDelay)
+              .duration(rotationDuration)
+              .ease(d3.easeCubicOut)
+              .attr('cx', targetX)
+              .attr('cy', targetY)
+              .attr('r', getSize(d) + 3)
+              .attr('stroke', LOCAL_GLOW_COLORS[d.glowRole])
+
+            glowEl
+              .transition('local-glow-show')
+              .delay(glowReappearDelay)
+              .duration(200)
+              .attr('opacity', 0.35)
+          } else {
+            // Node isn't actually moving - just update glow position, keep visible
+            glowEl
+              .attr('cx', targetX)
+              .attr('cy', targetY)
+              .attr('r', getSize(d) + 3)
+              .attr('stroke', LOCAL_GLOW_COLORS[d.glowRole])
+          }
+        }
+      })
+    }
+
+    // Add new local glows
+    // During collapse: start at OLD position, animate with nodes, then fade in
+    // During expand: wait until node finishes entering, then fade in at final position
+    const newLocalGlows = localGlowSelection.enter()
+      .append('circle')
+      .attr('class', 'glow-local')
+      .attr('cx', d => {
+        // During collapse, start at old position so glow follows node
+        if (isCollapsing) {
+          const prevPos = nodePositionsRef.current.get(d.id)
+          return prevPos?.x ?? d.x
+        }
+        // During expand, start at final position
+        return d.x
+      })
+      .attr('cy', d => {
+        if (isCollapsing) {
+          const prevPos = nodePositionsRef.current.get(d.id)
+          return prevPos?.y ?? d.y
+        }
+        return d.y
+      })
+      .attr('r', d => getSize(d) + 3)
+      .attr('fill', 'none')
+      .attr('stroke', d => LOCAL_GLOW_COLORS[d.glowRole])
+      .attr('stroke-width', 3)
+      .attr('opacity', 0)  // Start hidden
+      .style('filter', 'blur(2px)')
+      .style('pointer-events', 'none')
+
+    // Animate glows based on whether their SPECIFIC node's DOM position differs from target
+    if (isCollapsing) {
+      // COLLAPSE: check each glow's node's actual DOM position
+      newLocalGlows.each(function(d) {
+        const glowEl = d3.select(this)
+        const nodeEl = nodesLayer.select<SVGCircleElement>(`circle.node[data-id="${d.id}"]`)
+
+        if (!nodeEl.empty()) {
+          const nodeCx = parseFloat(nodeEl.attr('cx') || '0')
+          const nodeCy = parseFloat(nodeEl.attr('cy') || '0')
+          const targetX = d.x
+          const targetY = d.y
+
+          // Check if node actually needs to move
+          const dx = Math.abs(targetX - nodeCx)
+          const dy = Math.abs(targetY - nodeCy)
+          const nodeActuallyMoves = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
+
+          if (nodeActuallyMoves) {
+            // Node is moving: animate from current position to target
+            glowEl
+              .attr('cx', nodeCx)
+              .attr('cy', nodeCy)
+              .transition('new-local-glow-position')
+              .delay(glowRotationDelay)
+              .duration(rotationDuration)
+              .ease(d3.easeCubicOut)
+              .attr('cx', targetX)
+              .attr('cy', targetY)
+              .transition()
+              .duration(200)
+              .attr('opacity', 0.35)
+          } else {
+            // Node is stationary: snap to position, fade in after exit
+            glowEl
+              .attr('cx', targetX)
+              .attr('cy', targetY)
+              .transition()
+              .delay(collapseExitEndTime + 50)
+              .duration(200)
+              .attr('opacity', 0.35)
+          }
+        } else {
+          // Node not found, just fade in at target position
+          glowEl
+            .attr('cx', d.x)
+            .attr('cy', d.y)
+            .transition()
+            .delay(collapseExitEndTime + 50)
+            .duration(200)
+            .attr('opacity', 0.35)
+        }
+      })
+    } else if (hasAnyAnimation) {
+      // EXPAND: wait until nodes finish entering, then fade in
+      newLocalGlows
+        .transition('new-local-glow-expand')
+        .delay(expandGlowDelay + 50)
+        .duration(200)
+        .attr('opacity', 0.35)
+    } else {
+      // No animation - just fade in
+      newLocalGlows
+        .transition()
+        .duration(200)
+        .attr('opacity', 0.35)
+    }
+
+    // === EDGES with enter/update/exit ===
+    const edgeKey = (d: StructuralEdge) => `${d.sourceId}-${d.targetId}`
+    const edgeSelection = edgesLayer.selectAll<SVGLineElement, StructuralEdge>('line.edge')
+      .data(visibleEdges, edgeKey)
+
+    // Exit edges (COLLAPSE: after text disappears, before rotation)
+    edgeSelection.exit()
+      .transition()
+      .delay(collapseExitDelay)
+      .duration(exitDuration)
+      .attr('x2', function() { return d3.select(this).attr('x1') })
+      .attr('y2', function() { return d3.select(this).attr('y1') })
+      .style('opacity', 0)
+      .remove()
+
+    // Check if we're in the middle of a collapse animation (from a previous render)
+    // IMPORTANT: Check BEFORE setting new animation state
+    const now = Date.now()
+    const inCollapseAnimation = collapseAnimationRef.current.inProgress && now < collapseAnimationRef.current.endTime
+
+    // Track collapse animation state to prevent re-renders from overriding
+    if (isCollapsing && exitingNodeIds.size > 0) {
+      // Start of collapse animation - mark it and set end time
+      const totalCollapseTime = collapseRotationDelay + rotationDuration
+      collapseAnimationRef.current = { inProgress: true, endTime: now + totalCollapseTime }
+      // Schedule cleanup after animation completes
+      setTimeout(() => {
+        collapseAnimationRef.current = { inProgress: false, endTime: 0 }
+      }, totalCollapseTime + 50)
+    }
+
+    // Update edges (animate to new positions)
+    // Check each edge's actual DOM position vs target - animate if different
+    const rotationDelay = isCollapsing ? collapseRotationDelay : 0
+    const shouldSkipRotation = inCollapseAnimation && !isCollapsing
+
+    edgeSelection.each(function(d) {
+      const edgeEl = d3.select(this)
+      const currentX1 = parseFloat(edgeEl.attr('x1') || '0')
+      const currentY1 = parseFloat(edgeEl.attr('y1') || '0')
+      const currentX2 = parseFloat(edgeEl.attr('x2') || '0')
+      const currentY2 = parseFloat(edgeEl.attr('y2') || '0')
+
+      const targetX1 = nodeMap.get(d.sourceId)?.x || 0
+      const targetY1 = nodeMap.get(d.sourceId)?.y || 0
+      const targetX2 = nodeMap.get(d.targetId)?.x || 0
+      const targetY2 = nodeMap.get(d.targetId)?.y || 0
+
+      // Check if edge actually needs to move
+      const dx1 = Math.abs(targetX1 - currentX1)
+      const dy1 = Math.abs(targetY1 - currentY1)
+      const dx2 = Math.abs(targetX2 - currentX2)
+      const dy2 = Math.abs(targetY2 - currentY2)
+      const needsMove = dx1 > POSITION_CHANGE_THRESHOLD || dy1 > POSITION_CHANGE_THRESHOLD ||
+                        dx2 > POSITION_CHANGE_THRESHOLD || dy2 > POSITION_CHANGE_THRESHOLD
+
+      if (needsMove || !shouldSkipRotation) {
+        edgeEl
+          .transition('rotation')
+          .delay(rotationDelay)
+          .duration(rotationDuration)
+          .ease(d3.easeCubicOut)
+          .attr('x1', targetX1)
+          .attr('y1', targetY1)
+          .attr('x2', targetX2)
+          .attr('y2', targetY2)
+      }
+    })
+
+    // Enter edges (EXPAND: after rotation completes)
+    edgeSelection.enter()
+      .append('line')
+      .attr('class', 'edge')
+      .attr('x1', d => nodeMap.get(d.sourceId)?.x || 0)
+      .attr('y1', d => nodeMap.get(d.sourceId)?.y || 0)
+      .attr('x2', d => nodeMap.get(d.sourceId)?.x || 0)
+      .attr('y2', d => nodeMap.get(d.sourceId)?.y || 0)
+      .attr('stroke', '#ccc')
+      .attr('stroke-width', d => vLayout.getEdgeThickness(d.sourceRing))
+      .attr('stroke-opacity', 0)
+      .style('pointer-events', 'none')
+      .transition()
+      .delay(expandEnterDelay)
+      .duration(enterExitDuration)
+      .ease(d3.easeCubicOut)
+      .attr('x2', d => nodeMap.get(d.targetId)?.x || 0)
+      .attr('y2', d => nodeMap.get(d.targetId)?.y || 0)
+      .attr('stroke-opacity', d => vLayout.getEdgeOpacity(d.sourceRing))
+
+    // === NODES with enter/update/exit ===
+    const nodeSelection = nodesLayer.selectAll<SVGCircleElement, ExpandableNode>('circle.node')
+      .data(visibleNodes, d => d.id)
+
+    // Exit nodes (COLLAPSE: after text disappears, before rotation)
+    nodeSelection.exit()
+      .each(function() {
+        const el = d3.select(this)
+        const id = el.attr('data-id')
+        if (id) {
+          const nodeData = nodePositionsRef.current.get(id)
+          const parentPos = nodeData?.parentId ? nodePositionsRef.current.get(nodeData.parentId) : null
+          el.transition()
+            .delay(collapseExitDelay)
+            .duration(exitDuration)
+            .ease(d3.easeCubicIn)
+            .attr('cx', parentPos?.x ?? el.attr('cx'))
+            .attr('cy', parentPos?.y ?? el.attr('cy'))
+            .attr('r', 0)
+            .style('opacity', 0)
+            .remove()
+        }
+      })
+
+    // Update nodes (animate to new positions)
+    // Check each node's actual DOM position vs target - animate if different
+    nodeSelection.each(function(d) {
+      const nodeEl = d3.select(this)
+      const currentCx = parseFloat(nodeEl.attr('cx') || '0')
+      const currentCy = parseFloat(nodeEl.attr('cy') || '0')
+      const targetX = d.x
+      const targetY = d.y
+
+      // Check if node actually needs to move
+      const dx = Math.abs(targetX - currentCx)
+      const dy = Math.abs(targetY - currentCy)
+      const needsMove = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
+
+      if (needsMove) {
+        // Node position differs from target - animate to new position
+        nodeEl
+          .transition('rotation')
+          .delay(rotationDelay)
+          .duration(rotationDuration)
+          .ease(d3.easeCubicOut)
+          .attr('cx', targetX)
+          .attr('cy', targetY)
+          .attr('r', getSize(d))
+          .attr('fill', getColor(d))
+      } else if (!shouldSkipRotation) {
+        // Position matches but may need size/color update
+        nodeEl
+          .transition('rotation')
+          .delay(rotationDelay)
+          .duration(rotationDuration)
+          .ease(d3.easeCubicOut)
+          .attr('r', getSize(d))
+          .attr('fill', getColor(d))
+      }
+      // Note: opacity is always 1 since uncovered nodes are filtered out by effectiveNodes
+    })
+
+    // Enter nodes (EXPAND: after rotation completes)
+    nodeSelection.enter()
+      .append('circle')
+      .attr('class', 'node')
+      .attr('data-id', d => d.id)
+      .attr('cx', d => getParentPosition(d).x)
+      .attr('cy', d => getParentPosition(d).y)
+      .attr('r', 0)
+      .attr('fill', d => getColor(d))
+      .attr('stroke', d => isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E'))
+      .attr('stroke-width', d => {
+        const radius = getSize(d)
+        if (isNodeFloored(d.importance)) return Math.min(1, radius * 0.5)
+        return getBorderWidth(d)
+      })
+      .attr('stroke-dasharray', d => isNodeFloored(d.importance) ? '2,2' : 'none')
+      .style('cursor', d => d.hasChildren ? 'pointer' : 'default')
+      .style('opacity', 0)
+      .transition()
+      .delay(expandEnterDelay)
+      .duration(enterExitDuration)
+      .ease(d3.easeCubicOut)
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y)
+      .attr('r', d => getSize(d))
+      .style('opacity', 1)
+
+    // === TIMELINE-BASED SIZE UPDATES ===
+    // When timeline year changes, update all node radii with smooth transition
+    // Speed: 300ms for unified (35 years), 700ms for country-specific (~26 years)
+    if (playbackMode === 'historical' && historicalTimeline) {
+      const MS_PER_YEAR = selectedCountry ? 700 : 300
+
+      g.selectAll<SVGCircleElement, ExpandableNode>('circle.node')
+        .transition('timeline-size')
+        .duration(MS_PER_YEAR)
+        .ease(d3.easeLinear)  // Linear for smooth continuous feel
+        .attr('r', d => getSize(d))
+        .attr('stroke-width', d => {
+          const radius = getSize(d)
+          if (isNodeFloored(d.importance)) return Math.min(1, radius * 0.5)
+          return getBorderWidth(d)
+        })
+    }
+
+    // Update refs for next render
+    prevVisibleNodeIdsRef.current = currentVisibleIds
+    visibleNodes.forEach(n => {
+      nodePositionsRef.current.set(n.id, { x: n.x, y: n.y, parentId: n.parentId })
+    })
+
+    // === EVENT DELEGATION ===
+    const nodeDataMap = new Map<string, ExpandableNode>()
+    visibleNodes.forEach(n => nodeDataMap.set(n.id, n))
+
+    // Remove old handlers and add new ones
+    g.on('click', null).on('dblclick', null).on('mouseenter', null).on('mouseleave', null)
+
+    // Delayed single-click to allow time for double-click detection
+    // This prevents accidental expand/collapse when user intended to double-click
+    const CLICK_DELAY = 100 // ms - window for double-click
+
+    g.on('click', (event) => {
+      const target = event.target as Element
+      if (target.classList.contains('node')) {
+        event.stopPropagation()
+        const nodeId = target.getAttribute('data-id')
+        if (nodeId) {
+          const node = nodeDataMap.get(nodeId)
+
+          // Clear any pending click timeout
+          if (clickTimeoutRef.current) {
+            window.clearTimeout(clickTimeoutRef.current)
+            clickTimeoutRef.current = null
+          }
+
+          // Delay single-click action to allow double-click
+          clickTimeoutRef.current = window.setTimeout(() => {
+            clickTimeoutRef.current = null
+            if (node?.hasChildren) {
+              // Root node (ring 0): reset view if expanded, normal expand if collapsed
+              if (node.ring === 0 && expandedNodes.has(node.id)) {
+                resetView()
+              } else {
+                toggleExpansion(node.id)
+              }
+            }
+            // Clear highlight when clicking any node
+            if (highlightedPath.size > 0) {
+              setHighlightedPath(new Set())
+              setHighlightedTarget(null)
+            }
+          }, CLICK_DELAY)
+        }
+      } else {
+        // Clicked on background - clear highlight immediately
+        if (highlightedPath.size > 0) {
+          setHighlightedPath(new Set())
+          setHighlightedTarget(null)
+        }
+      }
+    })
+    .on('dblclick', (event) => {
+      const target = event.target as Element
+
+      // Cancel pending single-click
+      if (clickTimeoutRef.current) {
+        window.clearTimeout(clickTimeoutRef.current)
+        clickTimeoutRef.current = null
+      }
+
+      if (target.classList.contains('node')) {
+        // Double-click on node - add to Local View
+        event.stopPropagation()
+        event.preventDefault()
+        const nodeId = target.getAttribute('data-id')
+        if (nodeId) {
+          addToLocalView(nodeId)
+        }
+      } else {
+        // Double-click on empty space - fit all visible nodes
+        event.preventDefault()
+        fitToVisibleNodes()
+      }
+    })
+    .on('mouseenter', (event) => {
+      const target = event.target as Element
+      if (target.classList.contains('node')) {
+        const nodeId = target.getAttribute('data-id')
+        if (nodeId) {
+          const node = nodeDataMap.get(nodeId)
+          if (node) {
+            const radius = getSize(node)
+            const baseStroke = isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node)
+            const hoverStroke = Math.min(baseStroke + 1, radius * 0.8)
+            d3.select(target)
+              .attr('r', radius * 1.3)
+              .attr('stroke-width', hoverStroke)
+            setHoveredNode(node)
+            tooltipNodeRef.current = node  // Cache for smooth tooltip fade
+          }
+        }
+      }
+    }, true)
+    .on('mouseleave', (event) => {
+      const target = event.target as Element
+      if (target.classList.contains('node')) {
+        const nodeId = target.getAttribute('data-id')
+        if (nodeId) {
+          const node = nodeDataMap.get(nodeId)
+          if (node) {
+            const radius = getSize(node)
+            const baseStroke = isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node)
+            d3.select(target)
+              .attr('r', radius)
+              .attr('stroke-width', baseStroke)
+            setHoveredNode(null)
+          }
+        }
+      }
+    }, true)
+
+    // === LABELS with enter/update/exit ===
+    const labelNodes = visibleNodes.filter(n => {
+      if (n.ring === 0) return true
+      if (n.parentId && expandedNodes.has(n.parentId)) return true
+      return false
+    })
+
+    // Helper functions for labels
+    const estimateTextWidth = (text: string, fontSize: number) => text.length * fontSize * AVG_CHAR_WIDTH_RATIO
+    /**
+     * Split label into N lines, distributing words evenly
+     */
+    const splitIntoLines = (label: string, numLines: number): string[] => {
+      const words = label.split(' ')
+      if (words.length <= 1 || numLines <= 1) return [label]
+
+      const wordsPerLine = Math.ceil(words.length / numLines)
+      const lines: string[] = []
+
+      for (let i = 0; i < words.length; i += wordsPerLine) {
+        lines.push(words.slice(i, i + wordsPerLine).join(' '))
+      }
+
+      return lines
+    }
+
+    /**
+     * Determine optimal line count for a label based on available space
+     * Prefers fewer lines, only uses more if needed to avoid collision
+     */
+    const getOptimalLines = (
+      label: string,
+      fontSize: number,
+      availableWidth: number,
+      isHorizontal: boolean
+    ): string[] => {
+      if (!label.includes(' ')) return [label]
+
+      const lineHeight = fontSize * 1.1
+
+      // Try 1 line
+      const width1 = estimateTextWidth(label, fontSize)
+      if (width1 <= availableWidth) {
+        return [label]
+      }
+
+      // Try 2 lines
+      const lines2 = splitIntoLines(label, 2)
+      const maxWidth2 = Math.max(...lines2.map(l => estimateTextWidth(l, fontSize)))
+      const height2 = lineHeight * 2
+      if (isHorizontal) {
+        // For horizontal text, check width fits
+        if (maxWidth2 <= availableWidth) {
+          return lines2
+        }
+      } else {
+        // For radial text, height (along radius) matters more
+        if (maxWidth2 <= availableWidth || height2 <= availableWidth) {
+          return lines2
+        }
+      }
+
+      // Use 3 lines as last resort
+      return splitIntoLines(label, 3)
+    }
+    const getNextRingRadius = (ring: number): number => {
+      const nextRing = ring + 1
+      if (nextRing < ringRadii.length) return ringRadii[nextRing]
+      return Infinity
+    }
+
+    // Calculate text boost for branch exploration
+    // When exploring few branches, boost small text into readable range (3-5px)
+    // Smoothly transition to original sizes as more branches expand
+    const MIN_READABLE_SIZE = 3
+    const MAX_BOOSTED_SIZE = 5
+
+    // Count expanded Ring 1 nodes (outcomes being explored)
+    const expandedOutcomes = visibleNodes.filter(n => n.ring === 1 && expandedNodes.has(n.id))
+    const expandedCount = expandedOutcomes.length
+
+    // Boost factor: 1.0 at 1 branch, decreasing to 0.0 at 5+ branches
+    // Linear interpolation: 1 branch = 1.0, 2 = 0.75, 3 = 0.5, 4 = 0.25, 5+ = 0.0
+    const boostFactor = expandedCount <= 0 ? 0 : Math.max(0, 1 - (expandedCount - 1) / 4)
+
+    /**
+     * Apply readability boost to font size
+     * - Ring 0-1: No boost (constant text size for QoL and Outcomes)
+     * - Text >= MIN_READABLE_SIZE: no change
+     * - Text < MIN_READABLE_SIZE: boost into MIN_READABLE_SIZE to MAX_BOOSTED_SIZE range
+     * - Boost strength controlled by boostFactor (based on expanded branch count)
+     */
+    const applyTextBoost = (baseSize: number, ring: number): number => {
+      // Ring 0 (QoL) and Ring 1 (Outcomes) always use base size - no boost
+      if (ring <= 1) {
+        return baseSize
+      }
+
+      if (boostFactor === 0 || baseSize >= MIN_READABLE_SIZE) {
+        return baseSize
+      }
+
+      // Map small text (0 to MIN_READABLE_SIZE) into boosted range (MIN to MAX)
+      // Preserve relative ordering: smaller base = smaller boosted
+      const ratio = baseSize / MIN_READABLE_SIZE  // 0 to 1
+      const boostedSize = MIN_READABLE_SIZE + ratio * (MAX_BOOSTED_SIZE - MIN_READABLE_SIZE)
+
+      // Blend between original and boosted based on boostFactor
+      return baseSize + (boostedSize - baseSize) * boostFactor
+    }
+
+    // Compute label positions
+    const labelPositions = new Map<string, { x: number; y: number; anchor: string; rotation: number; fontSize: number; lines: string[] }>()
+    debug.render('=== RING 1 FONT SIZES ===')
+
+    for (const d of labelNodes) {
+      const nodeSize = getSize(d)
+      // Ring 0 always uses importance=1.0, others use temporal SHAP (with cache fallback)
+      const nodeId = String(d.id)
+      const importance = d.ring === 0
+        ? 1.0
+        : (timelineImportance.get(nodeId) ?? lastValidShapRef.current.get(nodeId) ?? 0.01)
+      const label = d.label || ''
+
+      // Calculate font size based on ring
+      let fontSize: number
+      if (d.ring === 0) {
+        // Ring 0 (QoL): Fixed max size
+        fontSize = vLayout.getFontSize(1.0, d.ring)
+      } else if (d.ring === 1) {
+        // Ring 1 (Outcomes): Narrower range (4-8px scaled by viewport)
+        const baseMax = vLayout.getFontSize(1, 1)  // Get viewport-scaled maximum
+        const scaleFactor = baseMax / 16  // Normalize to ~1.0 on 1080p
+        const ring1Min = 4 * scaleFactor
+        const ring1Max = 8 * scaleFactor
+        fontSize = ring1Min + (ring1Max - ring1Min) * Math.sqrt(importance)
+        // DEBUG: Log all Ring 1 font sizes
+        debug.render(`  ${label}: ${fontSize.toFixed(1)}px (importance=${importance.toFixed(4)})`)
+      } else {
+        // Ring 2+: Importance-based with boost
+        const baseFontSize = vLayout.getFontSize(importance, d.ring)
+        fontSize = applyTextBoost(baseFontSize, d.ring)
+      }
+
+      if (d.ring <= 1) {
+        // Ring 0-1: Constant text - no wrapping, no boost
+        // Dynamic padding: larger nodes need more space
+        const basePadding = Math.max(4, nodeSize * 0.2)
+        const offset = nodeSize + fontSize * 0.6 + basePadding
+
+        // Always single line for Ring 0-1 (QoL and Outcomes)
+        const lines = [label]
+
+        labelPositions.set(d.id, { x: d.x, y: d.y + offset, anchor: 'middle', rotation: 0, fontSize, lines })
+      } else {
+        const offset = nodeSize + fontSize * 0.3 + 2
+        const angle = Math.atan2(d.y, d.x)
+        const angleDeg = angle * (180 / Math.PI)
+        const labelX = d.x + Math.cos(angle) * offset
+        const labelY = d.y + Math.sin(angle) * offset
+        let rotation = angleDeg
+        let anchor: 'start' | 'end' = 'start'
+        if (Math.abs(angleDeg) > 90) {
+          rotation = angleDeg + 180
+          anchor = 'end'
+        }
+        const nodeRadius = Math.sqrt(d.x * d.x + d.y * d.y)
+        const nextRingRadius = getNextRingRadius(d.ring)
+
+        // Available radial space for text
+        const availableSpace = nextRingRadius - nodeRadius - offset - 5
+
+        const lines = getOptimalLines(label, fontSize, availableSpace, false)
+        labelPositions.set(d.id, { x: labelX, y: labelY, anchor, rotation, fontSize, lines })
+      }
+    }
+
+    // Labels with enter/update/exit for proper animation timing
+    const currentScale = currentTransformRef.current?.k ?? 1
+    const initialZoomClass = getZoomClass(currentScale)
+    g.attr('class', `graph-container ${initialZoomClass}`)
+
+    // Minimum effective size for readability (font-size * zoom)
+    // Set to 3 so boosted 3px text is visible at 1x zoom
+    const MIN_EFFECTIVE_SIZE = 3
+
+    /**
+     * Check if a label should be visible based on font size and zoom
+     * Ring 0-1 always visible, others require minimum effective size
+     */
+    const isLabelVisible = (ring: number, fontSize: number, zoomScale: number): boolean => {
+      if (ring <= 1) return true  // Root and outcomes always visible
+      const effectiveSize = fontSize * zoomScale
+      return effectiveSize >= MIN_EFFECTIVE_SIZE
+    }
+
+    /**
+     * Update all label visibility based on current zoom
+     * Always sets explicit opacity (1 or 0) to avoid CSS conflicts
+     */
+    const updateLabelVisibility = (zoomScale: number) => {
+      labelsLayer.selectAll<SVGTextElement, ExpandableNode>('text.node-label')
+        .style('opacity', function() {
+          const ring = parseInt(d3.select(this).attr('data-ring') || '0')
+          const fontSize = parseFloat(d3.select(this).attr('data-fontsize') || '0')
+          return isLabelVisible(ring, fontSize, zoomScale) ? 1 : 0
+        })
+    }
+
+    // Update zoom handler to use dynamic visibility
+    if (zoomRef.current) {
+      zoomRef.current.on('zoom', (event) => {
+        g.attr('transform', event.transform)
+        currentTransformRef.current = event.transform
+        const zoomClass = getZoomClass(event.transform.k)
+        g.attr('class', `graph-container ${zoomClass}`)
+        // Update label visibility based on actual font sizes
+        updateLabelVisibility(event.transform.k)
+        // Update QoL node position for loading spinner
+        setQolNodePosition({ x: event.transform.x, y: event.transform.y })
+      })
+    }
+
+    const labelSelection = labelsLayer.selectAll<SVGTextElement, ExpandableNode>('text.node-label')
+      .data(labelNodes, d => d.id)
+
+    // Exit labels (COLLAPSE: fade out first, before nodes collapse)
+    labelSelection.exit()
+      .transition()
+      .delay(collapseTextDelay)
+      .duration(textFadeDuration)
+      .style('opacity', 0)
+      .remove()
+
+    // Update labels (move with rotation, update font-size for boost changes)
+    // Check each label's actual DOM position vs target - animate if different
+    labelSelection.each(function(d) {
+      const pos = labelPositions.get(d.id)
+      if (pos) {
+        const textEl = d3.select(this)
+        const currentX = parseFloat(textEl.attr('x') || '0')
+        const currentY = parseFloat(textEl.attr('y') || '0')
+
+        // Check if label actually needs to move
+        const dx = Math.abs(pos.x - currentX)
+        const dy = Math.abs(pos.y - currentY)
+        const needsMove = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
+
+        // Parse current rotation from transform attribute
+        const currentTransform = textEl.attr('transform') || ''
+        const rotateMatch = currentTransform.match(/rotate\(([^,)]+)/)
+        const currentRotation = rotateMatch ? parseFloat(rotateMatch[1]) : 0
+
+        // Check if rotation change is large (> 90°) - indicates text direction flip
+        // In this case, skip animation to avoid text spinning visibly
+        const rotationDiff = Math.abs(pos.rotation - currentRotation)
+        const isLargeRotationChange = rotationDiff > 90 && rotationDiff < 270
+
+        // Update data-fontsize for visibility calculations
+        textEl.attr('data-fontsize', pos.fontSize)
+
+        const newTransform = pos.rotation !== 0 ? `rotate(${pos.rotation}, ${pos.x}, ${pos.y})` : null
+
+        if (isLargeRotationChange) {
+          // Large rotation change (text direction flip) - set instantly without animation
+          // Must also update text-anchor when direction flips
+          textEl
+            .attr('x', pos.x)
+            .attr('y', pos.y)
+            .attr('font-size', pos.fontSize)
+            .attr('text-anchor', pos.anchor)
+            .attr('transform', newTransform)
+          textEl.selectAll('tspan').attr('x', pos.x)
+        } else if (needsMove) {
+          // Label position differs from target - animate to new position
+          // Update text-anchor immediately (not animatable)
+          textEl.attr('text-anchor', pos.anchor)
+          textEl
+            .transition('rotation')
+            .delay(rotationDelay)
+            .duration(rotationDuration)
+            .attr('x', pos.x)
+            .attr('y', pos.y)
+            .attr('font-size', pos.fontSize)
+            .attr('transform', newTransform)
+
+          // Also update tspans (for multi-line labels)
+          textEl.selectAll('tspan')
+            .transition('rotation')
+            .delay(rotationDelay)
+            .duration(rotationDuration)
+            .attr('x', pos.x)
+        } else if (!shouldSkipRotation) {
+          // Position matches but may need font-size/rotation update
+          textEl.attr('text-anchor', pos.anchor)
+          textEl
+            .transition('rotation')
+            .delay(rotationDelay)
+            .duration(rotationDuration)
+            .attr('font-size', pos.fontSize)
+            .attr('transform', newTransform)
+        }
+      }
+    })
+
+    // Update visibility after font sizes change
+    updateLabelVisibility(currentScale)
+
+    // Enter labels (EXPAND: fade in last, after nodes appear)
+    labelSelection.enter()
+      .append('text')
+      .attr('class', 'node-label')
+      .attr('data-id', d => d.id)
+      .attr('data-ring', d => d.ring)
+      .attr('data-fontsize', d => labelPositions.get(d.id)?.fontSize ?? 0)
+      .style('opacity', 0)
+      .each(function(d) {
+        const pos = labelPositions.get(d.id)!
+        const textEl = d3.select(this)
+          .attr('x', pos.x)
+          .attr('y', pos.y)
+          .attr('text-anchor', pos.anchor)
+          .attr('transform', pos.rotation !== 0 ? `rotate(${pos.rotation}, ${pos.x}, ${pos.y})` : null)
+          .attr('font-size', pos.fontSize)
+          .attr('font-weight', d.ring <= 1 ? 'bold' : 'normal')
+          .attr('fill', '#333')
+          .style('pointer-events', 'none')
+
+        if (pos.lines.length === 1) {
+          textEl.text(pos.lines[0])
+        } else {
+          const lineHeight = pos.fontSize * 1.1
+          pos.lines.forEach((line, i) => {
+            textEl.append('tspan')
+              .attr('x', pos.x)
+              .attr('dy', i === 0 ? 0 : lineHeight)
+              .text(line)
+          })
+        }
+      })
+      .transition()
+      .delay(expandTextDelay)
+      .duration(textFadeDuration)
+      .style('opacity', function(d) {
+        // Fade in only if visible at current zoom
+        // Always use explicit opacity (1 or 0) to avoid CSS conflicts
+        const pos = labelPositions.get(d.id)
+        if (!pos) return 0
+        return isLabelVisible(d.ring, pos.fontSize, currentScale) ? 1 : 0
+      })
+
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio, temporalResults, currentYear, historicalTimeline, temporalShapTimeline, stratifiedShapTimeline, selectedStratum, playbackMode, currentYearIndex, effectiveNodes, precomputedShapCache])
+
+  // Fetch data once on mount
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // Restore state from URL after data loads
+  useEffect(() => {
+    if (!rawData || urlStateRestoredRef.current) return
+
+    const urlState = getStateFromBrowserURL()
+    if (!urlState) {
+      urlStateRestoredRef.current = true
+      return
+    }
+
+    debug.layout('[URL Restore] Restoring state from URL:', urlState)
+
+    // Restore view mode
+    if (urlState.view) {
+      setViewMode(urlState.view)
+    }
+
+    // Store expanded nodes for later (applied when SHAP cache is ready)
+    if (urlState.expanded && urlState.expanded.length > 0) {
+      pendingExpandedNodesRef.current = urlState.expanded
+    }
+
+    // Restore Local View targets
+    if (urlState.targets && urlState.targets.length > 0) {
+      setLocalViewTargets(urlState.targets)
+    }
+
+    // Restore beta threshold
+    if (urlState.beta !== undefined) {
+      setLocalViewBetaThreshold(urlState.beta)
+    }
+
+    // Restore highlighted node (trigger navigation)
+    if (urlState.highlight) {
+      const nodeMap = new Map(rawData.nodes.map(n => [String(n.id), n]))
+      const node = nodeMap.get(urlState.highlight)
+      if (node) {
+        // Delay highlight to ensure nodes are rendered
+        setTimeout(() => {
+          setHighlightedTarget(urlState.highlight!)
+          // Build highlight path from node to Ring 1
+          const highlightPath = new Set<string>()
+          highlightPath.add(urlState.highlight!)
+          let current = node
+          while (current.parent) {
+            const parentId = String(current.parent)
+            highlightPath.add(parentId)
+            const parent = nodeMap.get(parentId)
+            if (!parent || parent.layer <= 1) break
+            current = parent
+          }
+          setHighlightedPath(highlightPath)
+        }, 500)
+      }
+    }
+
+    // Restore zoom state
+    if (urlState.zoom && zoomRef.current && svgRef.current) {
+      setTimeout(() => {
+        const transform = d3.zoomIdentity
+          .translate(urlState.zoom!.x, urlState.zoom!.y)
+          .scale(urlState.zoom!.k)
+        currentTransformRef.current = transform
+        d3.select(svgRef.current!).call(zoomRef.current!.transform, transform)
+      }, 600)
+    }
+
+    urlStateRestoredRef.current = true
+  }, [rawData])
+
+  // Apply expanded nodes only after SHAP data is ready
+  // Unified view: wait for precomputedShapCache
+  // Country view: wait for countryGraph.shap_importance
+  useEffect(() => {
+    if (!rawData || !urlStateRestoredRef.current || initialExpansionDoneRef.current) return
+    if (expandedNodes.size > 0) return  // Already expanded
+
+    // Check if SHAP data is ready based on view type
+    const isUnifiedShapReady = !selectedCountry && precomputedShapCache.size > 0
+    const isCountryShapReady = selectedCountry && countryGraph?.shap_importance && Object.keys(countryGraph.shap_importance).length > 0
+
+    if (!isUnifiedShapReady && !isCountryShapReady) return  // Wait for SHAP
+
+    // Use pending expanded nodes from URL if available
+    if (pendingExpandedNodesRef.current) {
+      setExpandedNodes(new Set(pendingExpandedNodesRef.current))
+      pendingExpandedNodesRef.current = null
+    } else {
+      // Default: expand Ring 1 (root node)
+      const rootNode = rawData.nodes.find(n => n.layer === 0)
+      if (rootNode) {
+        setExpandedNodes(new Set([String(rootNode.id)]))
+      }
+    }
+    initialExpansionDoneRef.current = true
+  }, [precomputedShapCache.size, rawData, selectedCountry, countryGraph, expandedNodes.size])
+
+  // Sync state to URL when key state changes
+  useEffect(() => {
+    // Don't sync until URL state has been restored (avoid overwriting on load)
+    if (!urlStateRestoredRef.current) return
+
+    const state: URLState = {
+      view: viewMode,
+      expanded: expandedNodes.size > 0 ? Array.from(expandedNodes) : undefined,
+      targets: localViewTargets.length > 0 ? localViewTargets : undefined,
+      beta: localViewBetaThreshold !== 0.5 ? localViewBetaThreshold : undefined,
+      highlight: highlightedTarget || undefined
+    }
+
+    // Add zoom state if available
+    if (currentTransformRef.current) {
+      const t = currentTransformRef.current
+      state.zoom = { k: t.k, x: t.x, y: t.y }
+    }
+
+    updateBrowserURL(state)
+  }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
+
+  // Recompute layout when rawData or ringRadii changes
+  useEffect(() => {
+    computeLayout()
+  }, [computeLayout])
+
+  // Re-render when visible nodes change (expansion state changes)
+  useEffect(() => {
+    renderVisualization()
+  }, [renderVisualization])
+
+  // Auto-zoom on expand/collapse
+  useEffect(() => {
+    if (!pendingZoomRef.current || !zoomRef.current || !svgRef.current || visibleNodes.length === 0) return
+
+    const { nodeId, action } = pendingZoomRef.current
+
+    // Find the node that was expanded/collapsed
+    const targetNode = visibleNodes.find(n => n.id === nodeId)
+    if (!targetNode) return
+
+    // No camera change when expanding root (ring 0)
+    if (action === 'expand' && targetNode.ring === 0) {
+      pendingZoomRef.current = null
+      return
+    }
+
+    if (action === 'expand') {
+      // For expand, we need to wait until children are actually visible
+      const directChildren = visibleNodes.filter(n => n.parentId === nodeId)
+      if (targetNode.hasChildren && directChildren.length === 0) {
+        // Children not yet in visibleNodes, wait for next update
+        return
+      }
+    }
+
+    // Clear the pending action now that we're ready to process
+    pendingZoomRef.current = null
+
+    const svg = d3.select(svgRef.current)
+    const zoom = zoomRef.current
+    // Use split-aware dimensions for zoom calculations
+    const width = viewMode === 'split' ? window.innerWidth * splitRatio : window.innerWidth
+    const height = window.innerHeight
+    const currentTransform = currentTransformRef.current || d3.zoomIdentity
+
+    // Delay to let render complete
+    setTimeout(() => {
+      /**
+       * Find the Ring 1 ancestor of a node (walk up the tree)
+       */
+      const getRing1Ancestor = (node: ExpandableNode): ExpandableNode | null => {
+        if (node.ring === 1) return node
+        if (node.ring === 0) return null // Root has no Ring 1 ancestor
+
+        // Walk up the tree to find Ring 1 ancestor
+        let current = node
+        while (current.ring > 1 && current.parentId) {
+          const parent = visibleNodes.find(n => n.id === current.parentId)
+          if (!parent) break
+          current = parent
+        }
+        return current.ring === 1 ? current : null
+      }
+
+      /**
+       * Get all descendants of a node (entire subtree)
+       */
+      const getSubtreeNodes = (rootId: string): ExpandableNode[] => {
+        const result: ExpandableNode[] = []
+        const rootNode = visibleNodes.find(n => n.id === rootId)
+        if (rootNode) result.push(rootNode)
+
+        const addDescendants = (parentId: string) => {
+          visibleNodes.filter(n => n.parentId === parentId).forEach(child => {
+            result.push(child)
+            addDescendants(child.id)
+          })
+        }
+        addDescendants(rootId)
+        return result
+      }
+
+      let centerX: number
+      let centerY: number
+
+      if (action === 'expand') {
+        // EXPAND: Center between root (0,0) and the ENTIRE branch from Ring 1 forward
+        // Find the Ring 1 ancestor first, then get all its descendants
+        const clickedNode = visibleNodes.find(n => n.id === nodeId)
+        if (!clickedNode) return
+
+        const ring1Ancestor = getRing1Ancestor(clickedNode)
+        const branchRootId = ring1Ancestor ? ring1Ancestor.id : nodeId
+
+        // Get all nodes in the entire branch from Ring 1 forward
+        const branchNodes = getSubtreeNodes(branchRootId)
+        if (branchNodes.length === 0) return
+
+        const allXs = branchNodes.map(n => n.x)
+        const allYs = branchNodes.map(n => n.y)
+
+        // Find the bounding box of entire branch
+        const branchMinX = Math.min(...allXs)
+        const branchMaxX = Math.max(...allXs)
+        const branchMinY = Math.min(...allYs)
+        const branchMaxY = Math.max(...allYs)
+
+        // Include root (0,0) in bounds to keep QoL visible
+        const boundsMinX = Math.min(0, branchMinX)
+        const boundsMaxX = Math.max(0, branchMaxX)
+        const boundsMinY = Math.min(0, branchMinY)
+        const boundsMaxY = Math.max(0, branchMaxY)
+
+        centerX = (boundsMinX + boundsMaxX) / 2
+        centerY = (boundsMinY + boundsMaxY) / 2
+      } else {
+        // COLLAPSE: Center between root (0,0) and the collapsed node
+        // The collapsed node is now the "frontier" of that branch
+        const collapsedNode = visibleNodes.find(n => n.id === nodeId)
+        if (!collapsedNode) return
+
+        // Center between root (0,0) and the collapsed node
+        const boundsMinX = Math.min(0, collapsedNode.x)
+        const boundsMaxX = Math.max(0, collapsedNode.x)
+        const boundsMinY = Math.min(0, collapsedNode.y)
+        const boundsMaxY = Math.max(0, collapsedNode.y)
+
+        centerX = (boundsMinX + boundsMaxX) / 2
+        centerY = (boundsMinY + boundsMaxY) / 2
+      }
+
+      // Calculate zoom to fit entire branch (from Ring 1) with padding
+      const currentScale = currentTransform.k
+      let newScale = currentScale
+
+      if (action === 'expand') {
+        // Get the bounding box dimensions of entire branch from Ring 1 (including root at 0,0)
+        const clickedNode = visibleNodes.find(n => n.id === nodeId)
+        if (clickedNode) {
+          const ring1Ancestor = getRing1Ancestor(clickedNode)
+          const branchRootId = ring1Ancestor ? ring1Ancestor.id : nodeId
+          const branchNodes = getSubtreeNodes(branchRootId)
+
+          const allXs = branchNodes.map(n => n.x)
+          const allYs = branchNodes.map(n => n.y)
+
+          const boundsMinX = Math.min(0, ...allXs)
+          const boundsMaxX = Math.max(0, ...allXs)
+          const boundsMinY = Math.min(0, ...allYs)
+          const boundsMaxY = Math.max(0, ...allYs)
+
+          const boundsWidth = boundsMaxX - boundsMinX
+          const boundsHeight = boundsMaxY - boundsMinY
+
+          // Calculate scale needed to fit with padding (10% margin on each side)
+          const padding = 0.1
+          const scaleX = width * (1 - 2 * padding) / Math.max(boundsWidth, 1)
+          const scaleY = height * (1 - 2 * padding) / Math.max(boundsHeight, 1)
+          const fitScale = Math.min(scaleX, scaleY)
+
+          // Use the smaller of current scale or fit scale (zoom out if needed to fit)
+          // But don't zoom in beyond current scale just to fit
+          if (fitScale < currentScale) {
+            newScale = fitScale
+          } else if (currentScale < 0.8) {
+            // If very zoomed out, zoom in a bit to see detail
+            newScale = Math.min(0.8, fitScale)
+          }
+        }
+      }
+      // Cap at reasonable bounds
+      newScale = Math.max(0.1, Math.min(newScale, 3))
+
+      // Calculate translation to center the relevant content
+      const newX = width / 2 - centerX * newScale
+      const newY = height / 2 - centerY * newScale
+
+      const newTransform = d3.zoomIdentity.translate(newX, newY).scale(newScale)
+
+      // Animate using manual interpolation for smoother results
+      isAnimatingZoomRef.current = true
+      const startTransform = currentTransform
+      const duration = 400
+      const startTime = performance.now()
+
+      const animate = (currentTime: number) => {
+        const elapsed = currentTime - startTime
+        const t = Math.min(elapsed / duration, 1)
+        // Ease out cubic
+        const eased = 1 - Math.pow(1 - t, 3)
+
+        const interpolatedK = startTransform.k + (newTransform.k - startTransform.k) * eased
+        const interpolatedX = startTransform.x + (newTransform.x - startTransform.x) * eased
+        const interpolatedY = startTransform.y + (newTransform.y - startTransform.y) * eased
+
+        const interpolatedTransform = d3.zoomIdentity.translate(interpolatedX, interpolatedY).scale(interpolatedK)
+
+        // Apply transform directly to the g element and update zoom
+        svg.select('g.graph-container').attr('transform', interpolatedTransform.toString())
+        currentTransformRef.current = interpolatedTransform
+
+        if (t < 1) {
+          requestAnimationFrame(animate)
+        } else {
+          // Sync zoom behavior state at the end
+          svg.call(zoom.transform, newTransform)
+          currentTransformRef.current = newTransform
+          isAnimatingZoomRef.current = false
+        }
+      }
+
+      requestAnimationFrame(animate)
+    }, 100)  // Delay to let render complete
+  }, [visibleNodes, expandedNodes, viewMode, splitRatio])
+
+  return (
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#fafafa' }}>
+      {/* Left Sidebar - Responsive flex container */}
+      <div
+        className="left-sidebar"
+        style={{
+          position: 'absolute',
+          top: 16,
+          left: 10,
+          bottom: 10,
+          width: 'min(220px, 26vw)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          zIndex: 100,
+          pointerEvents: 'none'
+        }}
+      >
+        {/* Top Group - Search, Country, Rings, Domains */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Search Bar */}
+          <div className="search-container" style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'stretch',
+            pointerEvents: 'auto'
+          }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'white', padding: '10px 12px', borderRadius: 6,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.1)', width: 260, boxSizing: 'border-box'
+        }}>
+          {/* Search icon */}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+
+          {/* Search input */}
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+            onFocus={() => {
+              if (searchResults.length > 0) setShowSearchResults(true)
+              // Show recent searches on focus, auto-hide after 5 seconds
+              if (recentSearches.length > 0 && !searchQuery) {
+                setShowRecentSearches(true)
+                if (recentSearchesTimeoutRef.current) {
+                  clearTimeout(recentSearchesTimeoutRef.current)
+                }
+                recentSearchesTimeoutRef.current = window.setTimeout(() => {
+                  setShowRecentSearches(false)
+                }, 5000)
+              }
+            }}
+            onBlur={() => {
+              // Hide recent searches on blur (with small delay for click handling)
+              setTimeout(() => setShowRecentSearches(false), 200)
+            }}
+            placeholder="Search... (/)"
+            style={{
+              flex: 1, border: 'none', outline: 'none', fontSize: 12,
+              background: 'transparent', minWidth: 0
+            }}
+          />
+
+          {/* Clear button */}
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery('')
+                setSearchResults([])
+                setShowSearchResults(false)
+              }}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: 4, display: 'flex', alignItems: 'center'
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Search results dropdown */}
+        {showSearchResults && searchResults.length > 0 && (
+          <div style={{
+            background: 'white', borderRadius: 8, marginTop: 4,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: '100%',
+            maxHeight: 300, overflow: 'auto'
+          }}>
+            {searchResults.map((node, i) => (
+              <div
+                key={node.id}
+                onClick={() => jumpToNode(node)}
+                style={{
+                  padding: '10px 14px', cursor: 'pointer',
+                  borderBottom: i < searchResults.length - 1 ? '1px solid #eee' : 'none',
+                  display: 'flex', alignItems: 'center', gap: 10
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+              >
+                {/* Domain color dot */}
+                <div style={{
+                  width: 10, height: 10, borderRadius: '50%',
+                  backgroundColor: DOMAIN_COLORS[node.domain] || '#9E9E9E',
+                  flexShrink: 0
+                }} />
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>
+                    {node.label}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                    {node.domain}
+                    {node.subdomain && node.subdomain !== node.domain && (
+                      <> &rsaquo; {node.subdomain}</>
+                    )}
+                    <span style={{ marginLeft: 8, color: '#aaa' }}>
+                      Ring {node.ring}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Importance badge */}
+                <div style={{
+                  fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                  background: '#f0f0f0', color: '#666'
+                }}>
+                  {(node.importance * 100).toFixed(1)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Recent searches */}
+        {!showSearchResults && !searchQuery && showRecentSearches && recentSearches.length > 0 && (
+          <div style={{
+            background: 'white', borderRadius: 8, marginTop: 4, padding: '8px 12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '100%'
+          }}>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 6 }}>Recent searches</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {recentSearches.map((term, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSearch(term)}
+                  style={{
+                    background: '#f5f5f5', border: 'none', borderRadius: 4,
+                    padding: '4px 8px', fontSize: 11, cursor: 'pointer', color: '#555'
+                  }}
+                >
+                  {term}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        </div>
+
+        {/* Country Selector */}
+        <div style={{ background: 'white', padding: '8px 10px', borderRadius: 6, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #ddd', pointerEvents: 'auto' }}>
+          <CountrySelector />
+        </div>
+
+        {/* Rings Panel - Hidden in local view */}
+        {ringStats.length > 0 && viewMode !== 'local' && (
+          <div style={{ background: 'white', padding: '8px 10px', borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', fontSize: 11, pointerEvents: 'auto', maxWidth: 180 }}>
+            <div style={{ fontWeight: 'bold', marginBottom: 6, fontSize: 11 }}>Rings</div>
+            {ringStats.map((ring, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, paddingBottom: 2, borderBottom: i < ringStats.length - 1 ? '1px solid #eee' : 'none' }}>
+                <span style={{ color: '#555', fontSize: 10 }}>{ring.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <span style={{ fontWeight: 'bold', color: '#333', fontSize: 10 }}>{ring.count.toLocaleString()}</span>
+                  {i < ringStats.length - 1 && (
+                    <>
+                      <button
+                        onClick={() => expandRing(i)}
+                        style={{ padding: '0 3px', fontSize: 9, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
+                        title={`Expand ${ring.label}`}
+                      >+</button>
+                      <button
+                        onClick={() => collapseRing(i)}
+                        style={{ padding: '0 3px', fontSize: 9, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
+                        title={`Collapse ${ring.label}`}
+                      >−</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 6, display: 'flex', gap: 4 }}>
+              <button onClick={expandAll} style={{ flex: 1, padding: '3px 6px', fontSize: 10, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 3, background: '#f5f5f5' }}>Expand</button>
+              <button onClick={collapseAll} style={{ flex: 1, padding: '3px 6px', fontSize: 10, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 3, background: '#f5f5f5' }}>Collapse</button>
+            </div>
+          </div>
+        )}
+
+        {/* Domain Legend */}
+        {Object.keys(domainCounts).length > 0 && (
+          <div style={{
+            background: 'white',
+            padding: '8px 10px',
+            borderRadius: 4,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            pointerEvents: 'auto',
+            flex: viewMode === 'local' ? 1 : 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            maxWidth: 180
+          }}>
+            <div style={{ fontWeight: 'bold', marginBottom: 4, fontSize: 11 }}>Domains</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {Object.entries(domainCounts).sort((a, b) => b[1] - a[1]).map(([domain, count]) => (
+                <div key={domain} style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: DOMAIN_COLORS[domain] || '#9E9E9E', marginRight: 6, flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domain}</span>
+                  <span style={{ fontSize: 9, color: '#888', marginLeft: 4 }}>({count})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        </div>
+
+        {/* Bottom - Data Quality & Simulate Buttons */}
+        <div style={{ pointerEvents: 'auto', display: 'flex', gap: 8 }}>
+          {/* Data Quality Button */}
+          <button
+            onClick={() => setDataQualityOpen(!dataQualityOpen)}
+            onMouseEnter={() => setDataQualityBtnHovered(true)}
+            onMouseLeave={() => setDataQualityBtnHovered(false)}
+            title="Data Quality"
+            style={{
+              width: 48,
+              height: 48,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: dataQualityOpen ? '#10B981' : dataQualityBtnHovered ? '#f0f0f0' : 'rgba(255, 255, 255, 0.95)',
+              border: dataQualityOpen ? '1px solid #10B981' : '1px solid #e0e0e0',
+              borderRadius: 24,
+              color: dataQualityOpen ? 'white' : dataQualityBtnHovered ? '#333' : '#666',
+              cursor: 'pointer',
+              boxShadow: dataQualityOpen ? '0 2px 8px rgba(16, 185, 129, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.1)',
+              backdropFilter: 'blur(8px)',
+              transition: 'background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease',
+              outline: 'none'
+            }}
+          >
+            {/* Erlenmeyer flask icon */}
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.9H6.8A2 2 0 0 1 5 17l4-9V3z" />
+              <line x1="9" y1="3" x2="15" y2="3" />
+              <path d="M8 14h8" />
+            </svg>
+          </button>
+
+          {/* Simulate Button */}
+          <button
+            onClick={togglePanel}
+            onMouseEnter={() => setSimulateBtnHovered(true)}
+            onMouseLeave={() => setSimulateBtnHovered(false)}
+            title="Simulate"
+            style={{
+              width: 48,
+              height: 48,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: isPanelOpen ? '#3B82F6' : simulateBtnHovered ? '#f0f0f0' : 'rgba(255, 255, 255, 0.95)',
+              border: isPanelOpen ? '1px solid #3B82F6' : '1px solid #e0e0e0',
+              borderRadius: 24,
+              color: isPanelOpen ? 'white' : simulateBtnHovered ? '#333' : '#666',
+              cursor: 'pointer',
+              boxShadow: isPanelOpen ? '0 2px 8px rgba(59, 130, 246, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.1)',
+              backdropFilter: 'blur(8px)',
+              transition: 'background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease',
+              outline: 'none'
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <rect x="9" y="9" width="6" height="6" />
+              <line x1="9" y1="1" x2="9" y2="4" />
+              <line x1="15" y1="1" x2="15" y2="4" />
+              <line x1="9" y1="20" x2="9" y2="23" />
+              <line x1="15" y1="20" x2="15" y2="23" />
+              <line x1="20" y1="9" x2="23" y2="9" />
+              <line x1="20" y1="15" x2="23" y2="15" />
+              <line x1="1" y1="9" x2="4" y2="9" />
+              <line x1="1" y1="15" x2="4" y2="15" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Data Quality Panel */}
+      <DataQualityPanel
+        isOpen={dataQualityOpen}
+        onClose={() => setDataQualityOpen(false)}
+        edges={(() => {
+          // Get current year from timeline
+          const year = temporalShapTimeline?.years?.[currentYearIndex]
+          if (year && temporalEdgesCacheRef.current.has(year)) {
+            return temporalEdgesCacheRef.current.get(year)
+          }
+          // Fallback to country graph edges
+          return countryGraph?.edges
+        })()}
+        targetIds={localViewTargets}
+        nodeById={nodeByIdMap}
+        isLocalView={viewMode === 'local' || viewMode === 'split'}
+      />
+
+      {/* Minimal loading spinner - centered on QoL node, with delay to avoid flash */}
+      <LoadingSpinner
+        show={loading || shapTimelineLoading || countryLoading}
+        delay={200}
+        x={qolNodePosition?.x}
+        y={qolNodePosition?.y}
+      />
+
+      {/* Error State */}
+      {error && (
+        <div className="loading-screen">
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <div style={{ color: '#e53935', fontSize: 16, fontWeight: 'bold' }}>Failed to load data</div>
+          <div style={{ color: '#666', fontSize: 13, marginTop: 8 }}>{error}</div>
+        </div>
+      )}
+
+      {/* View Tabs - Top right */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 16,
+          right: 10,
+          display: 'flex',
+          gap: 8,
+          zIndex: 100
+        }}
+      >
+        <ViewTabs
+          activeView={viewMode}
+          onViewChange={setViewMode}
+          localTargetCount={localViewTargets.length}
+          onReset={resetView}
+          onClear={clearLocalViewTargets}
+          onShare={shareCurrentState}
+        />
+      </div>
+
+      {/* Strata Tabs - Center top, available in all views when non-country specific */}
+      {!selectedCountry && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 100
+          }}
+        >
+          <StrataTabs
+            activeStratum={selectedStratum}
+            onStratumChange={setStratum}
+          />
+        </div>
+      )}
+
+      {/* Views Container - handles split view layout */}
+      <div
+        className="split-container"
+        style={{
+          display: 'flex',
+          width: '100%',
+          height: '100%',
+          position: 'absolute',
+          top: 0,
+          left: 0
+        }}
+      >
+        {/* Global View */}
+        <div
+          style={{
+            width: viewMode === 'split' ? `${splitRatio * 100}%` : '100%',
+            height: '100%',
+            display: viewMode === 'local' ? 'none' : 'block',
+            position: 'relative',
+            flexShrink: 0
+          }}
+        >
+          <svg
+            ref={svgRef}
+            style={{
+              width: '100%',
+              height: '100%'
+            }}
+          />
+        </div>
+
+        {/* Draggable Divider */}
+        {viewMode === 'split' && (
+          <div
+            onMouseDown={handleDividerMouseDown}
+            style={{
+              width: 6,
+              height: '100%',
+              background: '#e0e0e0',
+              cursor: 'col-resize',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 60
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#bbb'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#e0e0e0'}
+          >
+            <div style={{
+              width: 2,
+              height: 40,
+              background: '#999',
+              borderRadius: 1
+            }} />
+          </div>
+        )}
+
+        {/* Local View */}
+        <div
+          style={{
+            width: viewMode === 'split' ? `${(1 - splitRatio) * 100}%` : '100%',
+            height: '100%',
+            display: viewMode === 'global' ? 'none' : 'block',
+            position: 'relative',
+            flexShrink: 0
+          }}
+        >
+          {(viewMode === 'local' || viewMode === 'split') && rawData && (
+            <LocalView
+              targetIds={localViewTargets}
+              allEdges={effectiveEdges}
+              nodeById={nodeByIdMap}
+              domainColors={DOMAIN_COLORS}
+              onRemoveTarget={removeFromLocalView}
+              onClearTargets={clearLocalViewTargets}
+              onSwitchToGlobal={() => setViewMode('global')}
+              onNavigateToNode={(nodeId) => {
+                // Add clicked node as new target
+                addToLocalView(nodeId)
+              }}
+              onShowInGlobal={showInGlobalView}
+              onDrillDown={drillDownTarget}
+              onDrillUp={drillUpTarget}
+              canDrillUp={drillDownHistory !== null}
+              showGlow={true}
+              betaThreshold={localViewBetaThreshold}
+              onBetaThresholdChange={setLocalViewBetaThreshold}
+              inputDepth={localViewInputDepth}
+              outputDepth={localViewOutputDepth}
+              onInputDepthChange={setLocalViewInputDepth}
+              onOutputDepthChange={setLocalViewOutputDepth}
+              onResetLocalView={(resetFn) => { localViewResetRef.current = resetFn }}
+              ciCache={historicalTimeline?.years[currentYearIndex] ? precomputedCICache.get(historicalTimeline.years[currentYearIndex]) : undefined}
+              currentYear={historicalTimeline?.years[currentYearIndex]}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* FPS Counter (dev mode only) - bottom right, hidden by default */}
+      {/* Uncomment to enable: import.meta.env.DEV && fps > 0 && ( */}
+      {false && (
+        <div style={{
+          position: 'absolute',
+          bottom: 10,
+          right: 10,
+          padding: '4px 8px',
+          fontSize: 11,
+          fontFamily: 'monospace',
+          background: fps >= 50 ? 'rgba(76, 175, 80, 0.9)' : fps >= 30 ? 'rgba(255, 152, 0, 0.9)' : 'rgba(244, 67, 54, 0.9)',
+          color: 'white',
+          borderRadius: 4,
+          zIndex: 100
+        }}>
+          {fps} FPS
+        </div>
+      )}
+
+      {/* Hover tooltip panel - always rendered for smooth transitions */}
+      {(() => {
+        // Use current hovered node or cached node for fade-out
+        const displayNode = hoveredNode || tooltipNodeRef.current
+        const isVisible = hoveredNode !== null
+
+        if (!displayNode || !layoutValues || !viewportLayoutRef.current) return null
+
+        // Get SHAP importance from temporal data (use precomputed cache)
+        const nodeId = String(displayNode.id)
+        const currentYear = historicalTimeline?.years[currentYearIndex]
+        const yearShapCache = currentYear ? precomputedShapCache.get(currentYear) : null
+        const shapValue = yearShapCache?.get(nodeId) ?? lastValidShapRef.current.get(nodeId)
+
+        // Compute ring rank using cached SHAP values
+        const ringNodes = allNodes.filter(n => n.ring === displayNode.ring)
+        const getNodeShap = (n: ExpandableNode) => yearShapCache?.get(String(n.id)) ?? lastValidShapRef.current.get(String(n.id)) ?? 0
+        const sortedRing = ringNodes.map(getNodeShap).sort((a, b) => b - a)
+        const ringRank = sortedRing.findIndex(imp => imp <= (shapValue ?? 0)) + 1
+
+        // Build breadcrumb path (file-path style)
+        const buildBreadcrumbPath = (): string[] => {
+          const path: string[] = []
+          let current = breadcrumbNodeMap.get(nodeId)
+          while (current) {
+            path.unshift(current.label)
+            if (current.parentId) {
+              current = breadcrumbNodeMap.get(current.parentId)
+            } else {
+              break
+            }
+          }
+          return path
+        }
+        const breadcrumbPath = buildBreadcrumbPath()
+
+        return (
+          <div style={{
+            position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+            background: 'white', padding: '10px 14px', borderRadius: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 220, maxWidth: 420, zIndex: 1100,
+            pointerEvents: 'none',
+            opacity: isVisible ? 1 : 0,
+            transition: 'opacity 0.2s ease'
+          }}>
+            {/* Breadcrumb path (file-path style) */}
+            {breadcrumbPath.length > 1 && (
+              <div style={{ fontSize: 10, color: '#888', marginBottom: 6, fontFamily: 'monospace' }}>
+                {breadcrumbPath.slice(0, -1).join(' / ')}
+              </div>
+            )}
+
+            {/* Node name */}
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{displayNode.label}</div>
+
+            {/* Badge row: ring + domain */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+              <span style={{ padding: '2px 6px', borderRadius: 4, backgroundColor: '#eee', fontSize: 10 }}>
+                {ringConfigs[displayNode.ring]?.label || `Ring ${displayNode.ring}`}
+              </span>
+              {displayNode.semanticPath.domain && (
+                <span style={{ padding: '2px 6px', borderRadius: 4, backgroundColor: DOMAIN_COLORS[displayNode.semanticPath.domain] || '#9E9E9E', color: 'white', fontSize: 10 }}>
+                  {displayNode.semanticPath.domain}
+                </span>
+              )}
+            </div>
+
+            {/* SHAP importance + rank */}
+            <div style={{ fontSize: 11, color: '#444', display: 'flex', gap: 12 }}>
+              {shapValue !== undefined && (
+                <span><strong>SHAP:</strong> {(shapValue * 100).toFixed(1)}%</span>
+              )}
+              {ringNodes.length > 1 && (
+                <span style={{ color: '#666' }}>#{ringRank} of {ringNodes.length}</span>
+              )}
+              {currentYear && (
+                <span style={{ color: '#888' }}>{currentYear}</span>
+              )}
+            </div>
+
+            {/* Node description */}
+            {displayNode.description && (
+              <div style={{
+                fontSize: 11,
+                color: '#555',
+                marginTop: 8,
+                lineHeight: 1.4,
+                maxHeight: 60,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}>
+                {displayNode.description}
+              </div>
+            )}
+
+            {/* Expand hint */}
+            {displayNode.hasChildren && (
+              <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>
+                {expandedNodes.has(displayNode.id) ? 'Click to collapse' : `Click to expand (${displayNode.childIds.length})`}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Simulation Panel - Right sidebar */}
+      <SimulationPanel />
+
+      {/* Timeline Player - Bottom center */}
+      <TimelinePlayer
+        edgesLoading={temporalEdgesLoading}
+        isLocalView={viewMode === 'local' || viewMode === 'split'}
+      />
+    </div>
+  )
+}
+
+export default App

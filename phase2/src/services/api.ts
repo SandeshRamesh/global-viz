@@ -1,0 +1,1040 @@
+/**
+ * API Service Layer for V3.0 Simulation Backend
+ * Provides type-safe access to country data, graphs, and simulation endpoints
+ *
+ * Configure API base via Vite env:
+ * - VITE_API_BASE: explicit base URL (e.g., http://localhost:8000)
+ * - VITE_API_MODE: 'local' or 'public' (fallback)
+ * - VITE_PUBLIC_API_BASE: public base URL (fallback)
+ */
+
+// ============================================
+// API Configuration - Toggle here to switch
+// ============================================
+type ApiMode = 'local' | 'public';
+
+const getApiBase = (): string => {
+  const explicit = import.meta.env.VITE_API_BASE as string | undefined;
+  if (explicit && explicit.length > 0) return explicit;
+
+  const publicBase = import.meta.env.VITE_PUBLIC_API_BASE as string | undefined;
+  const mode = (import.meta.env.VITE_API_MODE as ApiMode | undefined) ?? 'local';
+  if (mode === 'public' && publicBase) return publicBase;
+
+  // Default to local API on same host (LAN-friendly)
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  return `http://${hostname}:8000`;
+};
+
+const API_BASE = getApiBase();
+
+// ============================================
+// Performance Diagnostics (view in browser console)
+// ============================================
+const PERF_DEBUG = true; // Toggle performance logging
+
+interface PerfEntry {
+  endpoint: string;
+  start: number;
+  end?: number;
+  duration?: number;
+  size?: number;
+  status?: number;
+}
+
+const perfLog: PerfEntry[] = [];
+
+const logPerf = (entry: PerfEntry) => {
+  if (!PERF_DEBUG) return;
+  perfLog.push(entry);
+  const duration = entry.duration?.toFixed(0) || '?';
+  const size = entry.size ? `${(entry.size / 1024).toFixed(1)}KB` : '';
+  console.log(
+    `%c[API] ${entry.endpoint} %c${duration}ms %c${size}`,
+    'color: #888',
+    entry.duration && entry.duration > 1000 ? 'color: red; font-weight: bold' : 'color: green',
+    'color: #666'
+  );
+};
+
+// Expose to window for console access
+if (typeof window !== 'undefined') {
+  (window as unknown as { __apiPerf: PerfEntry[]; __perfSummary: () => void }).__apiPerf = perfLog;
+  (window as unknown as { __perfSummary: () => void }).__perfSummary = () => {
+    console.table(perfLog.slice(-20).map(e => ({
+      endpoint: e.endpoint.replace(API_BASE, ''),
+      ms: e.duration?.toFixed(0),
+      kb: e.size ? (e.size / 1024).toFixed(1) : '-'
+    })));
+  };
+  console.log('%c[Perf] API diagnostics enabled. Run __perfSummary() to see recent calls.', 'color: cyan');
+}
+
+/**
+ * Fetch wrapper with performance logging
+ */
+const fetchWithPerf = async (url: string, options?: RequestInit): Promise<Response> => {
+  const entry: PerfEntry = { endpoint: url, start: performance.now() };
+  try {
+    const res = await fetch(url, options);
+    entry.end = performance.now();
+    entry.duration = entry.end - entry.start;
+    entry.status = res.status;
+    // Clone to read size without consuming body
+    const clone = res.clone();
+    clone.text().then(text => {
+      entry.size = text.length;
+      logPerf(entry);
+    });
+    return res;
+  } catch (err) {
+    entry.end = performance.now();
+    entry.duration = entry.end - entry.start;
+    entry.status = 0;
+    logPerf(entry);
+    throw err;
+  }
+};
+
+// ============================================
+// Type Definitions (matching actual V3.0 API)
+// ============================================
+
+/** Country summary from /api/countries */
+export interface Country {
+  name: string;
+  n_edges: number;
+  n_edges_with_data: number;
+  coverage: number;
+}
+
+/** Response from /api/countries */
+export interface CountriesResponse {
+  total: number;
+  countries: Country[];
+}
+
+/** Intervention request payload */
+export interface Intervention {
+  indicator: string;
+  change_percent: number;
+  // UI-only fields (not sent to API)
+  id?: string;
+  indicatorLabel?: string;
+  domain?: string;
+}
+
+/** Single effect from simulation */
+export interface SimulationEffect {
+  baseline: number;
+  simulated: number;
+  absolute_change: number;
+  percent_change: number;
+}
+
+/** Propagation metadata from simulation */
+export interface PropagationInfo {
+  n_affected: number;
+  iterations: number;
+  converged: boolean;
+}
+
+/** Response from POST /api/simulate */
+export interface SimulationResults {
+  status: string;
+  country: string;
+  interventions: Intervention[];
+  effects: Record<string, SimulationEffect>;
+  propagation: PropagationInfo;
+}
+
+/** Single temporal effect with year context */
+export interface TemporalEffect {
+  baseline: number;
+  value: number;
+  absolute_change: number;
+  percent_change: number;
+}
+
+/** Response from POST /api/simulate/temporal */
+export interface TemporalResults {
+  status: string;
+  country: string;
+  horizon_years: number;
+  base_year: number;
+  interventions: Intervention[];
+  timeline: Record<string, Record<string, number>>;  // year_N → indicator → value
+  effects: Record<string, Record<string, TemporalEffect>>;  // year_N → indicator → effect
+}
+
+/** Edge from country graph */
+export interface CountryGraphEdge {
+  source: string;
+  target: string;
+  beta: number;
+  ci_lower: number;
+  ci_upper: number;
+  global_beta: number;
+  data_available: boolean;
+  lag: number;
+  lag_pvalue: number;
+  lag_significant: boolean;
+  // Extended stats from V3.1 temporal graphs
+  std?: number;
+  p_value?: number;
+  r_squared?: number;
+  n_samples?: number;
+  n_bootstrap?: number;
+  relationship_type?: string;
+}
+
+/** Response from GET /api/graph/{country} */
+export interface CountryGraph {
+  country: string;
+  n_edges: number;
+  n_edges_with_data: number;
+  edges: CountryGraphEdge[];
+  baseline: Record<string, number>;  // indicator ID → baseline value
+  shap_importance: Record<string, number>;  // indicator ID → SHAP importance (0-1 normalized)
+}
+
+/** Response from GET /api/graph/{country}/timeline */
+export interface CountryTimeline {
+  country: string;
+  start_year: number;
+  end_year: number;
+  years: number[];
+  values: Record<string, Record<string, number>>;  // year (string) → indicator → value
+  n_indicators: number;
+}
+
+/** Indicator info from /api/indicators */
+export interface IndicatorInfo {
+  id: string;
+  label: string;
+  domain: string;
+  importance?: number;
+}
+
+/** Response from GET /api/indicators */
+export interface IndicatorsResponse {
+  total: number;
+  indicators: IndicatorInfo[];
+}
+
+/** Response from GET /api/metadata */
+export interface MetadataResponse {
+  version: string;
+  total_countries: number;
+  total_indicators: number;
+  total_edges: number;
+  graphs_with_lags: number;
+  significant_lags: number;
+}
+
+/** Response from GET /health */
+export interface HealthResponse {
+  status: string;
+  version: string;
+}
+
+// ============================================
+// V3.1 Temporal Data Types
+// ============================================
+
+/** Response from GET /api/temporal/status */
+export interface TemporalDataStatus {
+  temporal_shap: {
+    status: 'mock' | 'real';
+    unified: boolean;
+    countries: number;
+    country_list: string[];
+  };
+  temporal_graphs: {
+    status: string;
+    unified: boolean;
+    countries: number;
+  };
+  development_clusters: {
+    status: string;
+    unified: boolean;
+    countries: number;
+  };
+  years: {
+    min: number;
+    max: number;
+  };
+  targets: string[];
+}
+
+/** SHAP value with uncertainty bounds (V3.1 real data format) */
+export interface ShapValueWithCI {
+  mean: number;
+  std: number;
+  ci_lower: number;
+  ci_upper: number;
+}
+
+/** Type guard to check if SHAP value has CI bounds */
+export function hasShapCI(value: ShapValueWithCI | number): value is ShapValueWithCI {
+  return typeof value === 'object' && 'mean' in value;
+}
+
+/** Get importance value from SHAP (handles both old format and new CI format) */
+export function getShapImportance(value: ShapValueWithCI | number): number {
+  if (hasShapCI(value)) {
+    return value.mean;
+  }
+  return value;
+}
+
+/** Response from GET /api/temporal/shap/{target}/timeline */
+export interface TemporalShapTimeline {
+  country: string | null;
+  target: string;
+  years: number[];
+  shap_by_year: Record<string, Record<string, ShapValueWithCI | number>>;  // year (string) → node_id → importance (with CI)
+  is_mock: boolean;
+}
+
+/** Response from GET /api/temporal/shap/stratified/{stratum}/{target}/timeline */
+export interface StratifiedShapTimeline {
+  stratum: string;
+  target: string;
+  years: number[];
+  shap_by_year: Record<string, Record<string, ShapValueWithCI>>;  // year → node_id → SHAP with CI
+  countries_by_year: Record<string, string[]>;  // year → country list (dynamic membership)
+}
+
+/** Response from GET /api/temporal/shap/{target}/{year} */
+export interface TemporalShapYear {
+  stratum?: string;
+  stratum_name?: string;
+  target: string;
+  target_name?: string;
+  year: number;
+  stratification?: {
+    countries_in_stratum: string[];
+    n_countries: number;
+    note?: string;
+  };
+  shap_importance: Record<string, ShapValueWithCI>;  // node_id → SHAP with CI
+  metadata: {
+    n_samples?: number;
+    n_countries?: number;
+    n_indicators?: number;
+    n_bootstrap?: number;
+    r2_mean?: number;
+    r2_std?: number;
+    year_range?: [number, number];
+    computation_time_sec?: number;
+    is_mock_data?: boolean;
+  };
+  data_quality?: {
+    mean_ci_width: number;
+  };
+  provenance?: {
+    computation_date: string;
+    code_version: string;
+    model: string;
+    hyperparameters?: Record<string, number | string>;
+  };
+}
+
+/** Income strata for stratified views */
+export type IncomeStratum = 'developing' | 'emerging' | 'advanced';
+
+/** Income classification for a country/year */
+export interface IncomeClassification {
+  group_4tier: string;  // 'Low income', 'Lower middle income', 'Upper middle income', 'High income'
+  group_3tier: string;  // 'Developing', 'Emerging', 'Advanced'
+  gni_per_capita: number | null;
+}
+
+/** Response from GET /api/temporal/classifications/{year} */
+export interface StratumCounts {
+  year: number;
+  counts: Record<IncomeStratum, number>;  // { developing: 71, emerging: 45, advanced: 55 }
+  total: number;
+}
+
+/** Response from GET /api/temporal/classifications (all years) */
+export interface AllClassifications {
+  total_countries: number;
+  classifications: Record<string, Record<string, IncomeClassification>>;  // { countryName: { year: classification } }
+}
+
+/** Available strata info */
+export interface StrataInfo {
+  strata: IncomeStratum[];
+  descriptions: Record<IncomeStratum, string>;
+}
+
+/** Data quality for a single year */
+export interface YearDataQuality {
+  quality: 'complete' | 'partial' | 'sparse';
+  indicators: number;
+  observed: number;
+  observed_pct: number;
+  imputed_pct: number;
+}
+
+/** Response from GET /api/temporal/data-quality/{country} */
+export interface CountryDataQuality {
+  country: string;
+  total_indicators: number;
+  coverage_pct: number;
+  observed_pct: number;
+  imputed_pct: number;
+  confidence: 'high' | 'medium' | 'low';
+  by_year: Record<string, YearDataQuality>;  // year (string) → quality
+}
+
+/** Aggregated year quality for unified/stratified views */
+export interface AggregatedYearQuality {
+  quality: 'complete' | 'partial' | 'sparse';
+  n_countries: number;
+  avg_indicators: number;
+  observed_pct: number;
+  imputed_pct: number;
+}
+
+/** Response from GET /api/temporal/data-quality/unified */
+export interface UnifiedDataQuality {
+  view: 'unified';
+  n_countries: number;
+  total_indicators: number;
+  avg_coverage_pct: number;
+  avg_observed_pct: number;
+  avg_imputed_pct: number;
+  confidence: 'high' | 'medium' | 'low';
+  by_year: Record<string, AggregatedYearQuality>;
+}
+
+/** Response from GET /api/temporal/data-quality/stratified/{stratum} */
+export interface StratifiedDataQuality {
+  view: 'stratified';
+  stratum: IncomeStratum;
+  n_countries: number;
+  countries: string[];
+  total_indicators: number;
+  avg_coverage_pct: number;
+  avg_observed_pct: number;
+  avg_imputed_pct: number;
+  confidence: 'high' | 'medium' | 'low';
+  by_year: Record<string, AggregatedYearQuality>;
+}
+
+/** Country info within stratum distribution */
+export interface StratumCountryInfo {
+  name: string;
+  gni_per_capita: number | null;
+  position_in_stratum: number;  // 0-1 (how far through the tier)
+  distance_to_next: number | null;  // GNI gap to next tier
+  progress_pct: number;  // % toward next tier
+}
+
+/** Distribution stats for a single stratum */
+export interface StratumDistributionStats {
+  count: number;
+  percentage: number;
+}
+
+/** Response from GET /api/temporal/distribution/{year} */
+export interface StratumDistribution {
+  year: number;
+  thresholds: {
+    developing_to_emerging: number;
+    emerging_to_advanced: number;
+  };
+  distribution: Record<IncomeStratum, StratumDistributionStats>;
+  total_countries: number;
+  countries: Record<IncomeStratum, StratumCountryInfo[]>;
+}
+
+// ============================================
+// API Client
+// ============================================
+
+export const simulationAPI = {
+  /**
+   * List all countries with graph availability info
+   * GET /api/countries
+   */
+  getCountries: async (): Promise<CountriesResponse> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/countries`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch countries: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get country-specific causal graph with beta coefficients and lag info
+   * GET /api/graph/{country}
+   */
+  getCountryGraph: async (country: string): Promise<CountryGraph> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/graph/${encodeURIComponent(country)}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Graph not found for country: ${country}`);
+      }
+      throw new Error(`Failed to fetch country graph: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get historical timeline of indicator values for a country
+   * GET /api/graph/{country}/timeline
+   */
+  getCountryTimeline: async (
+    country: string,
+    startYear?: number,
+    endYear?: number
+  ): Promise<CountryTimeline> => {
+    const params = new URLSearchParams();
+    if (startYear !== undefined) params.set('start_year', String(startYear));
+    if (endYear !== undefined) params.set('end_year', String(endYear));
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetchWithPerf(`${API_BASE}/api/graph/${encodeURIComponent(country)}/timeline${query}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Timeline not found for country: ${country}`);
+      }
+      throw new Error(`Failed to fetch country timeline: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Run instant simulation with interventions
+   * POST /api/simulate
+   */
+  runSimulation: async (
+    country: string,
+    interventions: Intervention[]
+  ): Promise<SimulationResults> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/simulate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ country, interventions })
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+      if (res.status === 400) {
+        throw new Error(error.detail || 'Invalid simulation parameters');
+      }
+      if (res.status === 404) {
+        throw new Error(error.detail || 'Country or indicator not found');
+      }
+      throw new Error(error.detail || `Simulation failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Run temporal simulation with multi-year projection
+   * POST /api/simulate/temporal
+   */
+  runTemporalSimulation: async (
+    country: string,
+    interventions: Intervention[],
+    horizonYears: number = 10
+  ): Promise<TemporalResults> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/simulate/temporal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        country,
+        interventions,
+        horizon_years: horizonYears
+      })
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `Temporal simulation failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get list of all indicators for intervention dropdown
+   * GET /api/indicators
+   */
+  getIndicators: async (): Promise<IndicatorsResponse> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/indicators`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch indicators: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get single indicator details
+   * GET /api/indicators/{indicator_id}
+   */
+  getIndicator: async (indicatorId: string): Promise<IndicatorInfo> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/indicators/${encodeURIComponent(indicatorId)}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Indicator not found: ${indicatorId}`);
+      }
+      throw new Error(`Failed to fetch indicator: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get API metadata and statistics
+   * GET /api/metadata
+   */
+  getMetadata: async (): Promise<MetadataResponse> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/metadata`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch metadata: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // ============================================
+  // V3.1 Temporal Data Endpoints
+  // ============================================
+
+  /**
+   * Get temporal data status (available data, mock vs real)
+   * GET /api/temporal/status
+   */
+  getTemporalStatus: async (): Promise<TemporalDataStatus> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/status`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch temporal status: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get unified (global) SHAP timeline for all years
+   * GET /api/temporal/shap/{target}/timeline
+   */
+  getUnifiedShapTimeline: async (
+    target: string,
+    startYear?: number,
+    endYear?: number
+  ): Promise<TemporalShapTimeline> => {
+    const params = new URLSearchParams();
+    if (startYear !== undefined) params.set('start_year', String(startYear));
+    if (endYear !== undefined) params.set('end_year', String(endYear));
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/shap/${encodeURIComponent(target)}/timeline${query}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`SHAP timeline not found for target: ${target}`);
+      }
+      throw new Error(`Failed to fetch SHAP timeline: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get country-specific SHAP timeline for all years
+   * GET /api/temporal/shap/{country}/{target}/timeline
+   */
+  getCountryShapTimeline: async (
+    country: string,
+    target: string,
+    startYear?: number,
+    endYear?: number
+  ): Promise<TemporalShapTimeline> => {
+    const params = new URLSearchParams();
+    if (startYear !== undefined) params.set('start_year', String(startYear));
+    if (endYear !== undefined) params.set('end_year', String(endYear));
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetch(
+      `${API_BASE}/api/temporal/shap/${encodeURIComponent(country)}/${encodeURIComponent(target)}/timeline${query}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`SHAP timeline not found for ${country}/${target}`);
+      }
+      throw new Error(`Failed to fetch country SHAP timeline: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get SHAP importance for a specific year (unified or country)
+   * GET /api/temporal/shap/{target}/{year} or GET /api/temporal/shap/{country}/{target}/{year}
+   */
+  getShapYear: async (
+    target: string,
+    year: number,
+    country?: string
+  ): Promise<TemporalShapYear> => {
+    const path = country
+      ? `/api/temporal/shap/${encodeURIComponent(country)}/${encodeURIComponent(target)}/${year}`
+      : `/api/temporal/shap/${encodeURIComponent(target)}/${year}`;
+
+    const res = await fetchWithPerf(`${API_BASE}${path}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`SHAP data not found for ${country || 'unified'}/${target}/${year}`);
+      }
+      throw new Error(`Failed to fetch SHAP year: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // ============================================
+  // V3.1 Stratified SHAP Endpoints
+  // ============================================
+
+  /**
+   * Get available income strata
+   * GET /api/temporal/shap/strata
+   */
+  getAvailableStrata: async (): Promise<StrataInfo> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/shap/strata`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch strata: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get stratified SHAP timeline for all years
+   * GET /api/temporal/shap/stratified/{stratum}/{target}/timeline
+   */
+  getStratifiedShapTimeline: async (
+    stratum: IncomeStratum,
+    target: string,
+    startYear?: number,
+    endYear?: number
+  ): Promise<StratifiedShapTimeline> => {
+    const params = new URLSearchParams();
+    if (startYear !== undefined) params.set('start_year', String(startYear));
+    if (endYear !== undefined) params.set('end_year', String(endYear));
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetch(
+      `${API_BASE}/api/temporal/shap/stratified/${encodeURIComponent(stratum)}/${encodeURIComponent(target)}/timeline${query}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Stratified SHAP timeline not found for ${stratum}/${target}`);
+      }
+      throw new Error(`Failed to fetch stratified SHAP timeline: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get stratified SHAP for a specific year
+   * GET /api/temporal/shap/stratified/{stratum}/{target}/{year}
+   */
+  getStratifiedShapYear: async (
+    stratum: IncomeStratum,
+    target: string,
+    year: number
+  ): Promise<TemporalShapYear> => {
+    const res = await fetch(
+      `${API_BASE}/api/temporal/shap/stratified/${encodeURIComponent(stratum)}/${encodeURIComponent(target)}/${year}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Stratified SHAP not found for ${stratum}/${target}/${year}`);
+      }
+      throw new Error(`Failed to fetch stratified SHAP: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // ============================================
+  // V3.1 Income Classification Endpoints
+  // ============================================
+
+  /**
+   * Get stratum counts for a specific year (for tab badges)
+   * GET /api/temporal/classifications/{year}
+   */
+  getStratumCounts: async (year: number): Promise<StratumCounts> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/classifications/${year}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Classifications not found for year ${year}`);
+      }
+      throw new Error(`Failed to fetch stratum counts: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get income classification for a specific country/year
+   * GET /api/temporal/classifications/{country}/{year}
+   */
+  getCountryClassification: async (
+    country: string,
+    year: number
+  ): Promise<{ country: string; year: number; classification: IncomeClassification }> => {
+    const res = await fetch(
+      `${API_BASE}/api/temporal/classifications/${encodeURIComponent(country)}/${year}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Classification not found for ${country}/${year}`);
+      }
+      throw new Error(`Failed to fetch country classification: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get all income classifications (for all countries/years) - cached on frontend
+   * GET /api/temporal/classifications
+   */
+  getAllClassifications: async (): Promise<AllClassifications> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/classifications`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch all classifications: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // ============================================
+  // V3.1 Stratified Graph Endpoints
+  // ============================================
+
+  /**
+   * Get stratified causal graph for a specific stratum/year
+   * GET /api/temporal/graph/stratified/{stratum}/{year}
+   */
+  getStratifiedGraph: async (
+    stratum: IncomeStratum,
+    year: number
+  ): Promise<{ stratum: string; year: number; edges: CountryGraphEdge[]; metadata: Record<string, unknown> }> => {
+    const res = await fetch(
+      `${API_BASE}/api/temporal/graph/stratified/${encodeURIComponent(stratum)}/${year}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Stratified graph not found for ${stratum}/${year}`);
+      }
+      throw new Error(`Failed to fetch stratified graph: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get unified (global) causal graph for a specific year
+   * GET /api/temporal/graph/{year}
+   */
+  getUnifiedGraph: async (
+    year: number
+  ): Promise<{ year: number; edges: CountryGraphEdge[]; n_edges: number }> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/graph/${year}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Unified graph not found for year ${year}`);
+      }
+      throw new Error(`Failed to fetch unified graph: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get country-specific causal graph for a specific year
+   * GET /api/temporal/graph/{country}/{year}
+   */
+  getCountryTemporalGraph: async (
+    country: string,
+    year: number
+  ): Promise<{ country: string; year: number; edges: CountryGraphEdge[]; n_edges: number }> => {
+    const res = await fetch(
+      `${API_BASE}/api/temporal/graph/${encodeURIComponent(country)}/${year}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Graph not found for ${country}/${year}`);
+      }
+      throw new Error(`Failed to fetch country temporal graph: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get available years for a country's temporal graphs
+   * GET /api/temporal/graph/{country}/years
+   */
+  getCountryGraphYears: async (
+    country: string
+  ): Promise<{ country: string; years: number[]; total: number }> => {
+    const res = await fetch(
+      `${API_BASE}/api/temporal/graph/${encodeURIComponent(country)}/years`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Country '${country}' not found`);
+      }
+      throw new Error(`Failed to fetch country graph years: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get income bracket transitions for a specific country
+   * GET /api/temporal/transitions/{country}
+   */
+  getCountryTransitions: async (
+    country: string
+  ): Promise<{
+    country: string;
+    has_transitions: boolean;
+    iso3?: string;
+    current_stratum?: string;
+    transitions?: Array<{
+      year: number;
+      from: string;
+      to: string;
+      gni_at_transition: number | null;
+    }>;
+  }> => {
+    const res = await fetch(
+      `${API_BASE}/api/temporal/transitions/${encodeURIComponent(country)}`
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to fetch country transitions: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // ============================================
+  // V3.1 Data Quality Endpoints
+  // ============================================
+
+  /**
+   * Get data quality metrics for a specific country
+   * GET /api/temporal/data-quality/{country}
+   */
+  getCountryDataQuality: async (country: string): Promise<CountryDataQuality> => {
+    const res = await fetch(
+      `${API_BASE}/api/temporal/data-quality/${encodeURIComponent(country)}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Data quality not found for ${country}`);
+      }
+      throw new Error(`Failed to fetch data quality: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get aggregated data quality for unified (all countries) view
+   * GET /api/temporal/data-quality/unified
+   */
+  getUnifiedDataQuality: async (): Promise<UnifiedDataQuality> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/data-quality/unified`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch unified data quality: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get aggregated data quality for a specific income stratum
+   * GET /api/temporal/data-quality/stratified/{stratum}
+   */
+  getStratifiedDataQuality: async (
+    stratum: IncomeStratum,
+    year: number = 2020
+  ): Promise<StratifiedDataQuality> => {
+    const res = await fetch(
+      `${API_BASE}/api/temporal/data-quality/stratified/${encodeURIComponent(stratum)}?year=${year}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Data quality not found for stratum ${stratum}`);
+      }
+      throw new Error(`Failed to fetch stratified data quality: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // ============================================
+  // V3.1 Stratum Distribution Endpoints
+  // ============================================
+
+  /**
+   * Get detailed stratum distribution for a given year
+   * GET /api/temporal/distribution/{year}
+   *
+   * Returns pie chart data, full country lists, GNI positions,
+   * and how close each country is to transitioning tiers.
+   */
+  getStratumDistribution: async (year: number): Promise<StratumDistribution> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/distribution/${year}`);
+    if (!res.ok) {
+      if (res.status === 400) {
+        throw new Error(`Invalid year: ${year}`);
+      }
+      throw new Error(`Failed to fetch stratum distribution: ${res.status}`);
+    }
+    return res.json();
+  }
+};
+
+// ============================================
+// Utility Functions
+// ============================================
+
+/**
+ * Check if the API server is reachable
+ * GET /health
+ */
+export async function checkAPIHealth(): Promise<boolean> {
+  try {
+    const res = await fetchWithPerf(`${API_BASE}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000)
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get detailed health info
+ * GET /health
+ */
+export async function getAPIHealth(): Promise<HealthResponse> {
+  const res = await fetchWithPerf(`${API_BASE}/health`);
+  if (!res.ok) {
+    throw new Error(`Health check failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Get API base URL (useful for debugging)
+ */
+export function getAPIBaseURL(): string {
+  return API_BASE;
+}
+
+/**
+ * Extract baseline values from simulation effects
+ * Useful for getting country-specific indicator values
+ */
+export function extractBaselines(effects: Record<string, SimulationEffect>): Record<string, number> {
+  const baselines: Record<string, number> = {};
+  for (const [indicator, effect] of Object.entries(effects)) {
+    baselines[indicator] = effect.baseline;
+  }
+  return baselines;
+}
