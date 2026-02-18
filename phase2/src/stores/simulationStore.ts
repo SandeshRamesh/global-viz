@@ -679,7 +679,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       const results = await simulationAPI.runTemporalSimulation(
         selectedCountry,
         interventionsWithYear,
-        effectiveHorizon
+        effectiveHorizon,
+        simulationStartYear
       );
       set({
         temporalResults: results,

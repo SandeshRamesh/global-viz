@@ -543,7 +543,8 @@ export const simulationAPI = {
   runTemporalSimulation: async (
     country: string,
     interventions: Intervention[],
-    horizonYears: number = 5
+    horizonYears: number = 5,
+    baseYear?: number
   ): Promise<TemporalResults> => {
     // Include per-intervention year in payload (strip UI-only fields)
     const apiInterventions = interventions.map(({ indicator, change_percent, year }) => ({
@@ -558,7 +559,8 @@ export const simulationAPI = {
       body: JSON.stringify({
         country,
         interventions: apiInterventions,
-        horizon_years: horizonYears
+        horizon_years: horizonYears,
+        ...(baseYear !== undefined ? { year: baseYear } : {})
       })
     });
 
