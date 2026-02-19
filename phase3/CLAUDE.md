@@ -1,233 +1,127 @@
-# Phase 3: Development Clusters, Transparency & Academic Rigor
+# CLAUDE.md
 
-## Overview
+## SSH Session Safety Rules
 
-Phase 3 adds **development cluster visualization**, **academic transparency features**, and **data export capabilities**. This phase serves both explorers (cluster insights) and validators (reproducibility).
+**CRITICAL**: Follow these rules to prevent session crashes:
 
-**Status:** Not Started
-**Dependencies:** Phase 2 complete, V3.1 data fully available
-**Estimated Duration:** Weeks 9-11
-**Target Users:** Path 1 (Explorer), Path 2 (Optimizer), Path 3 (Validator)
+1. **Never pipe curl directly** - save to file first: `curl -s -m 5 url > /tmp/out.json`
+2. **Always use timeouts**: `curl -m 5`
+3. **Limit output**: `head -c 500` or `head -20`
+4. **Kill before starting**: `pkill -9 -f pattern` and verify
+5. **Start servers with nohup**: `nohup uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/api.log 2>&1 &`
 
----
+## Build & Dev
 
-## Objectives
+```bash
+# Frontend (localhost:5173/global-viz/)
+npm run dev
+
+# Backend API (localhost:8000)
+source api/venv/bin/activate
+python -m uvicorn api.main:app --port 8000
+```
+
+Toggle API endpoint in `src/services/api.ts`: `API_MODE = 'local' | 'public'`
 
-1. Visualize indicator ecosystems (development clusters)
-2. Add full transparency for academic reproducibility
-3. Enable data export in multiple formats
-4. Provide citation generation and methodology documentation
-
----
-
-## Week 9: Development Clusters
-
-### What Are Development Clusters
-
-- Groups of indicators connected through causal chains
-- Example: "Human Capital Cluster" = education + health + income
-- Detected via Louvain community detection on causal graph
-- Already computed: 214 files (178 countries + 35 unified years + 1 global)
-
-### Cluster View Mode
-
-* [ ] **Cluster Layer in Global View**
-  - Toggle: "Show Clusters" button
-  - Nodes group by cluster (convex hull boundaries)
-  - Cluster labels: "Human Capital", "Infrastructure", "Governance"
-  - Color-coded: Each cluster gets unique hue
-
-* [ ] **Cluster Panel (Sidebar)**
-  ```
-  Rwanda 2010 - Detected Clusters:
-
-  1. Health-Education Cluster (23 indicators)
-     • vaccination_rate → child_mortality → school_enrollment
-     • Density: 0.18 (highly connected)
-
-  2. Economic-Trade Cluster (31 indicators)
-     • exports → manufacturing → gdp_growth
-     • Density: 0.12 (moderately connected)
-
-  3. Governance-Security Cluster (18 indicators)
-     • corruption → conflict → political_stability
-     • Density: 0.22 (very dense)
-  ```
-
-* [ ] **Cluster Stability Over Time**
-  - Timeline shows cluster persistence:
-  - "Human Capital cluster existed 1990-2024 (stable)"
-  - "Infrastructure cluster emerged 2005 (new)"
-  - Jaccard similarity chart: How clusters evolve
-
-### Cross-Country Cluster Comparison
-
-* [ ] **Cluster Similarity Matrix**
-  ```
-  Which countries have similar causal structures?
-
-           Rwanda  Kenya  Uganda
-  Rwanda     1.00   0.73   0.68
-  Kenya      0.73   1.00   0.81
-  Uganda     0.68   0.81   1.00
-
-  Interpretation: Kenya & Uganda have very similar clusters (0.81)
-  → Similar development patterns, policies may transfer
-  ```
-
-* [ ] **Regional Cluster Patterns**
-  - Map view: Countries colored by dominant cluster type
-  - Sub-Saharan Africa: Health-Education clusters dominate
-  - East Asia: Economic-Trade clusters dominate
-  - Europe: Governance-Sustainability clusters dominate
-
-### Cluster Deliverables
-
-* [ ] `ClusterView.tsx` (convex hull rendering, cluster labels)
-* [ ] `ClusterPanel.tsx` (sidebar with cluster details)
-* [ ] `ClusterSimilarity.tsx` (heatmap matrix)
-* [ ] `ClusterTimeline.tsx` (shows emergence/dissolution over time)
-
----
-
-## Week 10-11: Transparency & Academic Rigor
-
-### Transparency Panel
-
-* [ ] **"Show Methodology" button** (right sidebar drawer)
-
-* [ ] **Per-node statistics display:**
-  - SHAP value (importance score)
-  - Data quality (% observed vs imputed)
-  - Sample size (n observations)
-  - Source dataset (WDI, UNESCO, V-Dem, etc.)
-  - Confidence interval (ci_lower, ci_upper)
-
-* [ ] **Per-edge statistics display:**
-  - Beta coefficient (effect size)
-  - Confidence interval (95% CI)
-  - P-value (significance)
-  - Lag (0-5 years)
-  - Calculation method (backdoor adjustment, bootstrap, etc.)
-
-### Data Export Suite
-
-* [ ] **"Download Data" button** (multiple formats)
-
-* [ ] **Export options:**
-  - CSV: Full node list + edge list
-  - JSON: Complete graph structure
-  - SVG: Current view as vector graphic
-  - PNG: High-res screenshot (for publications)
-
-* [ ] **Export includes metadata:**
-  - Filters applied
-  - Date accessed
-  - Data version (v3.1.x)
-  - Country/stratum/year context
-
-### Citation Generator
-
-* [ ] **"Cite This Work" popup** (modal dialog)
-
-* [ ] **Formats provided:**
-  - BibTeX (LaTeX users)
-  - APA 7th edition
-  - MLA 9th edition
-  - Chicago 17th edition
-
-* [ ] **Auto-populates current URL** (for specific views/scenarios)
-
-### Methodology Documentation
-
-* [ ] **`/methodology` page** (separate from main app)
-
-* [ ] **Sections:**
-  - Phase A: Causal Discovery (GraNDAG algorithm)
-  - Phase B: Semantic Hierarchy (clustering, promotion)
-  - V2.1: Results & Validation
-  - V3.1: Temporal Dynamics & Stratification
-  - Known Limitations (honest disclosure)
-
-* [ ] **Downloadable as PDF** (for offline reading)
-
-### Sensitivity Analysis Runner (Optional)
-
-* [ ] **"Run Sensitivity Test" button**
-
-* [ ] **Options:**
-  - Exclude imputed data (re-run on observed only)
-  - Exclude high-income countries (test on developing world)
-  - Change saturation threshold (GDP $20K → $25K)
-  - Arithmetic vs geometric mean comparison
-
-* [ ] **Results comparison** (original vs sensitivity test)
-
-### Transparency Deliverables
-
-* [ ] `TransparencyPanel.tsx` (stats sidebar)
-* [ ] `ExportManager.ts` (handles CSV/JSON/SVG/PNG generation)
-* [ ] `CitationGenerator.tsx` (modal with copy-to-clipboard)
-* [ ] `/methodology` page (Markdown content rendered)
-* [ ] PDF export script (generate methodology PDF)
-
----
-
-## API Requirements
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/clusters/{country}` | GET | Country cluster data |
-| `/api/clusters/unified/{year}` | GET | Unified clusters for year |
-| `/api/clusters/similarity/{countryA}/{countryB}` | GET | Cluster similarity score |
-| `/api/export/csv` | POST | Generate CSV export |
-| `/api/export/json` | POST | Generate JSON export |
-
----
-
-## Success Metrics
-
-* [ ] Clusters render with convex hulls correctly
-* [ ] Cluster stability timeline shows evolution
-* [ ] Similarity matrix reveals regional patterns
-* [ ] 100% data export success rate (all formats)
-* [ ] Methodology page complete and accessible
-* [ ] Citation generator produces valid citations
-* [ ] Zero accessibility violations (WCAG AA)
-
----
-
-## Dependencies
-
-**From Phase 2:**
-- Timeline player (scrubbing, playback)
-- Stratification tabs (stratum switching)
-- Country selector (178 countries)
-- Temporal SHAP API endpoints
-
-**From V3.1 Data:**
-- `v3_1_development_clusters/countries/{country}_clusters.json` (178 files)
-- `v3_1_development_clusters/unified/{year}_clusters.json` (35 files)
-
-**External Libraries:**
-- `d3-delaunay` or similar for convex hull rendering
-- `file-saver` for downloads
-- `html2canvas` / `dom-to-image` for PNG export
-- `jspdf` for PDF methodology export
-
----
-
-## Legal/Admin Requirements
-
-* [ ] Privacy policy updated (data exports)
-* [ ] Terms of service reviewed
-* [ ] GDPR compliance verified (no PII in exports)
-
----
-
-## Out of Scope (Deferred to Phase 4+)
-
-- Multi-target selector (Phase 4)
-- Country comparison mode (Phase 4)
-- Optimization mode (Phase 5)
-- Education/classroom features (Phase 5)
+## Project Overview
+
+Phase 2 visualization: React + TypeScript + Vite + D3.js with simulation mode for country-specific causal graphs.
+
+**Tech Stack**: Zustand (state), D3 (viz), Fuse.js (search)
+
+## Architecture
+
+```
+src/
+├── components/
+│   ├── simulation/           # CountrySelector, PlayBar, SimulationPanel, InterventionBuilder, ResultsPanel
+│   ├── LocalView/            # DAG flow view
+│   └── StrataTabs.tsx        # Income stratification tabs
+├── stores/simulationStore.ts # Zustand state
+├── services/api.ts           # API client
+└── App.tsx                   # Main app + D3 rendering
+
+api/
+├── main.py                   # FastAPI entry
+├── routers/                  # Route handlers
+├── services/                 # Business logic
+└── data -> ../export         # Symlink to data
+```
+
+## Key API Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/health` | Health check |
+| `/api/countries` | List 203 countries |
+| `/api/graph/{country}` | Country graph + SHAP + baseline |
+| `/api/temporal/shap/{target}/timeline` | Unified SHAP all years |
+| `/api/temporal/shap/{country}/{target}/timeline` | Country SHAP timeline |
+| `/api/temporal/graph/{year}` | Unified graph for year |
+| `/api/temporal/graph/{country}/{year}` | Country graph for year |
+| `/api/simulate/v31` | V3.1 instant simulation |
+| `/api/simulate/v31/temporal` | V3.1 temporal simulation |
+
+## Current Work: Phase 3 (Weeks 9-11)
+
+Phase 2 is complete as of 2026-02-18. Active development has moved to Phase 3.
+
+**P0 - Critical (Phase 3):**
+- [ ] Scenario comparison (overlay mode) - deferred from Phase 2
+- [ ] Methodology panel (explain causal discovery approach)
+- [ ] Sensitivity analysis (perturb edge weights, observe outcome variance)
+
+**P1 - Important (Phase 3):**
+- [ ] Click-node-to-intervene flow - deferred from Phase 2
+- [ ] Top N quick filter for indicators - deferred from Phase 2
+- [ ] Export suite (PNG, CSV, shareable URL)
+
+**P2 - Nice-to-have (Phase 3):**
+- [ ] Pre-built scenario templates (WHO, Education, Infrastructure) - deferred from Phase 2
+
+## Key Constants
+
+```typescript
+// Preserve from Phase 1
+DOMAIN_COLORS  // 9 domain color mappings
+RING_LABELS    // ['Quality of Life', 'Outcomes', 'Coarse Domains', 'Fine Domains', 'Indicator Groups', 'Indicators']
+
+// Phase 2
+MAX_INTERVENTIONS = 5
+API_MODE = 'local' | 'public'
+```
+
+## Data Structure
+
+- **Temporal SHAP**: 35 years (1990-2024) x 178 countries
+- **Income Strata**: Unified, Developing (<$4.5k), Emerging ($4.5k-$14k), Advanced (>$14k)
+- **Graph edges**: Year-specific, country-specific, stratum-specific variants
+
+## Completed: Phase 2 (Weeks 5-8)
+
+**Weeks 5-6:**
+- Income stratification (StrataTabs with dynamic counts)
+- Timeline player (1990-2024 scrubbing, auto-collapse)
+- Country selector (178 countries, region grouping, autocomplete)
+- Temporal SHAP caching (smooth playback, no flash)
+
+**Week 7:**
+- Data Quality Panel (coverage, confidence, transitions)
+- Local View temporal edges (year-aware edge updates)
+
+**Week 8 - Simulation Enhancement:**
+- Per-intervention year support: each intervention targets a specific year (staggered interventions)
+- Timeline scrubber feeds default intervention year
+- Simulation range control: dual-thumb slider for start/end year (1990-2030)
+- Node glow effects: green/red proportional to simulation effect intensity on the radial viz
+- Auto-expand: only branches containing intervened indicators expand after simulation
+- Scenario save/load to localStorage (save name, country, interventions, year range; load restores full state)
+- Backend: staggered intervention support via `interventions_by_year` in `temporal_simulation_v31.py`
+- V3.1 API integration with year-specific temporal graphs
+
+## Roadmap (See ROADMAP.md)
+
+- Phase 3 (Weeks 9-11): Scenario comparison, methodology panel, sensitivity analysis, export suite
+- Phase 4 (Weeks 12-14): Multi-target, country comparison, Pareto optimization
+- Phase 5 (Weeks 15-18): Map overlay, 3D visualization
+- Phase 6 (Weeks 19-24): Education mode, accessibility, PWA
