@@ -295,7 +295,6 @@ function App() {
     clearCountry,
     togglePanel,
     temporalResults,
-    currentYear,
     historicalTimeline,
     temporalShapTimeline,
     stratifiedShapTimeline,
@@ -323,7 +322,9 @@ function App() {
     if (highlightedIndicator) {
       setHighlightedPath(new Set([highlightedIndicator]))
       setHighlightedTarget(highlightedIndicator)
-      setHighlightSource('sim')
+      if (highlightSource !== 'sim') {
+        setHighlightSource('sim')
+      }
     } else {
       // Only clear if the current highlight is from sim (don't clobber search highlights)
       if (highlightSource === 'sim') {
@@ -331,7 +332,7 @@ function App() {
         setHighlightedTarget(null)
       }
     }
-  }, [highlightedIndicator])
+  }, [highlightedIndicator, highlightSource])
 
   // Clear indicator highlight when panel closes or results cleared
   useEffect(() => {
@@ -1604,7 +1605,7 @@ function App() {
       nodeByIdMap,
       DOMAIN_COLORS
     )
-  }, [localViewSimMode, temporalResults, currentYearIndex, storeInterventions, nodeByIdMap, rawData, effectFilterPct, isPlaying])
+  }, [localViewSimMode, temporalResults, currentYearIndex, storeInterventions, nodeByIdMap, rawData, effectFilterPct])
 
   // Build simEffects map for local view coloring (nodeId → percent_change for current year)
   const simLocalEffects = useMemo(() => {
@@ -1938,7 +1939,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [resetView, localViewTargets.length])
+  }, [resetView, localViewTargets.length, localViewSimMode])
 
   // All nodes for search (derived from rawData, not just visible nodes)
   const searchableNodes = useMemo(() => {
@@ -2404,7 +2405,7 @@ function App() {
       drivers: driverCount,
       overlaps: overlaps.length
     })
-  }, [effectiveNodes, nodePadding, expandedNodes, pinnedPaths])  // Uses effectiveNodes for country-specific importance
+  }, [effectiveNodes, nodePadding, expandedNodes, pinnedPaths, playbackMode, causalHint])  // Uses effectiveNodes for country-specific importance
 
   // Render visible nodes and edges (called when expansion state changes)
   const renderVisualization = useCallback(() => {
@@ -4301,7 +4302,7 @@ function App() {
       layoutReadyTimerRef.current = null
     }
 
-  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio, temporalResults, currentYear, historicalTimeline, temporalShapTimeline, stratifiedShapTimeline, selectedStratum, playbackMode, currentYearIndex, effectiveNodes, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, causalHint])
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, storeInterventions])
 
   // Fetch data once on mount
   useEffect(() => {

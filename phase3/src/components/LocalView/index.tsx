@@ -382,7 +382,7 @@ export function LocalView({
     const optimalThreshold = sorted[targetIndex] * 0.99
 
     return Math.max(0.1, Math.min(optimalThreshold, sliderMax))
-  }, [betaRange, sliderMax])
+  }, [betaRange, sliderMax, targetIds.length])
 
   // Only auto-calculate threshold when targets actually change (not on every remount)
   useEffect(() => {
@@ -1247,7 +1247,7 @@ export function LocalView({
     })
     prevNodeDimsRef.current = newNodeDimsMap
 
-  }, [layout, dimensions, targetIds, betaThreshold, onRemoveTarget, onNavigateToNode, showGlow, toggleInputExpand, toggleOutputExpand, simMode, simEffects])
+  }, [layout, dimensions, targetIds, betaThreshold, onRemoveTarget, onNavigateToNode, showGlow, toggleInputExpand, toggleOutputExpand, simMode, simPlaybackActive, simEffects, handleNodeMouseLeave])
 
   // Empty state - no targets selected (skip if simData has targets)
   if (targetIds.length === 0 && !simData) {

@@ -12,7 +12,11 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from ..services import simulation_service
-from ..config import DEFAULT_GRAPH_YEAR
+from ..config import (
+    DEFAULT_GRAPH_YEAR,
+    SIMULATION_TIMEOUT as CONFIG_SIMULATION_TIMEOUT,
+    TEMPORAL_TIMEOUT as CONFIG_TEMPORAL_TIMEOUT,
+)
 from ..models import (
     InterventionInput,
     SimulationRequestV31,
@@ -24,9 +28,9 @@ from ..models import (
 router = APIRouter(prefix="/simulate", tags=["simulation"])
 logger = logging.getLogger("api.simulation")
 
-# Timeouts (may need tuning based on ensemble runs)
-SIMULATION_TIMEOUT = 30
-TEMPORAL_TIMEOUT = 60
+# Timeouts (wired from environment-configured settings)
+SIMULATION_TIMEOUT = CONFIG_SIMULATION_TIMEOUT
+TEMPORAL_TIMEOUT = CONFIG_TEMPORAL_TIMEOUT
 
 
 class LegacySimulationRequest(BaseModel):

@@ -56,10 +56,10 @@ TEMPORAL_TARGETS = [
 ]
 
 # API settings
-API_VERSION = "3.0.0"
+API_VERSION = "3.1.0"
 API_TITLE = "Global Causal Discovery API"
 API_DESCRIPTION = """
-## V3.0 Policy Intervention Simulator
+## V3.1 Policy Intervention Simulator
 
 Country-specific causal simulation for policy analysis.
 

@@ -803,6 +803,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         playbackMode: 'simulation',
         isPlaying: false,
         effectFilterPct: autoFilterPct,
+        highlightedIndicator: null,
         layoutReady: false,  // Will be set true by App.tsx after D3 render settles
         simulationRunToken: nextRunToken
       });
@@ -847,7 +848,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     temporalResults: null,
     currentYear: 0,
     isPlaying: false,
-    playbackMode: 'historical'
+    playbackMode: 'historical',
+    highlightedIndicator: null
   }),
 
   // Temporal playback actions

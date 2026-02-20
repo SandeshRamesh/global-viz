@@ -4,7 +4,7 @@ Request Models
 Pydantic schemas for API request validation.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 
 
@@ -24,14 +24,15 @@ class InterventionInput(BaseModel):
         le=2024
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "indicator": "v2elvotbuy",
                 "change_percent": 20.0,
                 "year": 2024
             }
         }
+    )
 
 
 # =============================================================================
@@ -102,8 +103,8 @@ class SimulationRequestV31(BaseModel):
         le=500
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "country": "Australia",
                 "interventions": [
@@ -118,6 +119,7 @@ class SimulationRequestV31(BaseModel):
                 "include_spillovers": True
             }
         }
+    )
 
 
 class TemporalSimulationRequestV31(BaseModel):
@@ -185,8 +187,8 @@ class TemporalSimulationRequestV31(BaseModel):
         description="Return debug trace (saturation, clamp, graph fallback details)"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "country": "Australia",
                 "interventions": [
@@ -198,3 +200,4 @@ class TemporalSimulationRequestV31(BaseModel):
                 "use_dynamic_graphs": True
             }
         }
+    )
