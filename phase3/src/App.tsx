@@ -277,6 +277,7 @@ function App() {
   const urlStateRestoredRef = useRef(false)  // Track if URL state has been restored
   const pendingExpandedNodesRef = useRef<string[] | null>(null)  // Expanded nodes from URL, applied after SHAP cache ready
   const clickTimeoutRef = useRef<number | null>(null)  // For delayed single-click to allow double-click
+  const layoutReadyTimerRef = useRef<number | null>(null)  // Debounced layout-ready signal timer
 
   // Temporal edges cache for Local View timeline playback
   // Maps year → country edges for the currently selected country/stratum
@@ -317,6 +318,16 @@ function App() {
   useEffect(() => {
     loadAllClassifications()
   }, [loadAllClassifications])
+
+  // Cleanup any pending layout-ready timer on unmount
+  useEffect(() => {
+    return () => {
+      if (layoutReadyTimerRef.current !== null) {
+        clearTimeout(layoutReadyTimerRef.current)
+        layoutReadyTimerRef.current = null
+      }
+    }
+  }, [])
 
   // Handle split divider drag
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -2400,10 +2411,8 @@ function App() {
       const absPct = Math.abs(eff.pct)
       if (absPct < 0.01) return domainColor
 
-      // State machine:
-      //   simPlaybackActive (timeline playing/scrubbing) → neon fill
-      //   panel open, playback stopped → domain color (borders handle the effect)
-      //   panel closed → domain color (cleanup effect reverts to historical)
+      // Simulation playback visuals activate once this run has started.
+      // Keep fill active while paused/scrubbing so year scrubs are immediate.
       if (!simPlaybackActive) return domainColor
 
       // Dynamic intensity: sqrt curve so small effects are visible, large ones saturate
@@ -2512,11 +2521,15 @@ function App() {
      * Color alpha scales by coverage for parents (honest visual weight).
      * Ineligible parents get no border (subtle glow handled separately).
      */
-    // Borders only show after simulation playback finishes (not during active play)
-    const simPlaybackActive = playbackMode === 'simulation' && isPlaying
+    // Simulation fill mode remains active once playback has started for this run.
+    // This keeps scrubbing responsive even when paused.
+    const simPlaybackActive =
+      playbackMode === 'simulation' &&
+      isPanelOpen &&
+      playbackStartedRef.current
 
     const getSimBorder = (node: ExpandableNode): { color: string; width: number; opacity: number } | null => {
-      if (simPlaybackActive) return null  // During playback: fill, not borders
+      if (simPlaybackActive) return null  // During playback/scrub: fill, not borders
       if (!isPanelOpen) return null        // Panel closed: no sim visuals
       if (node.ring === 0) return null
       if (interventionNodeIds.has(node.id)) return null
@@ -3926,11 +3939,20 @@ function App() {
         return isLabelVisible(d.ring, pos.fontSize, currentScale) ? 1 : 0
       })
 
-    // Signal layout ready after all D3 transitions complete
+    // Signal layout ready after all D3 transitions complete.
+    // Keep one timer alive at a time so rapid re-renders don't enqueue stale callbacks.
     if (!layoutReady && playbackMode === 'simulation') {
-      // nodeAnimationEndTime = max transition delay+duration computed above
       const settleMs = nodeAnimationEndTime + 200  // +200ms buffer for paint
-      setTimeout(() => setLayoutReady(true), settleMs)
+      if (layoutReadyTimerRef.current !== null) {
+        clearTimeout(layoutReadyTimerRef.current)
+      }
+      layoutReadyTimerRef.current = window.setTimeout(() => {
+        layoutReadyTimerRef.current = null
+        setLayoutReady(true)
+      }, settleMs)
+    } else if (layoutReadyTimerRef.current !== null) {
+      clearTimeout(layoutReadyTimerRef.current)
+      layoutReadyTimerRef.current = null
     }
 
   }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio, temporalResults, currentYear, historicalTimeline, temporalShapTimeline, stratifiedShapTimeline, selectedStratum, playbackMode, currentYearIndex, effectiveNodes, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady])

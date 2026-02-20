@@ -138,6 +138,7 @@ interface SimulationState {
   currentYearIndex: number;  // Index into years array
   isPlaying: boolean;
   layoutReady: boolean;  // True once D3 render + transitions complete after sim results arrive
+  simulationRunToken: number;  // Monotonic token used to detect true new simulation runs
 
   // Legacy fields for simulation temporal playback
   currentYear: number;
@@ -267,6 +268,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   currentYearIndex: 0,
   isPlaying: false,
   layoutReady: true,
+  simulationRunToken: 0,
   currentYear: 0,
   horizonYears: 5,
   baseYear: 2020,
@@ -771,6 +773,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
     // Helper to apply results (shared between cache hit and API response)
     const applyResults = (results: TemporalResults) => {
+      const nextRunToken = get().simulationRunToken + 1;
       const TARGET_VISIBLE = 20;
       const yearKeys = Object.keys(results.effects).sort();
       const finalYearEffects = yearKeys.length > 0
@@ -791,8 +794,10 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         currentYear: 1,
         currentYearIndex: 1,  // Skip base year (index 0), start at first intervention year
         playbackMode: 'simulation',
+        isPlaying: false,
         effectFilterPct: autoFilterPct,
-        layoutReady: false  // Will be set true by App.tsx after D3 render settles
+        layoutReady: false,  // Will be set true by App.tsx after D3 render settles
+        simulationRunToken: nextRunToken
       });
     };
 

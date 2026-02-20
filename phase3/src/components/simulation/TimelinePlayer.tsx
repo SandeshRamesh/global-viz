@@ -31,6 +31,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     historicalTimeline,
     timelineLoading,
     temporalResults,
+    simulationRunToken,
     playbackMode,
     currentYearIndex,
     isPlaying,
@@ -48,35 +49,33 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
   const [isDragging, setIsDragging] = useState(false)
   const trackRef = useRef<HTMLDivElement>(null)
   const wasPlayingBeforeDrag = useRef(false)
+  const waitingForLayoutRef = useRef(false)
 
   // Reset to docked when country changes
   useEffect(() => {
     setPlayerState('docked')
     setPendingPlay(false)
+    waitingForLayoutRef.current = false
   }, [selectedCountry])
 
-  // Auto-expand when simulation results arrive (or re-run triggers)
-  const prevSimStateRef = useRef<{ results: typeof temporalResults; yearIdx: number }>({
-    results: temporalResults, yearIdx: currentYearIndex
-  })
-  const waitingForLayoutRef = useRef(false)
+  // Auto-expand only on true simulation runs (store token increments in applyResults)
+  const prevRunTokenRef = useRef(simulationRunToken)
 
   useEffect(() => {
-    const prev = prevSimStateRef.current
-    // Detect: new results arrived, OR same results but yearIndex reset to 1 (re-run / cache hit)
-    // applyResults sets currentYearIndex=1 (skip base year, start at intervention year)
-    const isNewRun = temporalResults && playbackMode === 'simulation' && (
-      temporalResults !== prev.results ||
-      (currentYearIndex === 1 && prev.yearIdx !== 1)
+    const prevToken = prevRunTokenRef.current
+    const isNewRun = (
+      Boolean(temporalResults) &&
+      playbackMode === 'simulation' &&
+      simulationRunToken !== prevToken
     )
-    prevSimStateRef.current = { results: temporalResults, yearIdx: currentYearIndex }
+    prevRunTokenRef.current = simulationRunToken
 
-    if (isNewRun && !isPlaying) {
+    if (isNewRun) {
       // Expand timeline immediately; playback waits for layoutReady signal
       setPlayerState('expanded')
       waitingForLayoutRef.current = true
     }
-  }, [temporalResults, playbackMode, currentYearIndex, isPlaying])
+  }, [temporalResults, playbackMode, simulationRunToken])
 
   // Start playback once layout signals ready (with brief pause to show intervention pulse)
   useEffect(() => {
