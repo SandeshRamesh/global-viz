@@ -753,8 +753,16 @@ interface TemporalResultsDropdownProps {
 }
 
 function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDropdownProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const { indicators, effectFilterPct, setEffectFilterPct } = useSimulationStore()
+  const [isExpanded, setIsExpanded] = useState(true)
+  const { indicators, effectFilterPct, setEffectFilterPct, highlightedIndicator, setHighlightedIndicator } = useSimulationStore()
+  const resultsRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll results into view when they first appear
+  useEffect(() => {
+    if (resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [])
   const tableId = 'temporal-results-table'
 
   // Build indicator name lookup
@@ -830,8 +838,12 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
     return `${row.percentChange >= 0 ? '+' : ''}${row.percentChange.toFixed(1)}%`
   }
 
+  const handleRowClick = useCallback((id: string) => {
+    setHighlightedIndicator(highlightedIndicator === id ? null : id)
+  }, [highlightedIndicator, setHighlightedIndicator])
+
   return (
-    <div className="results-status">
+    <div className="results-status" ref={resultsRef}>
       {/* Header row — always visible, clickable */}
       <button
         type="button"
@@ -887,7 +899,12 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
             </thead>
             <tbody>
               {rows.map(row => (
-                <tr key={row.id}>
+                <tr
+                  key={row.id}
+                  onClick={() => handleRowClick(row.id)}
+                  className={highlightedIndicator === row.id ? 'dt-row-active' : ''}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td className="dt-name" title={row.name}>{row.name}</td>
                   <td className="dt-val">{formatVal(row.baseline)}</td>
                   <td className="dt-val">{formatVal(row.simulated)}</td>
@@ -971,8 +988,16 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
           background: rgba(76,175,80,0.08);
         }
 
+        .dropdown-table tbody tr.dt-row-active {
+          background: rgba(59,130,246,0.12);
+        }
+
+        .dropdown-table tbody tr.dt-row-active:hover {
+          background: rgba(59,130,246,0.18);
+        }
+
         .dt-name {
-          max-width: 110px;
+          max-width: 180px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;

@@ -41,6 +41,20 @@ export interface TextConfig {
   maxFontSize: number
 }
 
+/**
+ * Causal layout hints for simulation mode.
+ * Pre-computed once when simulation results arrive (before playback starts).
+ * Enables angular clustering of causally related nodes.
+ */
+export interface CausalLayoutHint {
+  /** Ring 1 outcomes containing affected descendants → cluster at 0° */
+  anchorOutcomes: Set<string>
+  /** target node ID → source node ID (immediate causal parent) */
+  causalAdjacency: Map<string, string>
+  /** node ID → hop distance from intervention (0=intervention itself) */
+  hopDistance: Map<string, number>
+}
+
 export interface LayoutConfig {
   rings: RingConfig[]
   nodePadding: number
@@ -55,6 +69,8 @@ export interface LayoutConfig {
   maxSpacing?: number
   // Text-aware spacing (optional)
   textConfig?: TextConfig
+  // Causal layout hints for simulation angular clustering (optional)
+  causalHint?: CausalLayoutHint
 }
 
 export interface ComputedRingConfig {
@@ -128,6 +144,9 @@ let currentMaxSpacing: number = 7
 // Module-level text config holder
 let currentTextConfig: TextConfig | null = null
 
+// Module-level causal hint holder (set per layout computation)
+let currentCausalHint: CausalLayoutHint | null = null
+
 // Module-level ring node counts for density-based text scaling
 let ringNodeCounts: Map<number, number> = new Map()
 
@@ -140,6 +159,7 @@ function setLayoutParams(config: LayoutConfig): void {
   currentSpacingScaleFactor = config.spacingScaleFactor ?? 0.3
   currentMaxSpacing = config.maxSpacing ?? 7
   currentTextConfig = config.textConfig ?? null
+  currentCausalHint = config.causalHint ?? null
 }
 
 // ============================================================================
@@ -388,16 +408,21 @@ function assignOutcomeAngles(
   if (allOutcomeIds.length === 0) return { angles, extents }
 
   // Separate expanded and collapsed outcomes
+  // In simulation mode with causal hints, anchor outcomes (those containing affected
+  // descendants) are treated as expanded for sector assignment — they cluster at 0°.
+  const anchorOutcomes = currentCausalHint?.anchorOutcomes
   const expanded: Array<{ id: string; minExtent: number }> = []
   const collapsed: Array<{ id: string; minExtent: number }> = []
 
   for (const id of allOutcomeIds) {
     const isExpanded = expandedNodeIds.has(id)
-    const minExtent = isExpanded
+    const isAnchor = anchorOutcomes?.has(id) ?? false
+    const shouldCluster = isExpanded || isAnchor
+    const minExtent = shouldCluster
       ? (outcomeRequirements.get(id) ?? COLLAPSED_OUTCOME_MIN_EXTENT)
       : COLLAPSED_OUTCOME_MIN_EXTENT
 
-    if (isExpanded) {
+    if (shouldCluster) {
       expanded.push({ id, minExtent })
     } else {
       collapsed.push({ id, minExtent })
@@ -508,6 +533,119 @@ function getUnifiedCompactness(expandedCount: number): number {
   if (expandedCount >= 5) return 1.0
   // Linear: 1→0.4, 2→0.55, 3→0.7, 4→0.85, 5→1.0
   return 0.4 + (expandedCount - 1) * (0.6 / 4)
+}
+
+// ============================================================================
+// CAUSAL CHAIN SORTING
+// Sort siblings so causally connected nodes are adjacent within their sector.
+// Affected nodes cluster at sector center, structural nodes at edges.
+// ============================================================================
+
+/**
+ * Sort children of a parent node for causal clustering.
+ *
+ * Algorithm:
+ * 1. Partition into affected (in hopDistance) vs structural
+ * 2. Group affected into causal chains (siblings sharing a chain via causalAdjacency)
+ * 3. Sort chains by min hop (closest to intervention → sector center)
+ * 4. Within each chain, sort by hop ascending
+ * 5. Final: [...structural_left, ...chains, ...structural_right]
+ *
+ * Cross-sector facing tiebreaker: between chains at same hop level,
+ * bias toward the side facing the source's angle (if source is in a different sector).
+ *
+ * @param children The sibling TreeNodes to sort
+ * @param parentAngle The parent's center angle (for cross-sector facing)
+ * @param nodeMap Layout node map (for source angle lookup in cross-sector heuristic)
+ */
+function sortChildrenByCausalChain(
+  children: TreeNode[],
+  parentAngle: number,
+  nodeMap: Map<string, LayoutNode>
+): TreeNode[] {
+  if (!currentCausalHint || children.length <= 1) return children
+
+  const { causalAdjacency, hopDistance } = currentCausalHint
+
+  // Partition into affected and structural
+  const affected: TreeNode[] = []
+  const structural: TreeNode[] = []
+  for (const child of children) {
+    if (hopDistance.has(child.id)) {
+      affected.push(child)
+    } else {
+      structural.push(child)
+    }
+  }
+
+  // If no affected children, preserve original order
+  if (affected.length === 0) return children
+
+  // Group affected into causal chains.
+  // Two siblings are in the same chain if one is the causal source of the other,
+  // or they share a common chain ancestor among these siblings.
+  // Simplified: group by "which chain does this node belong to" —
+  // walk causalAdjacency until we find a sibling or run out.
+  const siblingSet = new Set(affected.map(c => c.id))
+  const chainMap = new Map<string, string>() // nodeId → chain root among siblings
+
+  for (const node of affected) {
+    // Walk the causal source chain to find the earliest sibling in the chain
+    let chainRoot = node.id
+    const visited = new Set<string>()
+    let cur = node.id
+    while (cur) {
+      visited.add(cur)
+      const source = causalAdjacency.get(cur)
+      if (!source || visited.has(source)) break
+      if (siblingSet.has(source)) {
+        chainRoot = source // found a sibling that's upstream — it's the chain root
+      }
+      cur = source
+    }
+    chainMap.set(node.id, chainRoot)
+  }
+
+  // Group by chain root
+  const chains = new Map<string, TreeNode[]>()
+  for (const node of affected) {
+    const root = chainMap.get(node.id)!
+    if (!chains.has(root)) chains.set(root, [])
+    chains.get(root)!.push(node)
+  }
+
+  // Sort within each chain by hop ascending
+  for (const [, chain] of chains) {
+    chain.sort((a, b) => (hopDistance.get(a.id) ?? 99) - (hopDistance.get(b.id) ?? 99))
+  }
+
+  // Sort chains by minimum hop (closest to intervention first → placed at center)
+  const sortedChains = Array.from(chains.values()).sort((a, b) => {
+    const minHopA = Math.min(...a.map(n => hopDistance.get(n.id) ?? 99))
+    const minHopB = Math.min(...b.map(n => hopDistance.get(n.id) ?? 99))
+    if (minHopA !== minHopB) return minHopA - minHopB
+
+    // Cross-sector facing tiebreaker: chain whose source angle is more clockwise
+    // relative to parent should be placed more clockwise (higher angle)
+    const sourceA = causalAdjacency.get(a[0].id)
+    const sourceB = causalAdjacency.get(b[0].id)
+    const angleA = sourceA ? (nodeMap.get(sourceA)?.angle ?? parentAngle) : parentAngle
+    const angleB = sourceB ? (nodeMap.get(sourceB)?.angle ?? parentAngle) : parentAngle
+    // Normalize angular difference relative to parent
+    const diffA = ((angleA - parentAngle) + Math.PI * 3) % (Math.PI * 2) - Math.PI
+    const diffB = ((angleB - parentAngle) + Math.PI * 3) % (Math.PI * 2) - Math.PI
+    return diffA - diffB
+  })
+
+  // Flatten chains
+  const flatAffected = sortedChains.flat()
+
+  // Split structural: half before affected, half after
+  const halfStruct = Math.floor(structural.length / 2)
+  const structLeft = structural.slice(0, halfStruct)
+  const structRight = structural.slice(halfStruct)
+
+  return [...structLeft, ...flatAffected, ...structRight]
 }
 
 /**
@@ -716,12 +854,14 @@ function positionNode(
   const childRingIndex = ringIndex + 1
   if (childRingIndex >= ringRadii.length) return layoutNode
 
+  // Apply causal chain sorting if hints are available
+  const sortedChildren = sortChildrenByCausalChain(treeNode.children, midAngle, nodeMap)
   // Get children's minimum requirements (from Pass 1)
-  const childMinimums = treeNode.children.map(c => c.minAngularExtent)
+  const childMinimums = sortedChildren.map(c => c.minAngularExtent)
   const totalMinimum = childMinimums.reduce((a, b) => a + b, 0)
   const excessSpace = angularExtent - totalMinimum
 
-  if (verbose && treeNode.children.length > 1) {
+  if (verbose && sortedChildren.length > 1) {
     debug.layout(
       `[PASS 2] Distributing space in ${treeNode.id}: ` +
       `parent has ${toDeg(angularExtent)}, ` +
@@ -748,7 +888,7 @@ function positionNode(
 
     debug.layoutWarn(
       `[OVERCROWDING] ${treeNode.id} (ring ${ringIndex}): ` +
-      `${treeNode.children.length} children need ${toDeg(totalMinimum)} ` +
+      `${sortedChildren.length} children need ${toDeg(totalMinimum)} ` +
       `but only have ${toDeg(angularExtent)} ` +
       `(compression: ${(compressionRatio * 100).toFixed(1)}%)`
     )
@@ -759,8 +899,8 @@ function positionNode(
   let currentAngle = midAngle - totalChildExtent / 2
 
   // Recursively position each child
-  for (let i = 0; i < treeNode.children.length; i++) {
-    const child = treeNode.children[i]
+  for (let i = 0; i < sortedChildren.length; i++) {
+    const child = sortedChildren[i]
     const childExtent = childExtents[i]
 
     const childLayoutNode = positionNode(
@@ -913,7 +1053,10 @@ function positionNodeWithSectorAwareness(
   }
 
   // STANDARD CASE: Normal proportional distribution for non-root nodes
-  const childMinimums = treeNode.children.map(c => c.minAngularExtent)
+  // Apply causal chain sorting if hints are available — reorder children so
+  // causally connected nodes are adjacent, affected nodes at sector center.
+  const sortedChildren = sortChildrenByCausalChain(treeNode.children, midAngle, nodeMap)
+  const childMinimums = sortedChildren.map(c => c.minAngularExtent)
   const totalMinimum = childMinimums.reduce((a, b) => a + b, 0)
   const excessSpace = angularExtent - totalMinimum
 
@@ -933,8 +1076,8 @@ function positionNodeWithSectorAwareness(
   const totalChildExtent = childExtents.reduce((a, b) => a + b, 0)
   let currentAngle = midAngle - totalChildExtent / 2
 
-  for (let i = 0; i < treeNode.children.length; i++) {
-    const child = treeNode.children[i]
+  for (let i = 0; i < sortedChildren.length; i++) {
+    const child = sortedChildren[i]
     const childExtent = childExtents[i]
 
     const childLayoutNode = positionNodeWithSectorAwareness(
@@ -977,7 +1120,9 @@ function positionChildrenStandard(
   verbose: boolean,
   compactness: number = 1.0  // 1.0 = full spread, 0.5 = half spread
 ): void {
-  const childMinimums = parentTreeNode.children.map(c => c.minAngularExtent)
+  // Apply causal chain sorting if hints are available
+  const sortedChildren = sortChildrenByCausalChain(parentTreeNode.children, parentAngle, nodeMap)
+  const childMinimums = sortedChildren.map(c => c.minAngularExtent)
   const totalMinimum = childMinimums.reduce((a, b) => a + b, 0)
 
   // Apply compactness to get the effective extent for positioning
@@ -1004,8 +1149,8 @@ function positionChildrenStandard(
   const totalChildExtent = childExtents.reduce((a, b) => a + b, 0)
   let currentAngle = parentAngle - totalChildExtent / 2
 
-  for (let i = 0; i < parentTreeNode.children.length; i++) {
-    const child = parentTreeNode.children[i]
+  for (let i = 0; i < sortedChildren.length; i++) {
+    const child = sortedChildren[i]
     const childExtent = childExtents[i]
 
     const childLayoutNode = positionNode(

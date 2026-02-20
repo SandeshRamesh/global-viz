@@ -47,14 +47,49 @@
   color: #999;
 }
 
-/* Intervention node breathing pulse — sharp pop, minimal fade */
+/* Intervention node breathing pulse — cyan glow */
 @keyframes intervention-pulse {
-  0%, 100% { stroke-width: 2.5; opacity: 0.75; }
-  50% { stroke-width: 6; opacity: 1.0; }
+  0%, 100% { opacity: 0.6; stroke-width: 2.5; }
+  50% { opacity: 1.0; stroke-width: 3.5; }
 }
 
 /* Causal edge hop-staggered pulse */
 @keyframes causal-edge-pulse {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 0.8; }
+}
+
+/* Simulation edge ripple — staggered by ring distance from intervention */
+/* Near intervention: thick, bright, aggressive */
+@keyframes sim-edge-ripple-near {
+  0% { stroke-opacity: 0.15; stroke-width: 1.5; }
+  15% { stroke-opacity: 1.0; stroke-width: 3.5; }
+  40% { stroke-opacity: 0.4; stroke-width: 2; }
+  100% { stroke-opacity: 0.15; stroke-width: 1.5; }
+}
+/* Mid distance */
+@keyframes sim-edge-ripple-mid {
+  0% { stroke-opacity: 0.08; stroke-width: 0.6; }
+  15% { stroke-opacity: 0.8; stroke-width: 2; }
+  40% { stroke-opacity: 0.2; stroke-width: 0.8; }
+  100% { stroke-opacity: 0.08; stroke-width: 0.6; }
+}
+/* Far from intervention (near QoL): thinner, softer */
+@keyframes sim-edge-ripple-far {
+  0% { stroke-opacity: 0.05; stroke-width: 0.3; }
+  15% { stroke-opacity: 0.55; stroke-width: 1; }
+  40% { stroke-opacity: 0.12; stroke-width: 0.5; }
+  100% { stroke-opacity: 0.05; stroke-width: 0.3; }
+}
+
+/* Node flash when sim pulse arrives — green for positive, red for negative */
+@keyframes sim-node-flash-pos {
+  0%, 100% { filter: drop-shadow(0 0 0px transparent); }
+  20% { filter: drop-shadow(0 0 8px #39FF14) drop-shadow(0 0 3px #39FF14); }
+  50% { filter: drop-shadow(0 0 3px rgba(57,255,20,0.4)); }
+}
+@keyframes sim-node-flash-neg {
+  0%, 100% { filter: drop-shadow(0 0 0px transparent); }
+  20% { filter: drop-shadow(0 0 8px #FF1744) drop-shadow(0 0 3px #FF1744); }
+  50% { filter: drop-shadow(0 0 3px rgba(255,23,68,0.4)); }
 }

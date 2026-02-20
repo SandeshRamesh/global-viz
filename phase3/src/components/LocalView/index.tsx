@@ -87,7 +87,8 @@ function truncateLabel(label: string, maxChars: number): string {
 function renderNodeShape(
   group: d3.Selection<SVGGElement, unknown, null, undefined>,
   node: PositionedLocalNode,
-  prevDims?: { width: number; height: number }
+  prevDims?: { width: number; height: number },
+  simBorder?: { color: string; width: number } | null
 ): void {
   // Use previous dimensions for initial render if animating
   const startWidth = prevDims?.width ?? node.width
@@ -97,8 +98,8 @@ function renderNodeShape(
   const canExpand = node.isTarget || node.canExpand !== false
   const fillLightness = canExpand ? 0.75 : 0.90
   const fill = getMutedColor(node.sectorColor, fillLightness)
-  const stroke = node.sectorColor
-  const strokeWidth = node.isTarget ? 3 : 2
+  const stroke = simBorder ? simBorder.color : node.sectorColor
+  const strokeWidth = simBorder ? simBorder.width : (node.isTarget ? 3 : 2)
 
   if (node.shape === 'hexagon') {
     // Octagon shape
@@ -176,6 +177,18 @@ interface NodeCIData {
   child_coverage?: number  // Fraction of children with data
 }
 
+/** Pre-built simulation data for Local View (bypasses structural edge traversal) */
+interface SimLocalViewData {
+  targets: import('../../types').LocalViewNode[]
+  inputs: import('../../types').LocalViewNode[]
+  outputs: import('../../types').LocalViewNode[]
+  edges: import('../../types').LocalViewEdge[]
+  targetRing: number
+  mode: import('../../types').LocalViewMode
+  activeChildCount?: number
+  totalChildCount?: number
+}
+
 interface LocalViewProps {
   targetIds: string[]
   allEdges: RawEdge[]
@@ -199,6 +212,11 @@ interface LocalViewProps {
   onResetLocalView?: (resetFn: () => void) => void  // Callback to register reset function
   ciCache?: Map<string, NodeCIData>  // CI data for nodes (from precomputedCICache)
   currentYear?: number  // Current timeline year for display
+  // Simulation mode props
+  simMode?: boolean                    // True when simulation results drive the view
+  simPlaybackActive?: boolean          // True when timeline is playing (fill mode)
+  simEffects?: Map<string, number>     // nodeId → percent_change for current year
+  simData?: SimLocalViewData | null    // Pre-built sim data (bypasses structural traversal)
 }
 
 // ============================================
@@ -225,7 +243,11 @@ export function LocalView({
   outputDepth,
   onResetLocalView,
   ciCache,
-  currentYear
+  currentYear,
+  simMode = false,
+  simPlaybackActive = false,
+  simEffects,
+  simData
 }: LocalViewProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -240,6 +262,7 @@ export function LocalView({
   const prevFlowDirectionRef = useRef<'horizontal' | 'vertical' | null>(null)
   const isFirstRenderRef = useRef(true)
   const shouldAnimateViewportRef = useRef(false)  // Flag to trigger viewport animation after expand/collapse
+  const prevSimNodeCountRef = useRef(0)  // Track node count for auto-zoom on sim expansion
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
   const [hoveredNode, setHoveredNode] = useState<PositionedLocalNode | null>(null)
   const [hoveredEdge, setHoveredEdge] = useState<{ source: string; target: string; beta: number } | null>(null)
@@ -252,7 +275,7 @@ export function LocalView({
 
   // Layout constants
   const horizontalPadding = 16  // Extra padding for wide characters (W, M, etc.)
-  const verticalPadding = 10
+  const verticalPadding = 16
   const sizeMinScale = 0.5
   const sizeMaxScale = 1.5
 
@@ -396,8 +419,9 @@ export function LocalView({
     }
   }, [])
 
-  // Build Local View data
+  // Build Local View data — use pre-built simData when in simulation mode
   const localViewData = useMemo(() => {
+    if (simData) return simData  // Simulation mode: use pre-built data
     if (targetIds.length === 0) return null
     return buildLocalViewData(
       targetIds,
@@ -410,7 +434,7 @@ export function LocalView({
       inputDepth,
       outputDepth
     )
-  }, [targetIds, allEdges, nodeById, domainColors, betaThreshold, expandedInputNodes, expandedOutputNodes, inputDepth, outputDepth])
+  }, [simData, targetIds, allEdges, nodeById, domainColors, betaThreshold, expandedInputNodes, expandedOutputNodes, inputDepth, outputDepth])
 
   // Compute layout
   const layout = useMemo(() => {
@@ -422,9 +446,9 @@ export function LocalView({
       localViewData.edges,
       dimensions.width,
       dimensions.height,
-      { horizontalPadding, verticalPadding, sizeMinScale, sizeMaxScale }
+      { horizontalPadding, verticalPadding, sizeMinScale, sizeMaxScale, forceShowBeta: simMode }
     )
-  }, [localViewData, dimensions, horizontalPadding, verticalPadding, sizeMinScale, sizeMaxScale])
+  }, [localViewData, dimensions, horizontalPadding, verticalPadding, sizeMinScale, sizeMaxScale, simMode])
 
   // Get stats
   const stats = useMemo(() => {
@@ -617,6 +641,14 @@ export function LocalView({
       prevFlowDirectionRef.current !== layout.flowDirection
     prevFlowDirectionRef.current = layout.flowDirection
 
+    // Auto-zoom when sim node count changes (new effects appearing during playback)
+    const currentNodeCount = layout.nodes.length
+    const simNodeCountChanged = simMode && currentNodeCount !== prevSimNodeCountRef.current
+    if (simNodeCountChanged) {
+      shouldAnimateViewportRef.current = true
+    }
+    prevSimNodeCountRef.current = currentNodeCount
+
     // Should we animate? (not on first render, not on structural changes)
     // When targets/beta change, the graph structure changes fundamentally - don't animate
     // When flow direction changes, we need a clean reset - don't animate
@@ -735,10 +767,10 @@ export function LocalView({
     const isVertical = layout.flowDirection === 'vertical'
 
     // === UPDATE ARROW MARKERS ===
-    // Only create arrow markers for horizontal layout
-    // Vertical layout uses line thickness only (no arrows)
+    // Only create arrow markers for horizontal layout (not sim mode or vertical)
     defs.selectAll('*').remove()
-    if (!isVertical) {
+    const showArrows = !isVertical && !simMode
+    if (showArrows) {
       for (const edge of layout.edges) {
         const sourceNode = nodePositions.get(edge.source)
         const arrowScale = sourceNode?.arrowScale ?? 1.0
@@ -837,13 +869,13 @@ export function LocalView({
             .style('stroke-opacity', 0.7)
             .on('end', function() {
               // Add arrow after edge fade-in completes (only in horizontal mode)
-              if (!isVertical) {
+              if (showArrows) {
                 d3.select(this).attr('marker-end', `url(#${markerId})`)
               }
             })
         } else {
           // Existing edges: animate path to follow moving nodes
-          el.attr('marker-end', isVertical ? null : `url(#${markerId})`)
+          el.attr('marker-end', showArrows ? `url(#${markerId})` : null)
             .transition('edge-update')
             .duration(ANIMATION.POSITION_DURATION)
             .ease(ANIMATION.EASING)
@@ -857,7 +889,7 @@ export function LocalView({
         const datum = el.datum() as typeof d & { finalPath: string }
         const markerId = `arrow-${d.source}-${d.target}`
         el.attr('d', datum.finalPath)
-          .attr('marker-end', isVertical ? null : `url(#${markerId})`)
+          .attr('marker-end', showArrows ? `url(#${markerId})` : null)
           .style('stroke-opacity', 0.7)
       })
     }
@@ -958,8 +990,24 @@ export function LocalView({
       const prevDims = prevNodeDims.get(d.id)
       const dimsChanged = prevDims && (Math.abs(prevDims.width - d.width) > 1 || Math.abs(prevDims.height - d.height) > 1)
 
+      // Compute sim border for post-simulation stopped state (thin colored borders)
+      let nodeBorder: { color: string; width: number } | null = null
+      if (simMode && !simPlaybackActive && simEffects) {
+        const pct = simEffects.get(d.id)
+        if (pct !== undefined && Math.abs(pct) > 0.01 && !d.isTarget) {
+          const absPct = Math.abs(pct)
+          const intensity = 1 - Math.exp(-absPct / 6)
+          // Thin border: 1-2.5px based on effect intensity
+          const bw = 1 + 1.5 * intensity
+          nodeBorder = {
+            color: pct >= 0 ? '#39FF14' : '#FF1744',
+            width: bw
+          }
+        }
+      }
+
       // Render shape - animate size change if dimensions changed
-      renderNodeShape(nodeGroup, d, shouldAnimate && !isEntering && dimsChanged ? prevDims : undefined)
+      renderNodeShape(nodeGroup, d, shouldAnimate && !isEntering && dimsChanged ? prevDims : undefined, nodeBorder)
 
       // Invisible hit area
       nodeGroup.append('rect')
@@ -991,7 +1039,27 @@ export function LocalView({
       const textColor = getContrastColor(d.sectorColor)
       const truncatedLabel = truncateLabel(d.label, d.maxLabelChars)
       const betaFontSize = Math.max(8, d.fontSize - 1)
-      const showBetaInNode = d.betaDisplay && (!shouldDeclutter || d.depth <= 1)
+
+      // In sim mode: show % change instead of beta
+      const simPct = simMode && simEffects ? simEffects.get(d.id) : undefined
+      const hasSimPct = simPct !== undefined && Math.abs(simPct) > 0.001
+      const showBetaInNode = hasSimPct
+        ? true  // Always show % change in sim mode
+        : (d.betaDisplay && (!shouldDeclutter || d.depth <= 1))
+      // Format % change: cap display at ±999%, use integer for large values
+      const formatSimPct = (pct: number): string => {
+        const sign = pct >= 0 ? '+' : ''
+        const clamped = Math.max(-999, Math.min(999, pct))
+        const suffix = Math.abs(pct) > 999 ? '' : ''
+        if (Math.abs(clamped) >= 10) return `${sign}${Math.round(clamped)}%${suffix}`
+        return `${sign}${clamped.toFixed(1)}%${suffix}`
+      }
+      const secondLineText = hasSimPct
+        ? formatSimPct(simPct)
+        : (d.betaDisplay ? `β = ${d.betaDisplay}` : '')
+      const secondLineColor = hasSimPct
+        ? (simPct >= 0 ? '#4CAF50' : '#F44336')
+        : d.betaColor
 
       // Create text group for fade animation
       const textGroup = nodeGroup.append('g').attr('class', 'text-content')
@@ -1008,8 +1076,8 @@ export function LocalView({
         .attr('pointer-events', 'none')
         .text(truncatedLabel)
 
-      // Beta value
-      if (showBetaInNode) {
+      // Second line: beta value or % change
+      if (showBetaInNode && secondLineText) {
         textGroup.append('text')
           .attr('x', 0)
           .attr('y', 10)
@@ -1017,9 +1085,9 @@ export function LocalView({
           .attr('dominant-baseline', 'middle')
           .attr('font-size', betaFontSize)
           .attr('font-weight', 600)
-          .attr('fill', d.betaColor)
+          .attr('fill', secondLineColor)
           .attr('pointer-events', 'none')
-          .text(`β = ${d.betaDisplay}`)
+          .text(secondLineText)
       }
 
       // Animate text fade in for entering nodes
@@ -1083,6 +1151,29 @@ export function LocalView({
             .style('filter', 'blur(3px)')
             .attr('pointer-events', 'none')
         }
+      }
+
+      // Sim mode: pulsing cyan glow around intervention (target) nodes — persists entire sim
+      if (simMode && d.isTarget) {
+        const glowPad = 3
+        nodeGroup.insert('rect', ':first-child')
+          .attr('x', -d.width / 2 - glowPad)
+          .attr('y', -d.height / 2 - glowPad)
+          .attr('width', d.width + glowPad * 2)
+          .attr('height', d.height + glowPad * 2)
+          .attr('rx', 8)
+          .attr('ry', 8)
+          .attr('fill', 'none')
+          .attr('stroke', '#00E5FF')
+          .attr('stroke-width', 2.5)
+          .attr('opacity', 0)
+          .style('filter', 'blur(3px)')
+          .style('pointer-events', 'none')
+          .style('animation', 'intervention-pulse 2s ease-in-out infinite')
+          .transition()
+          .duration(600)
+          .ease(d3.easeCubicOut)
+          .attr('opacity', 0.8)
       }
 
       // Remove button for targets
@@ -1156,10 +1247,10 @@ export function LocalView({
     })
     prevNodeDimsRef.current = newNodeDimsMap
 
-  }, [layout, dimensions, targetIds, betaThreshold, onRemoveTarget, onNavigateToNode, showGlow, toggleInputExpand, toggleOutputExpand])
+  }, [layout, dimensions, targetIds, betaThreshold, onRemoveTarget, onNavigateToNode, showGlow, toggleInputExpand, toggleOutputExpand, simMode, simEffects])
 
-  // Empty state - no targets selected
-  if (targetIds.length === 0) {
+  // Empty state - no targets selected (skip if simData has targets)
+  if (targetIds.length === 0 && !simData) {
     return (
       <div
         ref={containerRef}
@@ -1202,8 +1293,8 @@ export function LocalView({
     )
   }
 
-  // Empty mode - targets exist but no causal edges found
-  if (localViewData?.mode === 'empty') {
+  // Empty mode - targets exist but no causal edges found (skip in sim mode — show target with pulse)
+  if (localViewData?.mode === 'empty' && !simMode) {
     const firstTarget = nodeById.get(targetIds[0])
     const targetLabel = firstTarget?.label.replace(/_/g, ' ') || 'Selected node'
     const hasChildren = firstTarget?.children && firstTarget.children.length > 0
@@ -1417,8 +1508,18 @@ export function LocalView({
           fontSize: 11
         }}
       >
-        {/* Layer Controls (like Global View's ring expand/collapse) */}
-        {(() => {
+        {/* Simulation mode label */}
+        {simMode && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <span style={{ fontWeight: 600, color: '#333' }}>Simulation Results</span>
+            {simPlaybackActive && (
+              <span style={{ fontSize: 10, color: '#39FF14', fontWeight: 500 }}>LIVE</span>
+            )}
+          </div>
+        )}
+
+        {/* Layer Controls (like Global View's ring expand/collapse) — hidden in sim mode */}
+        {!simMode && (() => {
           // Compute current state for button enable/disable
           const inputMaxDepth = localViewData ? Math.max(...localViewData.inputs.map(n => n.depth), 0) : 0
           const outputMaxDepth = localViewData ? Math.max(...localViewData.outputs.map(n => n.depth), 0) : 0
@@ -1496,67 +1597,69 @@ export function LocalView({
           )
         })()}
 
-        {/* Beta Threshold with +/- buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 6 }}>
-          <span style={{ color: '#666', whiteSpace: 'nowrap', fontSize: 11 }}>β ≥ {betaThreshold.toFixed(2)}</span>
-          {/* Decrease min bound */}
-          <button
-            onClick={() => {
-              const decrement = betaRange.step * 2
-              const newMin = Math.max(0, sliderMin - decrement)
-              setSliderMin(Math.round(newMin * 100) / 100)
-            }}
-            disabled={sliderMin <= 0}
-            style={{
-              width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
-              cursor: sliderMin <= 0 ? 'not-allowed' : 'pointer',
-              border: '1px solid #ccc', borderRadius: 2,
-              background: sliderMin <= 0 ? '#f5f5f5' : 'white',
-              color: sliderMin <= 0 ? '#ccc' : '#666'
-            }}
-            title="Decrease min"
-          >−</button>
-          <span style={{ fontSize: 10, color: '#999', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
-          <input
-            type="range"
-            min={sliderMin}
-            max={sliderMax}
-            step={betaRange.step}
-            value={Math.min(Math.max(betaThreshold, sliderMin), sliderMax)}
-            onChange={(e) => onBetaThresholdChange(parseFloat(e.target.value))}
-            onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
-            style={{ width: 70, cursor: 'grab' }}
-          />
-          <span style={{ fontSize: 10, color: '#999', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
-          {/* Increase max bound */}
-          <button
-            onClick={() => {
-              const increment = betaRange.step * 2
-              const newMax = sliderMax + increment
-              setSliderMax(Math.round(newMax * 100) / 100)
-            }}
-            style={{
-              width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
-              cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
-              background: 'white', color: '#666'
-            }}
-            title="Increase max"
-          >+</button>
-          {/* Reset to auto-calculated range */}
-          <button
-            onClick={() => {
-              setSliderMin(betaRange.min)
-              setSliderMax(Math.max(betaRange.max, 1))
-              onBetaThresholdChange(calculateOptimalThreshold)
-            }}
-            style={{
-              width: 14, height: 14, padding: 0, fontSize: 9, lineHeight: 1,
-              cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
-              background: 'white', color: '#888'
-            }}
-            title="Reset"
-          >↺</button>
-        </div>
+        {/* Beta Threshold with +/- buttons — hidden in sim mode */}
+        {!simMode && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 6 }}>
+            <span style={{ color: '#666', whiteSpace: 'nowrap', fontSize: 11 }}>β ≥ {betaThreshold.toFixed(2)}</span>
+            {/* Decrease min bound */}
+            <button
+              onClick={() => {
+                const decrement = betaRange.step * 2
+                const newMin = Math.max(0, sliderMin - decrement)
+                setSliderMin(Math.round(newMin * 100) / 100)
+              }}
+              disabled={sliderMin <= 0}
+              style={{
+                width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
+                cursor: sliderMin <= 0 ? 'not-allowed' : 'pointer',
+                border: '1px solid #ccc', borderRadius: 2,
+                background: sliderMin <= 0 ? '#f5f5f5' : 'white',
+                color: sliderMin <= 0 ? '#ccc' : '#666'
+              }}
+              title="Decrease min"
+            >−</button>
+            <span style={{ fontSize: 10, color: '#999', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
+            <input
+              type="range"
+              min={sliderMin}
+              max={sliderMax}
+              step={betaRange.step}
+              value={Math.min(Math.max(betaThreshold, sliderMin), sliderMax)}
+              onChange={(e) => onBetaThresholdChange(parseFloat(e.target.value))}
+              onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+              style={{ width: 70, cursor: 'grab' }}
+            />
+            <span style={{ fontSize: 10, color: '#999', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
+            {/* Increase max bound */}
+            <button
+              onClick={() => {
+                const increment = betaRange.step * 2
+                const newMax = sliderMax + increment
+                setSliderMax(Math.round(newMax * 100) / 100)
+              }}
+              style={{
+                width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
+                cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+                background: 'white', color: '#666'
+              }}
+              title="Increase max"
+            >+</button>
+            {/* Reset to auto-calculated range */}
+            <button
+              onClick={() => {
+                setSliderMin(betaRange.min)
+                setSliderMax(Math.max(betaRange.max, 1))
+                onBetaThresholdChange(calculateOptimalThreshold)
+              }}
+              style={{
+                width: 14, height: 14, padding: 0, fontSize: 9, lineHeight: 1,
+                cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+                background: 'white', color: '#888'
+              }}
+              title="Reset"
+            >↺</button>
+          </div>
+        )}
 
         {/* Stats + Clear */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1628,6 +1731,28 @@ export function LocalView({
               β = {hoveredNode.beta >= 0 ? '+' : ''}{hoveredNode.beta.toFixed(3)}
             </div>
           )}
+          {/* Simulation effect display */}
+          {simMode && simEffects && (() => {
+            const pct = simEffects.get(hoveredNode.id)
+            if (pct === undefined) return null
+            const color = pct >= 0 ? '#39FF14' : '#FF1744'
+            return (
+              <div style={{
+                fontSize: 11, marginTop: 6, padding: '4px 8px',
+                background: '#1a1a2e', borderRadius: 4,
+                borderLeft: `3px solid ${color}`
+              }}>
+                <div style={{ fontWeight: 600, color, fontSize: 13 }}>
+                  {pct >= 0 ? '+' : ''}{Math.abs(pct) >= 10 ? Math.round(pct) : pct.toFixed(2)}% simulated
+                </div>
+                {currentYear && (
+                  <div style={{ color: '#aaa', fontSize: 10, marginTop: 2 }}>
+                    Year {currentYear}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           {/* CI bounds and uncertainty metrics */}
           {(() => {
             const ciData = ciCache?.get(hoveredNode.id)

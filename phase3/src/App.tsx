@@ -22,7 +22,7 @@ import { LocalView } from './components/LocalView'
 import { CountrySelector, SimulationPanel, TimelinePlayer, DataQualityPanel } from './components/simulation'
 import { useSimulationStore, useIsPanelOpen } from './stores/simulationStore'
 import { simulationAPI, type CountryGraphEdge } from './services/api'
-import { getCausalEdges, countryGraphToRawEdges } from './utils/causalEdges'
+import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData } from './utils/causalEdges'
 import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
 import { SIM_MS_PER_YEAR } from './constants/time'
 import {
@@ -32,7 +32,8 @@ import {
   resolveOverlaps,
   type LayoutConfig,
   type LayoutNode,
-  type TextConfig
+  type TextConfig,
+  type CausalLayoutHint
 } from './layouts/RadialLayout'
 import {
   ViewportAwareLayout,
@@ -263,6 +264,7 @@ function App() {
   const recentSearchesTimeoutRef = useRef<number | null>(null)
   const [highlightedPath, setHighlightedPath] = useState<Set<string>>(new Set())
   const [highlightedTarget, setHighlightedTarget] = useState<string | null>(null)  // The searched node itself
+  const [highlightSource, setHighlightSource] = useState<'search' | 'sim'>('search')
 
   // View mode state (Global vs Local)
   const [viewMode, setViewMode] = useState<ViewMode>('global')
@@ -310,9 +312,33 @@ function App() {
     isPlaying,
     setPlaybackMode,
     layoutReady,
-    setLayoutReady
+    setLayoutReady,
+    highlightedIndicator,
+    setHighlightedIndicator
   } = useSimulationStore()
   const isPanelOpen = useIsPanelOpen()
+
+  // Sync highlighted indicator from results table → graph highlight (single node, no expansion)
+  useEffect(() => {
+    if (highlightedIndicator) {
+      setHighlightedPath(new Set([highlightedIndicator]))
+      setHighlightedTarget(highlightedIndicator)
+      setHighlightSource('sim')
+    } else {
+      // Only clear if the current highlight is from sim (don't clobber search highlights)
+      if (highlightSource === 'sim') {
+        setHighlightedPath(new Set())
+        setHighlightedTarget(null)
+      }
+    }
+  }, [highlightedIndicator])
+
+  // Clear indicator highlight when panel closes or results cleared
+  useEffect(() => {
+    if (!isPanelOpen || !temporalResults) {
+      setHighlightedIndicator(null)
+    }
+  }, [isPanelOpen, temporalResults, setHighlightedIndicator])
 
   // Load all classifications once at startup (cached for other features)
   useEffect(() => {
@@ -1335,6 +1361,34 @@ function App() {
     playbackStartedRef.current = false
   }, [temporalResults])
 
+  // When timeline resets to year 0, collapse back to intervention-only view
+  useEffect(() => {
+    if (playbackMode !== 'simulation' || !temporalResults) return
+    if (currentYearIndex === 0 && !isPlaying) {
+      playbackStartedRef.current = false
+      everAffectedRef.current = new Set()
+      lastSeenYearRef.current = new Map()
+      // Re-pin just interventions (trigger the auto-expand effect)
+      const interventionIds = storeInterventions.filter(i => i.indicator).map(i => i.indicator!)
+      if (interventionIds.length > 0 && rawData) {
+        const parentOf = new Map<string, string>()
+        for (const n of rawData.nodes) {
+          if (n.parent !== undefined) parentOf.set(String(n.id), String(n.parent))
+        }
+        const pins = new Set<string>()
+        for (const n of rawData.nodes) {
+          if (n.layer <= 1) pins.add(String(n.id))
+        }
+        for (const id of interventionIds) {
+          pins.add(id)
+          let cur = parentOf.get(id)
+          while (cur) { pins.add(cur); cur = parentOf.get(cur) }
+        }
+        setPinnedPaths(pins)
+      }
+    }
+  }, [currentYearIndex, isPlaying, playbackMode, temporalResults, storeInterventions, rawData])
+
   useEffect(() => {
     if (playbackMode !== 'simulation' || !temporalResults?.effects || !rawData) return
     if (storeInterventions.length === 0) return
@@ -1469,6 +1523,7 @@ function App() {
       setPinnedPaths(new Set())
       everAffectedRef.current = new Set()
       lastSeenYearRef.current = new Map()
+      playbackStartedRef.current = false
       // Expand root so ring 1 (domains) is visible instead of just the QoL node
       const rootNode = allNodes.find(n => n.ring === 0)
       if (rootNode) {
@@ -1476,6 +1531,156 @@ function App() {
       }
     }
   }, [isPanelOpen, playbackMode, setPlaybackMode, allNodes])
+
+  // ============================================
+  // Simulation in Local View
+  // ============================================
+
+  // Determine if local view should show simulation data
+  const localViewSimMode = !!(temporalResults?.causal_paths) && isPanelOpen
+
+  // Build sim data for local view
+  const simLocalViewData = useMemo(() => {
+    if (!localViewSimMode || !temporalResults?.causal_paths || !rawData) return null
+
+    // Get intervention indicator IDs
+    const interventionIds = storeInterventions
+      .filter(i => i.indicator)
+      .map(i => i.indicator!)
+    if (interventionIds.length === 0) return null
+
+    // At base year with playback not yet started: show only intervention targets
+    if (!playbackStartedRef.current) {
+      return buildSimLocalViewData(
+        interventionIds,
+        temporalResults.causal_paths,
+        {},  // No effects → targets only
+        new Set<string>(),
+        nodeByIdMap,
+        DOMAIN_COLORS
+      )
+    }
+
+    const simYear = temporalResults.base_year + currentYearIndex
+    const yearEffects = temporalResults.effects[String(simYear)]
+    if (!yearEffects) {
+      // No effects for this year — show targets only
+      return buildSimLocalViewData(
+        interventionIds,
+        temporalResults.causal_paths,
+        {},
+        new Set<string>(),
+        nodeByIdMap,
+        DOMAIN_COLORS
+      )
+    }
+
+    // Filter to top N effects — cap at 10 for local view (layout gets crowded beyond that)
+    const LOCAL_VIEW_MAX_EFFECTS = 10
+    const allEffects = Object.entries(yearEffects)
+      .filter(([, e]) => Math.abs(e.percent_change) > 0.01)
+      .sort((a, b) => Math.abs(b[1].percent_change) - Math.abs(a[1].percent_change))
+
+    const pctCount = allEffects.length > 1 && effectFilterPct < 1
+      ? Math.max(1, Math.round(allEffects.length * effectFilterPct))
+      : allEffects.length
+    const keepCount = Math.min(pctCount, LOCAL_VIEW_MAX_EFFECTS)
+
+    const topIds = new Set(allEffects.slice(0, keepCount).map(([id]) => id))
+
+    // Build filtered yearEffects (only top N)
+    const filteredEffects: Record<string, typeof yearEffects[string]> = {}
+    for (const id of topIds) {
+      filteredEffects[id] = yearEffects[id]
+    }
+
+    // Use only current year's filtered IDs (no progressive accumulation —
+    // the local view re-layouts per year, so accumulation just adds clutter)
+    return buildSimLocalViewData(
+      interventionIds,
+      temporalResults.causal_paths,
+      filteredEffects,
+      topIds,
+      nodeByIdMap,
+      DOMAIN_COLORS
+    )
+  }, [localViewSimMode, temporalResults, currentYearIndex, storeInterventions, nodeByIdMap, rawData, effectFilterPct, isPlaying])
+
+  // Build simEffects map for local view coloring (nodeId → percent_change for current year)
+  const simLocalEffects = useMemo(() => {
+    if (!localViewSimMode || !temporalResults?.effects) return undefined
+
+    const simYear = temporalResults.base_year + currentYearIndex
+    const yearEffects = temporalResults.effects[String(simYear)]
+    if (!yearEffects) return undefined
+
+    const effects = new Map<string, number>()
+    for (const [id, eff] of Object.entries(yearEffects)) {
+      if (Math.abs(eff.percent_change) > 0.001) {
+        effects.set(id, eff.percent_change)
+      }
+    }
+    return effects
+  }, [localViewSimMode, temporalResults, currentYearIndex])
+
+  /**
+   * Pre-computed causal layout hint for angular clustering.
+   * Built once from temporalResults (all years union) + causal_paths.
+   * Passed to computeRadialLayout so affected nodes cluster at 0° and
+   * causally connected siblings are adjacent. Stable across playback —
+   * no re-sorting during animation.
+   */
+  const causalHint = useMemo((): CausalLayoutHint | undefined => {
+    if (!temporalResults?.causal_paths || !rawData) return undefined
+
+    const causalPaths = temporalResults.causal_paths
+
+    // Build causalAdjacency and hopDistance from causal_paths
+    const causalAdjacency = new Map<string, string>()
+    const hopDistance = new Map<string, number>()
+    for (const [targetId, entry] of Object.entries(causalPaths)) {
+      hopDistance.set(targetId, entry.hop)
+      if (entry.source && entry.hop > 0) {
+        causalAdjacency.set(targetId, entry.source)
+      }
+    }
+
+    // Also include all affected nodes across ALL years to get the full set
+    if (temporalResults.effects) {
+      for (const yearEffects of Object.values(temporalResults.effects)) {
+        for (const [id, effect] of Object.entries(yearEffects)) {
+          if (Math.abs(effect.percent_change) > 0.01 && !hopDistance.has(id)) {
+            // Affected but not in causal_paths (shouldn't happen, but defensive)
+            hopDistance.set(id, 99)
+          }
+        }
+      }
+    }
+
+    // Find Ring 1 outcomes that contain affected descendants
+    const parentOf = new Map<string, string>()
+    const layerOf = new Map<string, number>()
+    for (const n of rawData.nodes) {
+      layerOf.set(String(n.id), n.layer)
+      if (n.parent !== undefined) parentOf.set(String(n.id), String(n.parent))
+    }
+
+    const anchorOutcomes = new Set<string>()
+    // Walk each affected node up to its Ring 1 ancestor
+    for (const id of hopDistance.keys()) {
+      let cur: string | undefined = id
+      while (cur) {
+        const layer = layerOf.get(cur)
+        if (layer === 1) {
+          anchorOutcomes.add(cur)
+          break
+        }
+        cur = parentOf.get(cur)
+      }
+    }
+
+    return { anchorOutcomes, causalAdjacency, hopDistance }
+  }, [temporalResults, rawData])
 
   // Compute visible nodes based on expansion state and pinned paths
   const visibleNodes = useMemo(() => {
@@ -1676,8 +1881,8 @@ function App() {
     const centerX = (boundsMinX + boundsMaxX) / 2
     const centerY = (boundsMinY + boundsMaxY) / 2
 
-    // Calculate scale to fit with padding
-    const padding = 0.1
+    // Calculate scale to fit with padding (extra margin so labels aren't clipped)
+    const padding = 0.15
     const scaleX = width * (1 - 2 * padding) / Math.max(boundsWidth, 1)
     const scaleY = height * (1 - 2 * padding) / Math.max(boundsHeight, 1)
     const fitScale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
@@ -1689,6 +1894,20 @@ function App() {
     svg.transition().duration(300).call(zoomRef.current.transform, newTransform)
     currentTransformRef.current = newTransform
   }, [visibleNodes, viewMode, splitRatio])
+
+  // Auto-zoom when sim causes visible node count to change (new effects cascading in)
+  const prevSimVisibleCountRef = useRef(0)
+  useEffect(() => {
+    if (!temporalResults || !isPanelOpen) {
+      prevSimVisibleCountRef.current = 0
+      return
+    }
+    const count = visibleNodes.length
+    if (prevSimVisibleCountRef.current > 0 && count !== prevSimVisibleCountRef.current) {
+      fitToVisibleNodes()
+    }
+    prevSimVisibleCountRef.current = count
+  }, [visibleNodes.length, temporalResults, isPanelOpen, fitToVisibleNodes])
 
   // Keyboard shortcuts for reset view (R or Home) and view switching (G, L, S)
   useEffect(() => {
@@ -1704,14 +1923,14 @@ function App() {
         setViewMode('global')
       } else if (e.key === 'l' || e.key === 'L') {
         e.preventDefault()
-        // Only switch to local if there are targets
-        if (localViewTargets.length > 0) {
+        // Switch to local if there are targets or sim mode is active
+        if (localViewTargets.length > 0 || localViewSimMode) {
           setViewMode('local')
         }
       } else if (e.key === 's' || e.key === 'S') {
         e.preventDefault()
-        // Only switch to split if there are targets
-        if (localViewTargets.length > 0) {
+        // Switch to split if there are targets or sim mode is active
+        if (localViewTargets.length > 0 || localViewSimMode) {
           setViewMode('split')
         }
       }
@@ -1838,6 +2057,7 @@ function App() {
     setTimeout(() => {
       setHighlightedPath(highlightPath)
       setHighlightedTarget(node.id)  // Track which node is the actual search target
+      setHighlightSource('search')
     }, 350)
   }, [getPathToNode, searchableNodes])
 
@@ -1880,6 +2100,7 @@ function App() {
     setTimeout(() => {
       setHighlightedPath(highlightPath)
       setHighlightedTarget(nodeId)
+      setHighlightSource('search')
     }, 350)
   }, [getPathToNode, searchableNodes])
 
@@ -2123,7 +2344,9 @@ function App() {
       spacingScaleFactor: 0.3,  // Scale factor remains constant
       maxSpacing: currentLayoutValues.maxSpacing,
       // Pass text config for text-aware spacing
-      textConfig
+      textConfig,
+      // Pass causal hints for angular clustering during simulation
+      causalHint: playbackMode === 'simulation' ? causalHint : undefined
     }
 
     // Compute layout using ring-independent angular positioning algorithm
@@ -2193,6 +2416,8 @@ function App() {
     const width = viewMode === 'split' ? window.innerWidth * splitRatio : window.innerWidth
     const height = window.innerHeight
     svg.attr('width', width).attr('height', height)
+
+
 
     // Get or create persistent container with layered groups for z-ordering
     let g = svg.select<SVGGElement>('g.graph-container')
@@ -2402,24 +2627,8 @@ function App() {
       if (viewMode !== 'global' && viewMode !== 'split') return domainColor
       if (!temporalResults || interventionNodeIds.has(n.id)) return domainColor
 
-      const eff = simEffectLookup.get(n.id)
-      if (!eff || !eff.isLeaf) return domainColor  // Only leaves get colored
-
-      // Neon simulation colors — distinct from domain greens/reds:
-      //   Economic=#4CAF50 (muted green), Security=#F44336 (muted red)
-      //   Neon positive=#39FF14 (lime), Neon negative=#FF1744 (neon red)
-      const absPct = Math.abs(eff.pct)
-      if (absPct < 0.01) return domainColor
-
-      // Simulation playback visuals activate once this run has started.
-      // Keep fill active while paused/scrubbing so year scrubs are immediate.
-      if (!simPlaybackActive) return domainColor
-
-      // Dynamic intensity: sqrt curve so small effects are visible, large ones saturate
-      // At 5% change → 0.45, 20% → 0.63, 50%+ → 1.0
-      const t = Math.min(1, Math.sqrt(absPct / 50))
-      const neonTarget = eff.pct >= 0 ? '#39FF14' : '#FF1744'
-      return d3.interpolateRgb(domainColor, neonTarget)(0.3 + t * 0.7)
+      // Leaf nodes stay domain color — edge ripples + node flash glows signal effects
+      return domainColor
     }
 
     // Node sizing uses importance (0-1) mapped to area
@@ -2522,11 +2731,11 @@ function App() {
      * Ineligible parents get no border (subtle glow handled separately).
      */
     // Simulation fill mode remains active once playback has started for this run.
-    // This keeps scrubbing responsive even when paused.
+    // This keeps scrubbing responsive even when paused (once playback has started).
     const simPlaybackActive =
       playbackMode === 'simulation' &&
       isPanelOpen &&
-      playbackStartedRef.current
+      isPlaying
 
     const getSimBorder = (node: ExpandableNode): { color: string; width: number; opacity: number } | null => {
       if (simPlaybackActive) return null  // During playback/scrub: fill, not borders
@@ -2728,7 +2937,9 @@ function App() {
     const glowRotationDelay = isCollapsing ? collapseRotationDelay : 0
     const expandGlowDelay = hasRotation ? expandEnterDelay + enterExitDuration : enterExitDuration
 
-    // === GLOW CIRCLES for search highlight ===
+    // === GLOW CIRCLES for search/sim highlight ===
+    const glowColorTarget = highlightSource === 'sim' ? '#FF9800' : '#D32F2F'
+    const glowColorParent = highlightSource === 'sim' ? '#FFE0B2' : '#FFCDD2'
     const highlightedNodes = visibleNodes.filter(n => highlightedPath.has(n.id))
     const glowSelection = glowLayer.selectAll<SVGCircleElement, ExpandableNode>('circle.glow')
       .data(highlightedNodes, d => d.id)
@@ -2747,7 +2958,7 @@ function App() {
         .attr('cx', d.x)
         .attr('cy', d.y)
         .attr('r', getSize(d) + 3)
-        .attr('stroke', isTarget ? '#D32F2F' : '#FFCDD2')  // Dark red for target, light pink for parents
+        .attr('stroke', isTarget ? glowColorTarget : glowColorParent)
         .attr('stroke-width', 3)
         .attr('opacity', 0.5)
     })
@@ -2759,7 +2970,7 @@ function App() {
         const glowEl = d3.select(this)
         const nodeEl = nodesLayer.select<SVGCircleElement>(`circle.node[data-id="${d.id}"]`)
         const isTarget = d.id === highlightedTarget
-        const glowColor = isTarget ? '#D32F2F' : '#FFCDD2'
+        const glowColor = isTarget ? glowColorTarget : glowColorParent
 
         if (!nodeEl.empty()) {
           const nodeCx = parseFloat(nodeEl.attr('cx') || '0')
@@ -2831,7 +3042,7 @@ function App() {
       })
       .attr('r', d => getSize(d) + 3)
       .attr('fill', 'none')
-      .attr('stroke', d => d.id === highlightedTarget ? '#D32F2F' : '#FFCDD2')  // Dark red for target, light pink for parents
+      .attr('stroke', d => d.id === highlightedTarget ? glowColorTarget : glowColorParent)
       .attr('stroke-width', 3)
       .attr('opacity', 0)  // Start hidden
       .style('filter', 'blur(2px)')
@@ -3132,6 +3343,25 @@ function App() {
         .attr('opacity', 0.35)
     }
 
+    // === Hop distance from intervention (shared by flash nodes + edge pulse) ===
+    // BFS on visible edges — ring compression makes ring values unreliable
+    const hopFromIntervention = new Map<string, number>()
+    for (const id of interventionNodeIds) hopFromIntervention.set(id, 0)
+    let hopBfsChanged = true
+    while (hopBfsChanged) {
+      hopBfsChanged = false
+      for (const e of visibleEdges) {
+        for (const [a, b] of [[e.sourceId, e.targetId], [e.targetId, e.sourceId]] as const) {
+          const aHop = hopFromIntervention.get(a)
+          if (aHop !== undefined && !hopFromIntervention.has(b)) {
+            hopFromIntervention.set(b, aHop + 1)
+            hopBfsChanged = true
+          }
+        }
+      }
+    }
+    const simMaxHop = Math.max(1, ...Array.from(hopFromIntervention.values()))
+
     // === SIMULATION: intervention node glow + affected node borders ===
     // Affected nodes use direct stroke on circle.node (via getSimBorder).
     // Intervention nodes get a dedicated glow ring on the sim glow layer.
@@ -3150,26 +3380,26 @@ function App() {
       simGlowSelection
         .attr('cx', d => d.x)
         .attr('cy', d => d.y)
-        .attr('r', d => getSize(d) + 4)
+        .attr('r', d => getSize(d) + 3)
 
-      // Enter new — with breathing pulse animation
+      // Enter new — cyan glow pulse (persists entire sim state)
       simGlowSelection.enter()
         .append('circle')
         .attr('class', 'glow-sim')
         .attr('cx', d => d.x)
         .attr('cy', d => d.y)
-        .attr('r', d => getSize(d) + 4)
+        .attr('r', d => getSize(d) + 3)
         .attr('fill', 'none')
         .attr('stroke', '#00E5FF')
         .attr('stroke-width', 2.5)
         .attr('opacity', 0)
-        .style('filter', 'blur(4px)')
+        .style('filter', 'blur(3px)')
         .style('pointer-events', 'none')
         .style('animation', `intervention-pulse ${SIM_MS_PER_YEAR}ms ease-in-out infinite`)
         .transition()
         .duration(600)
         .ease(d3.easeCubicOut)
-        .attr('opacity', 0.7)
+        .attr('opacity', 0.8)
 
       // Subtle glow for ineligible parent nodes (weak effect, didn't pass gating)
       const ineligibleGlowNodes = visibleNodes.filter(n => {
@@ -3211,6 +3441,61 @@ function App() {
           const g = getSimGlowForIneligible(d)
           return g ? g.opacity : 0
         })
+
+      // Affected node flash — glow red/green when the edge ripple arrives
+      // Only during active playback; synced to hop delay so flash = pulse arrival
+
+      const flashNodes = simPlaybackActive
+        ? visibleNodes.filter(n => {
+            if (interventionNodeIds.has(n.id)) return false
+            const eff = simEffectLookup.get(n.id)
+            if (!eff || Math.abs(eff.pct) < 0.01) return false
+            // Only leaf nodes and parents with visible children
+            if (n.hasChildren && !hasVisibleChild.has(n.id)) return false
+            // Parent nodes only flash if they have meaningful effect (>=1%)
+            if (n.hasChildren && Math.abs(eff.pct) < 1.0) return false
+            return true
+          })
+        : []
+
+      const flashSelection = simGlowLayer
+        .selectAll<SVGCircleElement, ExpandableNode>('circle.glow-sim-flash')
+        .data(flashNodes, d => d.id)
+
+      flashSelection.exit()
+        .transition().duration(200).attr('opacity', 0).remove()
+
+      // Update positions
+      flashSelection
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 1.5)
+
+      // Enter — flash animation timed to edge ripple arrival at this ring
+      flashSelection.enter()
+        .append('circle')
+        .attr('class', 'glow-sim-flash')
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 1.5)
+        .attr('fill', 'none')
+        .attr('stroke', d => {
+          const eff = simEffectLookup.get(d.id)
+          return eff && eff.pct >= 0 ? '#39FF14' : '#FF1744'
+        })
+        .attr('stroke-width', 1.5)
+        .attr('opacity', 0)
+        .style('pointer-events', 'none')
+        .style('animation', d => {
+          const eff = simEffectLookup.get(d.id)
+          const anim = eff && eff.pct >= 0 ? 'sim-node-flash-pos' : 'sim-node-flash-neg'
+          const hop = hopFromIntervention.get(d.id) ?? simMaxHop
+          const delay = hop * 120
+          return `${anim} ${SIM_MS_PER_YEAR}ms ease-out ${delay}ms infinite`
+        })
+        .transition()
+        .duration(300)
+        .attr('opacity', 1)
     }
 
     // === EDGES with enter/update/exit ===
@@ -3301,6 +3586,67 @@ function App() {
       .attr('x2', d => nodeMap.get(d.targetId)?.x || 0)
       .attr('y2', d => nodeMap.get(d.targetId)?.y || 0)
       .attr('stroke-opacity', d => vLayout.getEdgeOpacity(d.sourceRing))
+
+    // === SIMULATION EDGE PULSE — cyan ripple along hierarchical edges during playback ===
+    {
+      // Only show during sim playback when panel is open
+      const showSimPulse = simPlaybackActive && pinnedPaths.size > 0
+
+      // Filter edges: both endpoints must be pinned (on a sim path).
+      // Skip edges TO ring-1 nodes that have no visible children (dead-end domains).
+      const pulseEdges = showSimPulse
+        ? visibleEdges.filter(e => {
+            if (!pinnedPaths.has(e.sourceId) || !pinnedPaths.has(e.targetId)) return false
+            // Skip ring-1 target nodes without visible children
+            if (e.targetRing === 1 && !hasVisibleChild.has(e.targetId)) return false
+            return true
+          })
+        : []
+
+      const pulseKey = (d: StructuralEdge) => `pulse-${d.sourceId}-${d.targetId}`
+      const pulseSelection = edgesLayer
+        .selectAll<SVGLineElement, StructuralEdge>('line.edge-sim-pulse')
+        .data(pulseEdges, pulseKey)
+
+      // Exit
+      pulseSelection.exit()
+        .transition().duration(300).attr('stroke-opacity', 0).remove()
+
+      // Update positions
+      pulseSelection
+        .attr('x1', d => nodeMap.get(d.sourceId)?.x || 0)
+        .attr('y1', d => nodeMap.get(d.sourceId)?.y || 0)
+        .attr('x2', d => nodeMap.get(d.targetId)?.x || 0)
+        .attr('y2', d => nodeMap.get(d.targetId)?.y || 0)
+
+      // Edge hop = min hop of its two endpoints (using shared hopFromIntervention map)
+      const edgeHop = (e: StructuralEdge) => {
+        const s = hopFromIntervention.get(e.sourceId) ?? simMaxHop
+        const t = hopFromIntervention.get(e.targetId) ?? simMaxHop
+        return Math.min(s, t)
+      }
+
+      pulseSelection.enter()
+        .append('line')
+        .attr('class', 'edge-sim-pulse')
+        .attr('x1', d => nodeMap.get(d.sourceId)?.x || 0)
+        .attr('y1', d => nodeMap.get(d.sourceId)?.y || 0)
+        .attr('x2', d => nodeMap.get(d.targetId)?.x || 0)
+        .attr('y2', d => nodeMap.get(d.targetId)?.y || 0)
+        .attr('stroke', '#00E5FF')
+        .attr('stroke-width', 0.3)
+        .attr('stroke-opacity', 0.05)
+        .style('pointer-events', 'none')
+        .style('animation', d => {
+          const hop = edgeHop(d)
+          const delay = hop * 120
+          // 3-tier based on actual hop distance from intervention
+          const animName = hop === 0 ? 'sim-edge-ripple-near'
+            : hop <= Math.ceil(simMaxHop / 2) ? 'sim-edge-ripple-mid'
+            : 'sim-edge-ripple-far'
+          return `${animName} ${SIM_MS_PER_YEAR}ms ease-out ${delay}ms infinite`
+        })
+    }
 
     // === NODES with enter/update/exit ===
     const nodeSelection = nodesLayer.selectAll<SVGCircleElement, ExpandableNode>('circle.node')
@@ -3955,7 +4301,7 @@ function App() {
       layoutReadyTimerRef.current = null
     }
 
-  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio, temporalResults, currentYear, historicalTimeline, temporalShapTimeline, stratifiedShapTimeline, selectedStratum, playbackMode, currentYearIndex, effectiveNodes, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady])
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio, temporalResults, currentYear, historicalTimeline, temporalShapTimeline, stratifiedShapTimeline, selectedStratum, playbackMode, currentYearIndex, effectiveNodes, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, causalHint])
 
   // Fetch data once on mount
   useEffect(() => {
@@ -4650,6 +4996,7 @@ function App() {
           onReset={resetView}
           onClear={clearLocalViewTargets}
           onShare={shareCurrentState}
+          simMode={localViewSimMode}
         />
       </div>
 
@@ -4766,6 +5113,10 @@ function App() {
               onResetLocalView={(resetFn) => { localViewResetRef.current = resetFn }}
               ciCache={historicalTimeline?.years[currentYearIndex] ? precomputedCICache.get(historicalTimeline.years[currentYearIndex]) : undefined}
               currentYear={historicalTimeline?.years[currentYearIndex]}
+              simMode={localViewSimMode}
+              simPlaybackActive={playbackMode === 'simulation' && isPlaying}
+              simEffects={simLocalEffects}
+              simData={simLocalViewData}
             />
           )}
         </div>
@@ -4850,6 +5201,31 @@ function App() {
                 <span style={{ color: '#888' }}>{currentYear}</span>
               )}
             </div>
+
+            {/* Simulation effect (visible during sim state: playback, pause, or after finish) */}
+            {temporalResults && isPanelOpen && (() => {
+              const eff = aggregateEffects.get(String(displayNode.id))
+              if (!eff) return null
+              const color = eff.pct >= 0 ? '#39FF14' : '#FF1744'
+              const simYear = temporalResults.base_year + currentYearIndex
+              return (
+                <div style={{
+                  fontSize: 11, marginTop: 6, padding: '4px 8px',
+                  background: '#1a1a2e', borderRadius: 4,
+                  borderLeft: `3px solid ${color}`
+                }}>
+                  <div style={{ fontWeight: 600, color, fontSize: 13 }}>
+                    {eff.pct >= 0 ? '+' : ''}{Math.abs(eff.pct) >= 10 ? Math.round(eff.pct) : eff.pct.toFixed(2)}% simulated
+                  </div>
+                  <div style={{ color: '#aaa', fontSize: 10, marginTop: 2 }}>
+                    Year {simYear}
+                    {!eff.isLeaf && eff.coverage < 1 && (
+                      <span> · {Math.round(eff.coverage * 100)}% of children affected</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Node description */}
             {displayNode.description && (

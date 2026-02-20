@@ -436,7 +436,8 @@ function computeHorizontalLayout(
   vPad: number,
   minScale: number,
   maxScale: number,
-  declutterThreshold: number
+  declutterThreshold: number,
+  forceShowBeta?: boolean
 ): LocalViewLayoutResult {
   const positionedNodes: PositionedLocalNode[] = []
   const targetIds = targets.map(t => t.id)
@@ -448,7 +449,7 @@ function computeHorizontalLayout(
   const totalNodes = allNodes.length
 
   for (const node of allNodes) {
-    const showBeta = shouldShowBeta(node, totalNodes, declutterThreshold, false) // horizontal layout
+    const showBeta = shouldShowBeta(node, totalNodes, declutterThreshold, false, !!forceShowBeta)
     const dims = getNodeDimensions(node, minBeta, maxBeta, hPad, vPad, minScale, maxScale, showBeta)
     nodeDims.set(node.id, dims)
     nodeHeights.set(node.id, dims.height)
@@ -464,27 +465,32 @@ function computeHorizontalLayout(
     nodeMap.set(node.id, node)
   }
 
+  // Derive spacing from average node height (~30% of avg height, min 6, max NODE_SPACING)
+  const heights = Array.from(nodeHeights.values())
+  const avgHeight = heights.length > 0 ? heights.reduce((a, b) => a + b, 0) / heights.length : 40
+  const nodeSpacing = Math.max(6, Math.min(NODE_SPACING, avgHeight * 0.3))
+
   // Position targets close together at center
   const targetWidth = getMaxColumnWidth(targets, minBeta, maxBeta, hPad, vPad, minScale, maxScale)
 
   // Calculate heights for targets (close together) and subtrees (spread out)
   const targetHeights: number[] = targets.map(t => nodeHeights.get(t.id) || 40)
   const inputSubtreeHeights: number[] = targets.map(t =>
-    calculateSubtreeHeight(t.id, inputTree, nodeHeights, NODE_SPACING)
+    calculateSubtreeHeight(t.id, inputTree, nodeHeights, nodeSpacing)
   )
   const outputSubtreeHeights: number[] = targets.map(t =>
-    calculateSubtreeHeight(t.id, outputTree, nodeHeights, NODE_SPACING)
+    calculateSubtreeHeight(t.id, outputTree, nodeHeights, nodeSpacing)
   )
 
   // Total height for targets (close together with small spacing)
   const totalTargetHeight = targetHeights.reduce((sum, h) => sum + h, 0) +
-    (targets.length - 1) * NODE_SPACING
+    (targets.length - 1) * nodeSpacing
 
   // Total height for subtrees (spread out to avoid overlap)
   const totalInputHeight = inputSubtreeHeights.reduce((sum, h) => sum + h, 0) +
-    (targets.length - 1) * NODE_SPACING * 2
+    (targets.length - 1) * nodeSpacing * 2
   const totalOutputHeight = outputSubtreeHeights.reduce((sum, h) => sum + h, 0) +
-    (targets.length - 1) * NODE_SPACING * 2
+    (targets.length - 1) * nodeSpacing * 2
 
   // Position targets close together at center
   let targetY = -totalTargetHeight / 2
@@ -510,7 +516,7 @@ function computeHorizontalLayout(
     }
     positionedNodes.push(positioned)
 
-    targetY += dims.height + NODE_SPACING
+    targetY += dims.height + nodeSpacing
   }
 
   // Position input subtrees (spread out vertically, independent of target Y)
@@ -532,12 +538,12 @@ function computeHorizontalLayout(
       minBeta,
       maxBeta,
       'input',
-      NODE_SPACING,
+      nodeSpacing,
       columnGap,
       'left'
     )
 
-    inputSubtreeY += subtreeHeight + NODE_SPACING * 2
+    inputSubtreeY += subtreeHeight + nodeSpacing * 2
   }
 
   // Position output subtrees (spread out vertically, independent of target Y)
@@ -559,12 +565,12 @@ function computeHorizontalLayout(
       minBeta,
       maxBeta,
       'output',
-      NODE_SPACING,
+      nodeSpacing,
       columnGap,
       'right'
     )
 
-    outputSubtreeY += subtreeHeight + NODE_SPACING * 2
+    outputSubtreeY += subtreeHeight + nodeSpacing * 2
   }
 
   // Calculate bounds
@@ -835,7 +841,8 @@ function computeVerticalLayout(
   vPad: number,
   minScale: number,
   maxScale: number,
-  declutterThreshold: number
+  declutterThreshold: number,
+  forceShowBeta?: boolean
 ): LocalViewLayoutResult {
   const positionedNodes: PositionedLocalNode[] = []
   const targetIds = targets.map(t => t.id)
@@ -847,7 +854,7 @@ function computeVerticalLayout(
   const totalNodes = allNodes.length
 
   for (const node of allNodes) {
-    const showBeta = shouldShowBeta(node, totalNodes, declutterThreshold, true) // vertical layout - always hide beta for depth > 1
+    const showBeta = shouldShowBeta(node, totalNodes, declutterThreshold, true, !!forceShowBeta) // vertical layout - always hide beta for depth > 1
     const dims = getNodeDimensions(node, minBeta, maxBeta, hPad, vPad, minScale, maxScale, showBeta)
     nodeDims.set(node.id, dims)
     nodeWidths.set(node.id, dims.width)
@@ -1054,6 +1061,7 @@ export interface LayoutOptions {
   sizeMinScale: number       // Minimum size scale (0.3-1.0)
   sizeMaxScale: number       // Maximum size scale (1.0-2.5)
   declutterThreshold: number // Hide beta on depth>1 nodes when total nodes exceed this
+  forceShowBeta?: boolean    // Force all non-target nodes to reserve space for second line
 }
 
 const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
@@ -1071,9 +1079,11 @@ const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
  * Determine if a node should show beta text based on declutter rules
  * @param isVertical - In vertical layout, always only show beta for depth 1
  */
-function shouldShowBeta(node: LocalViewNode, totalNodes: number, declutterThreshold: number, isVertical: boolean = false): boolean {
+function shouldShowBeta(node: LocalViewNode, totalNodes: number, declutterThreshold: number, isVertical: boolean = false, forceShowBeta: boolean = false): boolean {
   // Targets never show beta (they have no incoming edge)
   if (node.isTarget) return false
+  // Force mode: all non-target nodes show beta (sim mode needs room for % text)
+  if (forceShowBeta) return true
   // Vertical layout: always only show beta on immediate layers (depth 1)
   if (isVertical) return node.depth <= 1
   // Horizontal: If under threshold, show beta on all nodes
@@ -1109,12 +1119,12 @@ export function computeLocalViewLayout(
   const columnGap = Math.max(30, Math.min(80, containerWidth * 0.04))
 
   if (!isVertical) {
-    return computeHorizontalLayout(targets, inputs, outputs, edges, minBeta, maxBeta, columnGap, opts.horizontalPadding, opts.verticalPadding, opts.sizeMinScale, opts.sizeMaxScale, opts.declutterThreshold)
+    return computeHorizontalLayout(targets, inputs, outputs, edges, minBeta, maxBeta, columnGap, opts.horizontalPadding, opts.verticalPadding, opts.sizeMinScale, opts.sizeMaxScale, opts.declutterThreshold, opts.forceShowBeta)
   } else {
     // Vertical layout uses tighter spacing and more aggressive decluttering
     const rowGap = Math.max(12, Math.min(30, containerHeight * 0.025))
     const verticalDeclutter = Math.min(opts.declutterThreshold, VERTICAL_DECLUTTER_THRESHOLD)
-    return computeVerticalLayout(targets, inputs, outputs, edges, minBeta, maxBeta, rowGap, opts.horizontalPadding, opts.verticalPadding, opts.sizeMinScale, opts.sizeMaxScale, verticalDeclutter)
+    return computeVerticalLayout(targets, inputs, outputs, edges, minBeta, maxBeta, rowGap, opts.horizontalPadding, opts.verticalPadding, opts.sizeMinScale, opts.sizeMaxScale, verticalDeclutter, opts.forceShowBeta)
   }
 }
 
@@ -1166,11 +1176,15 @@ export function calculateEdgePath(
   arrowOffset: number = 0
 ): string {
   if (direction === 'horizontal') {
-    // Horizontal: source right -> target left (Bezier curve)
-    const start = getNodeEdgePoint(sourceNode, 'right')
-    const end = getNodeEdgePoint(targetNode, 'left')
+    // Determine if target is left of source (e.g. sim mode negative effects)
+    const targetIsLeft = targetNode.x < sourceNode.x
+    const startSide = targetIsLeft ? 'left' : 'right'
+    const endSide = targetIsLeft ? 'right' : 'left'
+    const start = getNodeEdgePoint(sourceNode, startSide)
+    const end = getNodeEdgePoint(targetNode, endSide)
     // Shorten path at target end to make room for arrow
-    const adjustedEnd = { x: end.x - arrowOffset, y: end.y }
+    const arrowDir = targetIsLeft ? arrowOffset : -arrowOffset
+    const adjustedEnd = { x: end.x + arrowDir, y: end.y }
     const midX = (start.x + adjustedEnd.x) / 2
     return `M ${start.x} ${start.y} C ${midX} ${start.y}, ${midX} ${adjustedEnd.y}, ${adjustedEnd.x} ${adjustedEnd.y}`
   } else {

@@ -8,7 +8,7 @@
  */
 
 import type { RawEdge, RawNodeV21, LocalViewEdge, LocalViewNode, LocalNodeShape, LocalViewMode, EdgePathway } from '../types'
-import type { CountryGraphEdge } from '../services/api'
+import type { CountryGraphEdge, CausalPathEntry, TemporalEffect } from '../services/api'
 
 /** Default beta threshold for filtering edges */
 export const DEFAULT_BETA_THRESHOLD = 0.5
@@ -884,6 +884,190 @@ export function buildLocalViewData(
     edges: relevantEdges,
     targetRing,
     mode
+  }
+}
+
+/**
+ * Build Local View data from simulation results (causal_paths + year effects).
+ *
+ * Transforms simulation output into the same {targets, inputs, outputs, edges}
+ * structure that the existing `computeLocalViewLayout` expects.
+ *
+ * - **targets** = intervention nodes (center column)
+ * - **outputs** = positive effect nodes (right side, by hop distance)
+ * - **inputs** = negative effect nodes (left side, by hop distance)
+ * - Tree structure derived from `causal_paths[id].source` chains
+ *
+ * @param interventionIds - IDs of the intervention indicator nodes
+ * @param causalPaths - causal_paths from TemporalResults
+ * @param yearEffects - effects[currentYear] from TemporalResults
+ * @param everAffected - set of node IDs that have been affected in any year so far (progressive reveal)
+ * @param nodeById - full node lookup
+ * @param domainColors - domain → hex color mapping
+ */
+export function buildSimLocalViewData(
+  interventionIds: string[],
+  causalPaths: Record<string, CausalPathEntry>,
+  yearEffects: Record<string, TemporalEffect>,
+  everAffected: Set<string>,
+  nodeById: Map<string, RawNodeV21>,
+  domainColors: Record<string, string>
+): {
+  targets: LocalViewNode[]
+  inputs: LocalViewNode[]
+  outputs: LocalViewNode[]
+  edges: LocalViewEdge[]
+  targetRing: number
+  mode: LocalViewMode
+} {
+  const interventionSet = new Set(interventionIds)
+  const targets: LocalViewNode[] = []
+  const inputs: LocalViewNode[] = []
+  const outputs: LocalViewNode[] = []
+  const edges: LocalViewEdge[] = []
+  const includedIds = new Set<string>()
+
+  // Build targets from intervention IDs
+  for (const id of interventionIds) {
+    const rawNode = nodeById.get(id)
+    if (!rawNode) continue
+    includedIds.add(id)
+    const node = toLocalViewNode(rawNode, nodeById, domainColors, 'target', 0, undefined, 1.0, undefined)
+    node.hasMoreInputs = false
+    node.hasMoreOutputs = false
+    node.isInputExpanded = true
+    node.isOutputExpanded = true
+    targets.push(node)
+  }
+
+  // Collect all nodes from everAffected that have causal path info
+  // This includes nodes affected in current year AND nodes from prior years (progressive reveal)
+  const affectedNodes: Array<{
+    id: string
+    hop: number
+    source: string
+    beta: number
+    pctChange: number
+    isCurrentYear: boolean
+  }> = []
+
+  for (const id of everAffected) {
+    if (interventionSet.has(id)) continue // Skip interventions
+    const pathEntry = causalPaths[id]
+    if (!pathEntry || pathEntry.hop === 0) continue
+
+    const currentEffect = yearEffects[id]
+    const pctChange = currentEffect?.percent_change ?? 0
+    affectedNodes.push({
+      id,
+      hop: pathEntry.hop,
+      source: pathEntry.source,
+      beta: pathEntry.beta,
+      pctChange,
+      isCurrentYear: !!currentEffect && Math.abs(currentEffect.percent_change) > 0.001
+    })
+  }
+
+  // Also include bridge nodes (in causal_paths, have source chains, but not directly affected)
+  // These connect intervention → affected leaf through intermediate hops
+  const bridgeNeeded = new Set<string>()
+  for (const node of affectedNodes) {
+    let curId = node.source
+    let depth = 0
+    while (depth < 10) {
+      if (interventionSet.has(curId) || includedIds.has(curId)) break
+      const entry = causalPaths[curId]
+      if (!entry) break
+      bridgeNeeded.add(curId)
+      if (entry.hop === 0 || !entry.source) break
+      curId = entry.source
+      depth++
+    }
+  }
+
+  for (const id of bridgeNeeded) {
+    if (everAffected.has(id) || interventionSet.has(id)) continue
+    const entry = causalPaths[id]
+    if (!entry) continue
+    const currentEffect = yearEffects[id]
+    const pctChange = currentEffect?.percent_change ?? 0
+    affectedNodes.push({
+      id,
+      hop: entry.hop,
+      source: entry.source,
+      beta: entry.beta,
+      pctChange,
+      isCurrentYear: !!currentEffect && Math.abs(currentEffect.percent_change) > 0.001
+    })
+  }
+
+  // Build node list: negative → inputs (left), positive/zero → outputs (right)
+  // Side is determined by CURRENT year's percent_change
+  for (const node of affectedNodes) {
+    if (includedIds.has(node.id)) continue
+    const rawNode = nodeById.get(node.id)
+    if (!rawNode) continue
+    includedIds.add(node.id)
+
+    // Current year effect determines side (left = negative, right = positive)
+    const currentEffect = yearEffects[node.id]
+    const currentPct = currentEffect?.percent_change ?? node.pctChange
+    const role: 'input' | 'output' = currentPct < 0 ? 'input' : 'output'
+    // visualBeta: normalize percent_change to [0.15, 1.0] range for sizing
+    // Use log scale so extreme values (100%+) don't dominate
+    const absPct = Math.abs(currentPct)
+    const visualBeta = Math.max(0.15, Math.min(1.0, 0.15 + 0.85 * (1 - Math.exp(-absPct / 10))))
+
+    // Determine parentId: walk source chain to find an included node
+    let parentId: string | undefined
+    let sourceId = node.source
+    let sourceDepth = 0
+    while (sourceDepth < 10) {
+      if (includedIds.has(sourceId) || interventionSet.has(sourceId)) {
+        parentId = sourceId
+        break
+      }
+      const sourceEntry = causalPaths[sourceId]
+      if (!sourceEntry || !sourceEntry.source || sourceEntry.hop === 0) break
+      sourceId = sourceEntry.source
+      sourceDepth++
+    }
+
+    const localNode = toLocalViewNode(
+      rawNode, nodeById, domainColors, role,
+      node.hop, node.beta, visualBeta, parentId
+    )
+    // Use hexagon for all sim effect nodes
+    localNode.shape = 'hexagon'
+
+    if (role === 'input') {
+      inputs.push(localNode)
+    } else {
+      outputs.push(localNode)
+    }
+
+    // Create edge from parentId → this node
+    if (parentId) {
+      edges.push({
+        source: parentId,
+        target: node.id,
+        beta: node.beta,
+        sourceSector: getSectorForNode(parentId, nodeById),
+        targetSector: getSectorForNode(node.id, nodeById)
+      })
+    }
+  }
+
+  const targetRing = targets[0] ? (nodeById.get(targets[0].id)?.layer ?? 5) : 5
+  const hasAnyEdges = inputs.length > 0 || outputs.length > 0
+
+  return {
+    targets,
+    inputs,
+    outputs,
+    edges,
+    targetRing,
+    mode: hasAnyEdges ? 'direct' : 'empty'
   }
 }
 

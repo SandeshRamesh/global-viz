@@ -152,6 +152,9 @@ interface SimulationState {
   // Effect display filter (percentile threshold 0–1, e.g. 0.5 = top 50%)
   effectFilterPct: number;
 
+  // Highlighted indicator from results table click
+  highlightedIndicator: string | null;
+
   // Saved scenarios
   savedScenarios: SavedScenario[];
 
@@ -209,6 +212,9 @@ interface SimulationState {
 
   // Actions - Effect Filter
   setEffectFilterPct: (pct: number) => void;
+
+  // Actions - Highlight
+  setHighlightedIndicator: (id: string | null) => void;
 
   // Actions - Scenarios
   saveScenario: (name: string) => void;
@@ -275,6 +281,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   simulationStartYear: 2020,
   simulationEndYear: 2029,
   effectFilterPct: 0.5,
+  highlightedIndicator: null,
   savedScenarios: loadScenariosFromStorage(),
   error: null,
 
@@ -774,7 +781,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     // Helper to apply results (shared between cache hit and API response)
     const applyResults = (results: TemporalResults) => {
       const nextRunToken = get().simulationRunToken + 1;
-      const TARGET_VISIBLE = 20;
+      const TARGET_VISIBLE = 10;
       const yearKeys = Object.keys(results.effects).sort();
       const finalYearEffects = yearKeys.length > 0
         ? results.effects[yearKeys[yearKeys.length - 1]]
@@ -912,6 +919,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   setEffectFilterPct: (pct: number) => {
     set({ effectFilterPct: Math.max(0, Math.min(1, pct)) });
   },
+
+  // Highlight actions
+  setHighlightedIndicator: (id: string | null) => set({ highlightedIndicator: id }),
 
   // Scenario save/load actions
   saveScenario: (name: string) => {

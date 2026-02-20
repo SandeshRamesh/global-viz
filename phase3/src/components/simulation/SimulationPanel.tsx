@@ -44,7 +44,7 @@ export function SimulationPanel() {
         position: 'absolute',
         bottom: 70,
         right: 100,
-        width: 300,
+        width: 380,
         maxHeight: 560,
         background: 'rgba(255,255,255,0.98)',
         borderRadius: 8,

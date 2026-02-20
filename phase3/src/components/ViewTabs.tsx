@@ -13,6 +13,7 @@ interface ViewTabsProps {
   onReset: () => void         // Reset view callback
   onClear?: () => void        // Clear local view targets callback
   onShare?: () => Promise<boolean>  // Copy shareable link callback
+  simMode?: boolean           // Sim mode enables local/split even without targets
 }
 
 /**
@@ -24,9 +25,10 @@ export function ViewTabs({
   localTargetCount,
   onReset,
   onClear,
-  onShare
+  onShare,
+  simMode = false
 }: ViewTabsProps) {
-  const hasTargets = localTargetCount > 0
+  const hasTargets = localTargetCount > 0 || simMode
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle')
 
   const handleShare = async () => {

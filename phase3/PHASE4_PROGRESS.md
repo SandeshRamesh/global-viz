@@ -12,8 +12,8 @@
 | Preflight Rebase | Done | Store fixes, playbackMode auto-switch, currentYear derivation |
 | CP1: Static Sim View | Done | Fill tint, intervention pulse, bridge nodes, selective expansion |
 | CP2: Timeline Drives Visibility | Done | Progressive pinning, staged reveal, layout-ready signaling |
-| CP3: Causal Edges | Pending | Directed bezier edges, arrowheads, year-aware |
-| CP4: Angular Clustering | Pending | Priority sort in RadialLayout |
+| CP3: Causal Edges | Done | Straight colored lines (green/red), year-aware, 1px uniform |
+| CP4: Angular Clustering | Done | CausalLayoutHint pre-computed, anchor outcomes at 0°, chain-based sibling sort, cross-sector facing tiebreaker |
 | CP5: Edge Animation | Pending | Draw-in, hop-stagger, node overshoot |
 | CP6: Robustness | Pending | Teardown, edge cases, zero-propagation |
 
@@ -189,17 +189,42 @@ Cache hit → `applyResults()` instantly (same path as API response).
 
 ## Remaining Work (CP3-CP6)
 
-### CP3: Causal Edges
-- New SVG layer `layer-causal-edges` between glow and edges
-- Quadratic bezier routing with adaptive pull toward center
-- Edge styling: green/red by direction, width by |beta|, dash by hop
-- SVG `<marker>` arrowheads
-- D3 enter/update/exit with fade transitions
+### CP3: Causal Edges — DONE
+- Simplified to straight `<line>` elements (no bezier/arrowheads)
+- Color: neon green `#39FF14` (positive) / neon red `#FF1744` (negative)
+- Subtle styling: 0.5px width, 0.25 opacity, solid (no dashes)
+- D3 enter (fade in 400ms), update (transition 300ms), exit (fade out 300ms)
+- Only rendered when `playbackMode === 'simulation' && pinnedPaths.size > 0`
+- Both endpoints must be visible for edge to render
+- Panel-close cleanup removes all causal edges from SVG
 
-### CP4: Angular Clustering
-- `priorityNodes?: Set<string>` in RadialLayout config
-- Affected nodes sorted first within parent sectors
-- Multi-intervention same-sector handling
+### CP4: Angular Clustering — DONE
+
+**Pre-computed `CausalLayoutHint`** (App.tsx useMemo from `temporalResults`):
+- `anchorOutcomes: Set<string>` — Ring 1 outcomes with affected descendants
+- `causalAdjacency: Map<string, string>` — target → source from causal_paths
+- `hopDistance: Map<string, number>` — node → hop distance from intervention
+- Built once from ALL years' effects union (stable across playback, no re-sorting)
+
+**Ring 1 sector assignment** (RadialLayout.ts `assignOutcomeAngles`):
+- Anchor outcomes cluster at 0° (right side) alongside expanded outcomes
+- Non-anchor outcomes fill remaining arc space
+- Multiple interventions' anchor outcomes interleave at 0°
+
+**Ring 2-5 sibling sort** (RadialLayout.ts `sortChildrenByCausalChain`):
+- Partition children into affected (in hopDistance) vs structural
+- Group affected into causal chains (siblings sharing a source chain)
+- Sort chains by min hop (closest to intervention → sector center)
+- Within each chain, sort by hop ascending
+- Cross-sector facing tiebreaker: between chains at same hop, bias toward source angle
+- Final order: `[structural_left, ...chains, structural_right]`
+
+**Applied in all three positioning paths:**
+- `positionNode()` — recursive Ring 3+ positioning
+- `positionNodeWithSectorAwareness()` — standard case (Ring 2+)
+- `positionChildrenStandard()` — Ring 2 children of outcomes
+
+**Passed to layout via `LayoutConfig.causalHint`** — only in simulation mode
 
 ### CP5: Edge Animation
 - `stroke-dashoffset` draw-in animation
