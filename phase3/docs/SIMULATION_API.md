@@ -468,3 +468,82 @@ Default 60 seconds. Extended for large horizons (>15 years: +30s) and ensemble r
 | 500 | Internal error | Unexpected failure in propagation engine |
 
 Timeout responses include a `suggestion` field with recommended parameter adjustments.
+
+---
+
+## Frontend Visualization
+
+### Radial Hierarchy
+
+The visualization renders indicators as a radial tree with 6 concentric rings:
+
+| Ring | Label | Description |
+|------|-------|-------------|
+| 0 | Quality of Life | Root node (single) |
+| 1 | Outcomes | Top-level outcome categories |
+| 2 | Coarse Domains | Broad thematic groupings |
+| 3 | Fine Domains | Narrower thematic groupings |
+| 4 | Indicator Groups | Clusters of related indicators |
+| 5 | Indicators | Individual measurable indicators (leaf nodes) |
+
+The tree starts collapsed — only Ring 0 (root) is visible. Users drill into branches by clicking nodes to reveal children.
+
+### Branch Expansion and Collapse
+
+Expansion state is tracked as a `Set<string>` of expanded node IDs. A node's children are visible if and only if the node is in the expanded set. The root (Ring 0) is always visible.
+
+**Single-node toggle (`toggleExpansion`):**
+- **Expand:** Adds the node ID to the expanded set. Its children become visible on the next layout pass. The camera auto-zooms to frame the entire branch from Ring 1 forward (including the root at origin) with padding.
+- **Collapse:** Removes the node ID *and all its descendants* from the expanded set. This ensures collapsing a Ring 1 node hides the entire branch below it, not just its immediate children. The camera zooms out to frame the root and the now-collapsed node.
+
+**Ring-level expand (`expandRing`):** Expands all visible nodes at a given ring depth. A node is "visible" if it is the root or its parent is already expanded. This lets users open an entire tier of the hierarchy at once (e.g., "show all Coarse Domains").
+
+**Ring-level collapse (`collapseRing`):** Collapses all nodes at the given ring and recursively collapses all descendants below them.
+
+**Expand All / Collapse All:** Expand All adds every node with children to the expanded set. Collapse All resets the set to empty.
+
+### Animation Sequencing
+
+Expand and collapse have distinct animation sequences to avoid visual glitches:
+
+**Expand sequence:**
+1. Sector rotation (if layout changed) completes first
+2. New child nodes enter (fade + scale in)
+3. Text labels fade in after nodes finish entering
+
+**Collapse sequence:**
+1. Text labels fade out immediately (0-150ms)
+2. Child nodes exit (fade + scale out, 150-350ms)
+3. Sector rotation begins after collapse completes (~400ms)
+
+A `collapseAnimationRef` prevents re-renders from interrupting an in-progress collapse animation.
+
+### Auto-Expand After Simulation
+
+When simulation results arrive, the visualization automatically expands only the branches containing the intervened indicators. It does **not** expand branches for propagated effects — only the exact intervention targets.
+
+The algorithm:
+1. Get indicator IDs from the intervention list (not from results/effects)
+2. Build a parent lookup from the raw tree data
+3. For each intervention indicator, walk up the tree to root, collecting ancestor IDs
+4. Set the expanded set to exactly those ancestors
+
+This focuses the user's attention on the branches they acted on, without overwhelming them with every affected indicator.
+
+### Node Glow Effects
+
+After simulation, nodes glow green (positive effect) or red (negative effect) with intensity proportional to the magnitude of the percent change. Glows apply to the final year's effects.
+
+**Visibility filtering:** Only the top N effects (controlled by the effect filter slider) receive glows, matching exactly what the results table shows. Effects with near-zero baselines (`|baseline| < 0.01`) are excluded to prevent misleading glows from noise.
+
+**Ancestor propagation:** If an affected indicator's node is not currently visible (its branch is collapsed), the glow propagates upward to the nearest visible ancestor. This means a collapsed Ring 1 node can glow to indicate that effects exist somewhere in its subtree.
+
+### Effect Filter
+
+The results panel shows a slider that controls how many effects are displayed (both in the table and as node glows). The filter is count-based via a percentage:
+
+- `effectFilterPct` (0-1) determines the fraction of non-zero effects to show
+- The actual count is `round(totalNonZero * effectFilterPct)`, applied as a deterministic `slice(0, N)` on the magnitude-sorted list
+- **Auto-set on simulation:** When results arrive, the filter automatically computes a percentage that yields ~20 visible indicators: `min(1, 20 / nonZeroEffects)`. If fewer than 20 effects exist, all are shown.
+- The slider label shows both count and percentage: "Show: top 20 (7%)"
+- Zero-baseline effects are excluded before ranking to prevent noise from dominating the top positions

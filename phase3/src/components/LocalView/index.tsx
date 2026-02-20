@@ -871,8 +871,8 @@ export function LocalView({
           .attr('stroke-width', datum.style.strokeWidth + 2)
         setHoveredEdge({ source: d.source, target: d.target, beta: d.beta })
       })
-      .on('mouseleave', function(_event, d) {
-        const datum = d3.select(this).datum() as typeof d & { style: ReturnType<typeof getEdgeStyle> }
+      .on('mouseleave', function(_event, _d) {
+        const datum = d3.select(this).datum() as typeof _d & { style: ReturnType<typeof getEdgeStyle> }
         d3.select(this)
           .attr('stroke-opacity', datum.style.opacity)
           .attr('stroke-width', datum.style.strokeWidth)

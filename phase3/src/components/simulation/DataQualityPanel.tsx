@@ -13,6 +13,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
 import { simulationAPI } from '../../services/api'
+import { debug } from '../../utils/debug'
+import { DATA_YEAR_MAX, DATA_YEAR_MIN } from '../../constants/time'
 import type {
   CountryDataQuality,
   YearDataQuality,
@@ -69,8 +71,13 @@ interface StratifiedQualityData extends StratifiedDataQuality {
 type QualityData = CountryQualityData | UnifiedQualityData | StratifiedQualityData
 
 // Year range for the mini timeline
-const TIMELINE_START = 1990
-const TIMELINE_END = 2024
+const TIMELINE_START = DATA_YEAR_MIN
+const TIMELINE_END = DATA_YEAR_MAX
+
+const isAbortError = (error: unknown): boolean => (
+  (error instanceof DOMException && error.name === 'AbortError') ||
+  (error instanceof Error && error.name === 'AbortError')
+)
 
 // Stratum display names and colors
 const STRATUM_CONFIG: Record<IncomeStratum, { label: string; color: string; darkColor: string }> = {
@@ -90,7 +97,7 @@ export function DataQualityPanel({
   const { selectedCountry, selectedStratum, historicalTimeline, currentYearIndex } = useSimulationStore()
 
   // Compute actual year from timeline
-  const timelineYear = historicalTimeline?.years?.[currentYearIndex] ?? 2024
+  const timelineYear = historicalTimeline?.years?.[currentYearIndex] ?? DATA_YEAR_MAX
   const [qualityData, setQualityData] = useState<QualityData | null>(null)
   const [loading, setLoading] = useState(false)
   const [distributionLoading, setDistributionLoading] = useState(false)
@@ -100,6 +107,8 @@ export function DataQualityPanel({
   // Cache for all years' distribution data (for smooth timeline playback)
   const distributionCache = useRef<Map<number, StratumDistribution>>(new Map())
   const [distributionCacheVersion, setDistributionCacheVersion] = useState(0)
+  const qualityRequestIdRef = useRef(0)
+  const distributionRequestIdRef = useRef(0)
 
   // Get current distribution from cache (re-evaluates when cache version changes)
   const distributionData = useMemo(() => {
@@ -212,6 +221,9 @@ export function DataQualityPanel({
       return
     }
 
+    const requestId = ++qualityRequestIdRef.current
+    const controller = new AbortController()
+
     // Clear previous data and start loading
     setQualityData(null)
     setLoading(true)
@@ -220,21 +232,22 @@ export function DataQualityPanel({
       try {
         if (selectedCountry) {
           // Country mode
-          const data = await simulationAPI.getCountryDataQuality(selectedCountry)
+          const data = await simulationAPI.getCountryDataQuality(selectedCountry, controller.signal)
 
           // Fetch transitions
           let transitions: CountryQualityData['transitions'] = []
           try {
-            const transitionsData = await simulationAPI.getCountryTransitions(selectedCountry)
+            const transitionsData = await simulationAPI.getCountryTransitions(selectedCountry, controller.signal)
             if (transitionsData.has_transitions) {
               transitions = transitionsData.transitions || []
             }
-          } catch {
+          } catch (error) {
+            if (isAbortError(error)) return
             // No transitions available
           }
 
           // Only set data if we're still in country mode
-          if (selectedCountry) {
+          if (selectedCountry && requestId === qualityRequestIdRef.current && !controller.signal.aborted) {
             setQualityData({
               ...data,
               viewMode: 'country',
@@ -243,9 +256,9 @@ export function DataQualityPanel({
           }
         } else if (selectedStratum === 'unified') {
           // Unified mode
-          const data = await simulationAPI.getUnifiedDataQuality()
+          const data = await simulationAPI.getUnifiedDataQuality(controller.signal)
           // Only set data if we're still in unified mode
-          if (!selectedCountry && selectedStratum === 'unified') {
+          if (!selectedCountry && selectedStratum === 'unified' && requestId === qualityRequestIdRef.current && !controller.signal.aborted) {
             setQualityData({
               ...data,
               viewMode: 'unified'
@@ -254,9 +267,9 @@ export function DataQualityPanel({
         } else {
           // Stratified mode
           const stratum = selectedStratum as IncomeStratum
-          const data = await simulationAPI.getStratifiedDataQuality(stratum)
+          const data = await simulationAPI.getStratifiedDataQuality(stratum, timelineYear, controller.signal)
           // Only set data if we're still in the same stratified mode
-          if (!selectedCountry && selectedStratum === stratum) {
+          if (!selectedCountry && selectedStratum === stratum && requestId === qualityRequestIdRef.current && !controller.signal.aborted) {
             setQualityData({
               ...data,
               viewMode: 'stratified'
@@ -264,15 +277,20 @@ export function DataQualityPanel({
           }
         }
       } catch (error) {
-        console.error('Failed to fetch data quality:', error)
-        setQualityData(null)
+        if (!isAbortError(error)) {
+          debug.error('data-quality', 'Failed to fetch data quality:', error)
+          setQualityData(null)
+        }
       } finally {
-        setLoading(false)
+        if (requestId === qualityRequestIdRef.current && !controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchDataQuality()
-  }, [selectedCountry, selectedStratum, isOpen])
+    return () => controller.abort()
+  }, [selectedCountry, selectedStratum, isOpen, timelineYear])
 
   // Pre-fetch all years' distribution data when distribution tab is opened
   // This enables smooth timeline playback without per-year API calls
@@ -280,6 +298,9 @@ export function DataQualityPanel({
     if (!isOpen || viewMode === 'country' || activePage !== 'distribution') {
       return
     }
+
+    const requestId = ++distributionRequestIdRef.current
+    const controller = new AbortController()
 
     // Skip if cache is already populated
     if (distributionCache.current.size > 0) {
@@ -292,14 +313,20 @@ export function DataQualityPanel({
 
       try {
         // Fetch all years in parallel (1990-2024)
-        const years = Array.from({ length: 35 }, (_, i) => 1990 + i)
+        const years = Array.from(
+          { length: TIMELINE_END - TIMELINE_START + 1 },
+          (_, i) => TIMELINE_START + i
+        )
         const batchSize = 10  // Fetch 10 years at a time to avoid overwhelming the API
 
         for (let i = 0; i < years.length; i += batchSize) {
+          if (controller.signal.aborted || requestId !== distributionRequestIdRef.current) {
+            return
+          }
           const batch = years.slice(i, i + batchSize)
           const results = await Promise.all(
             batch.map(year =>
-              simulationAPI.getStratumDistribution(year)
+              simulationAPI.getStratumDistribution(year, controller.signal)
                 .catch(() => null)  // Gracefully handle missing years
             )
           )
@@ -312,16 +339,23 @@ export function DataQualityPanel({
           })
 
           // Trigger re-render after each batch for progressive loading
-          setDistributionCacheVersion(v => v + 1)
+          if (requestId === distributionRequestIdRef.current && !controller.signal.aborted) {
+            setDistributionCacheVersion(v => v + 1)
+          }
         }
       } catch (error) {
-        console.error('Failed to fetch stratum distributions:', error)
+        if (!isAbortError(error)) {
+          debug.error('data-quality', 'Failed to fetch stratum distributions:', error)
+        }
       } finally {
-        setDistributionLoading(false)
+        if (requestId === distributionRequestIdRef.current && !controller.signal.aborted) {
+          setDistributionLoading(false)
+        }
       }
     }
 
     fetchAllDistributions()
+    return () => controller.abort()
   }, [isOpen, viewMode, activePage])
 
   // Clear cache when panel closes

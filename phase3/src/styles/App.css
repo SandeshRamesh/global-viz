@@ -46,3 +46,15 @@
   font-size: 12px;
   color: #999;
 }
+
+/* Intervention node breathing pulse — sharp pop, minimal fade */
+@keyframes intervention-pulse {
+  0%, 100% { stroke-width: 2.5; opacity: 0.75; }
+  50% { stroke-width: 6; opacity: 1.0; }
+}
+
+/* Causal edge hop-staggered pulse */
+@keyframes causal-edge-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}

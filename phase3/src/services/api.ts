@@ -7,6 +7,7 @@
  * - VITE_API_MODE: 'local' or 'public' (fallback)
  * - VITE_PUBLIC_API_BASE: public base URL (fallback)
  */
+import { INTERVENTION_YEAR_MAX } from '../constants/time';
 
 // ============================================
 // API Configuration - Toggle here to switch
@@ -31,7 +32,8 @@ const API_BASE = getApiBase();
 // ============================================
 // Performance Diagnostics (view in browser console)
 // ============================================
-const PERF_DEBUG = true; // Toggle performance logging
+const PERF_DEBUG = import.meta.env.VITE_API_PERF === 'true';
+const PERF_INCLUDE_BODY_SIZE = import.meta.env.VITE_API_PERF_BODY_SIZE === 'true';
 
 interface PerfEntry {
   endpoint: string;
@@ -49,16 +51,12 @@ const logPerf = (entry: PerfEntry) => {
   perfLog.push(entry);
   const duration = entry.duration?.toFixed(0) || '?';
   const size = entry.size ? `${(entry.size / 1024).toFixed(1)}KB` : '';
-  console.log(
-    `%c[API] ${entry.endpoint} %c${duration}ms %c${size}`,
-    'color: #888',
-    entry.duration && entry.duration > 1000 ? 'color: red; font-weight: bold' : 'color: green',
-    'color: #666'
-  );
+  // Performance logs are intentionally opt-in to keep dev console quiet.
+  console.log(`[API] ${entry.endpoint} ${duration}ms ${size}`.trim());
 };
 
 // Expose to window for console access
-if (typeof window !== 'undefined') {
+if (PERF_DEBUG && typeof window !== 'undefined') {
   (window as unknown as { __apiPerf: PerfEntry[]; __perfSummary: () => void }).__apiPerf = perfLog;
   (window as unknown as { __perfSummary: () => void }).__perfSummary = () => {
     console.table(perfLog.slice(-20).map(e => ({
@@ -67,7 +65,7 @@ if (typeof window !== 'undefined') {
       kb: e.size ? (e.size / 1024).toFixed(1) : '-'
     })));
   };
-  console.log('%c[Perf] API diagnostics enabled. Run __perfSummary() to see recent calls.', 'color: cyan');
+  console.log('[Perf] API diagnostics enabled. Run __perfSummary() to see recent calls.');
 }
 
 /**
@@ -80,12 +78,23 @@ const fetchWithPerf = async (url: string, options?: RequestInit): Promise<Respon
     entry.end = performance.now();
     entry.duration = entry.end - entry.start;
     entry.status = res.status;
-    // Clone to read size without consuming body
-    const clone = res.clone();
-    clone.text().then(text => {
-      entry.size = text.length;
+
+    const contentLength = res.headers.get('content-length');
+    if (contentLength) {
+      const parsed = Number(contentLength);
+      if (!Number.isNaN(parsed)) entry.size = parsed;
+    }
+
+    if (PERF_INCLUDE_BODY_SIZE && entry.size === undefined) {
+      // Optional and disabled by default: cloning adds measurable overhead.
+      const clone = res.clone();
+      clone.text().then(text => {
+        entry.size = text.length;
+        logPerf(entry);
+      });
+    } else {
       logPerf(entry);
-    });
+    }
     return res;
   } catch (err) {
     entry.end = performance.now();
@@ -133,6 +142,16 @@ export interface TemporalEffect {
   percent_change: number;
 }
 
+/** Causal path entry for a single affected indicator */
+export interface CausalPathEntry {
+  /** Distance from intervention node (0=intervention, 1=direct effect, etc.) */
+  hop: number;
+  /** Immediate causal parent node ID (highest |beta * source_change| contributor) */
+  source: string;
+  /** Beta coefficient on the edge from source → this node */
+  beta: number;
+}
+
 /** Response from POST /api/simulate/v31/temporal */
 export interface TemporalResults {
   status: string;
@@ -143,6 +162,8 @@ export interface TemporalResults {
   interventions: Array<Record<string, unknown>>;
   timeline: Record<string, Record<string, number>>;
   effects: Record<string, Record<string, TemporalEffect>>;
+  /** Causal path for each affected indicator: hop distance, immediate source, edge beta */
+  causal_paths?: Record<string, CausalPathEntry>;
   affected_per_year: Record<string, number>;
   graphs_used: Record<string, string>;
   warnings?: string[];
@@ -443,8 +464,8 @@ export const simulationAPI = {
    * List all countries with graph availability info
    * GET /api/countries
    */
-  getCountries: async (): Promise<CountriesResponse> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/countries`);
+  getCountries: async (signal?: AbortSignal): Promise<CountriesResponse> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/countries`, { signal });
     if (!res.ok) {
       throw new Error(`Failed to fetch countries: ${res.status}`);
     }
@@ -455,8 +476,8 @@ export const simulationAPI = {
    * Get country-specific causal graph with beta coefficients and lag info
    * GET /api/graph/{country}
    */
-  getCountryGraph: async (country: string): Promise<CountryGraph> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/graph/${encodeURIComponent(country)}`);
+  getCountryGraph: async (country: string, signal?: AbortSignal): Promise<CountryGraph> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/graph/${encodeURIComponent(country)}`, { signal });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`Graph not found for country: ${country}`);
@@ -473,14 +494,15 @@ export const simulationAPI = {
   getCountryTimeline: async (
     country: string,
     startYear?: number,
-    endYear?: number
+    endYear?: number,
+    signal?: AbortSignal
   ): Promise<CountryTimeline> => {
     const params = new URLSearchParams();
     if (startYear !== undefined) params.set('start_year', String(startYear));
     if (endYear !== undefined) params.set('end_year', String(endYear));
     const query = params.toString() ? `?${params.toString()}` : '';
 
-    const res = await fetchWithPerf(`${API_BASE}/api/graph/${encodeURIComponent(country)}/timeline${query}`);
+    const res = await fetchWithPerf(`${API_BASE}/api/graph/${encodeURIComponent(country)}/timeline${query}`, { signal });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`Timeline not found for country: ${country}`);
@@ -498,7 +520,9 @@ export const simulationAPI = {
     country: string,
     interventions: Intervention[],
     horizonYears: number = 5,
-    baseYear?: number
+    baseYear?: number,
+    viewType: 'country' | 'stratified' | 'unified' = 'country',
+    signal?: AbortSignal
   ): Promise<TemporalResults> => {
     // Map frontend field names to V3.1 API field names
     const apiInterventions = interventions.map(({ indicator, change_percent, year }) => ({
@@ -510,12 +534,14 @@ export const simulationAPI = {
     const res = await fetchWithPerf(`${API_BASE}/api/simulate/v31/temporal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
       body: JSON.stringify({
         country,
         interventions: apiInterventions,
-        base_year: baseYear ?? 2024,
+        base_year: baseYear ?? INTERVENTION_YEAR_MAX,
         horizon_years: horizonYears,
         top_n_effects: 500,
+        view_type: viewType,
       })
     });
 
@@ -530,8 +556,8 @@ export const simulationAPI = {
    * Get list of all indicators for intervention dropdown
    * GET /api/indicators
    */
-  getIndicators: async (): Promise<IndicatorsResponse> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/indicators?limit=3000`);
+  getIndicators: async (signal?: AbortSignal): Promise<IndicatorsResponse> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/indicators?limit=3000`, { signal });
     if (!res.ok) {
       throw new Error(`Failed to fetch indicators: ${res.status}`);
     }
@@ -542,8 +568,8 @@ export const simulationAPI = {
    * Get single indicator details
    * GET /api/indicators/{indicator_id}
    */
-  getIndicator: async (indicatorId: string): Promise<IndicatorInfo> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/indicators/${encodeURIComponent(indicatorId)}`);
+  getIndicator: async (indicatorId: string, signal?: AbortSignal): Promise<IndicatorInfo> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/indicators/${encodeURIComponent(indicatorId)}`, { signal });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`Indicator not found: ${indicatorId}`);
@@ -557,8 +583,8 @@ export const simulationAPI = {
    * Get API metadata and statistics
    * GET /api/metadata
    */
-  getMetadata: async (): Promise<MetadataResponse> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/metadata`);
+  getMetadata: async (signal?: AbortSignal): Promise<MetadataResponse> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/metadata`, { signal });
     if (!res.ok) {
       throw new Error(`Failed to fetch metadata: ${res.status}`);
     }
@@ -573,8 +599,8 @@ export const simulationAPI = {
    * Get temporal data status (available data, mock vs real)
    * GET /api/temporal/status
    */
-  getTemporalStatus: async (): Promise<TemporalDataStatus> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/temporal/status`);
+  getTemporalStatus: async (signal?: AbortSignal): Promise<TemporalDataStatus> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/status`, { signal });
     if (!res.ok) {
       throw new Error(`Failed to fetch temporal status: ${res.status}`);
     }
@@ -588,14 +614,15 @@ export const simulationAPI = {
   getUnifiedShapTimeline: async (
     target: string,
     startYear?: number,
-    endYear?: number
+    endYear?: number,
+    signal?: AbortSignal
   ): Promise<TemporalShapTimeline> => {
     const params = new URLSearchParams();
     if (startYear !== undefined) params.set('start_year', String(startYear));
     if (endYear !== undefined) params.set('end_year', String(endYear));
     const query = params.toString() ? `?${params.toString()}` : '';
 
-    const res = await fetchWithPerf(`${API_BASE}/api/temporal/shap/${encodeURIComponent(target)}/timeline${query}`);
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/shap/${encodeURIComponent(target)}/timeline${query}`, { signal });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`SHAP timeline not found for target: ${target}`);
@@ -613,15 +640,17 @@ export const simulationAPI = {
     country: string,
     target: string,
     startYear?: number,
-    endYear?: number
+    endYear?: number,
+    signal?: AbortSignal
   ): Promise<TemporalShapTimeline> => {
     const params = new URLSearchParams();
     if (startYear !== undefined) params.set('start_year', String(startYear));
     if (endYear !== undefined) params.set('end_year', String(endYear));
     const query = params.toString() ? `?${params.toString()}` : '';
 
-    const res = await fetch(
-      `${API_BASE}/api/temporal/shap/${encodeURIComponent(country)}/${encodeURIComponent(target)}/timeline${query}`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/shap/${encodeURIComponent(country)}/${encodeURIComponent(target)}/timeline${query}`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -639,13 +668,14 @@ export const simulationAPI = {
   getShapYear: async (
     target: string,
     year: number,
-    country?: string
+    country?: string,
+    signal?: AbortSignal
   ): Promise<TemporalShapYear> => {
     const path = country
       ? `/api/temporal/shap/${encodeURIComponent(country)}/${encodeURIComponent(target)}/${year}`
       : `/api/temporal/shap/${encodeURIComponent(target)}/${year}`;
 
-    const res = await fetchWithPerf(`${API_BASE}${path}`);
+    const res = await fetchWithPerf(`${API_BASE}${path}`, { signal });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`SHAP data not found for ${country || 'unified'}/${target}/${year}`);
@@ -663,8 +693,8 @@ export const simulationAPI = {
    * Get available income strata
    * GET /api/temporal/shap/strata
    */
-  getAvailableStrata: async (): Promise<StrataInfo> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/temporal/shap/strata`);
+  getAvailableStrata: async (signal?: AbortSignal): Promise<StrataInfo> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/shap/strata`, { signal });
     if (!res.ok) {
       throw new Error(`Failed to fetch strata: ${res.status}`);
     }
@@ -679,15 +709,17 @@ export const simulationAPI = {
     stratum: IncomeStratum,
     target: string,
     startYear?: number,
-    endYear?: number
+    endYear?: number,
+    signal?: AbortSignal
   ): Promise<StratifiedShapTimeline> => {
     const params = new URLSearchParams();
     if (startYear !== undefined) params.set('start_year', String(startYear));
     if (endYear !== undefined) params.set('end_year', String(endYear));
     const query = params.toString() ? `?${params.toString()}` : '';
 
-    const res = await fetch(
-      `${API_BASE}/api/temporal/shap/stratified/${encodeURIComponent(stratum)}/${encodeURIComponent(target)}/timeline${query}`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/shap/stratified/${encodeURIComponent(stratum)}/${encodeURIComponent(target)}/timeline${query}`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -705,10 +737,12 @@ export const simulationAPI = {
   getStratifiedShapYear: async (
     stratum: IncomeStratum,
     target: string,
-    year: number
+    year: number,
+    signal?: AbortSignal
   ): Promise<TemporalShapYear> => {
-    const res = await fetch(
-      `${API_BASE}/api/temporal/shap/stratified/${encodeURIComponent(stratum)}/${encodeURIComponent(target)}/${year}`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/shap/stratified/${encodeURIComponent(stratum)}/${encodeURIComponent(target)}/${year}`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -727,8 +761,8 @@ export const simulationAPI = {
    * Get stratum counts for a specific year (for tab badges)
    * GET /api/temporal/classifications/{year}
    */
-  getStratumCounts: async (year: number): Promise<StratumCounts> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/temporal/classifications/${year}`);
+  getStratumCounts: async (year: number, signal?: AbortSignal): Promise<StratumCounts> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/classifications/${year}`, { signal });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`Classifications not found for year ${year}`);
@@ -744,10 +778,12 @@ export const simulationAPI = {
    */
   getCountryClassification: async (
     country: string,
-    year: number
+    year: number,
+    signal?: AbortSignal
   ): Promise<{ country: string; year: number; classification: IncomeClassification }> => {
-    const res = await fetch(
-      `${API_BASE}/api/temporal/classifications/${encodeURIComponent(country)}/${year}`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/classifications/${encodeURIComponent(country)}/${year}`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -762,8 +798,8 @@ export const simulationAPI = {
    * Get all income classifications (for all countries/years) - cached on frontend
    * GET /api/temporal/classifications
    */
-  getAllClassifications: async (): Promise<AllClassifications> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/temporal/classifications`);
+  getAllClassifications: async (signal?: AbortSignal): Promise<AllClassifications> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/classifications`, { signal });
     if (!res.ok) {
       throw new Error(`Failed to fetch all classifications: ${res.status}`);
     }
@@ -780,10 +816,12 @@ export const simulationAPI = {
    */
   getStratifiedGraph: async (
     stratum: IncomeStratum,
-    year: number
+    year: number,
+    signal?: AbortSignal
   ): Promise<{ stratum: string; year: number; edges: CountryGraphEdge[]; metadata: Record<string, unknown> }> => {
-    const res = await fetch(
-      `${API_BASE}/api/temporal/graph/stratified/${encodeURIComponent(stratum)}/${year}`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/graph/stratified/${encodeURIComponent(stratum)}/${year}`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -799,9 +837,10 @@ export const simulationAPI = {
    * GET /api/temporal/graph/{year}
    */
   getUnifiedGraph: async (
-    year: number
+    year: number,
+    signal?: AbortSignal
   ): Promise<{ year: number; edges: CountryGraphEdge[]; n_edges: number }> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/temporal/graph/${year}`);
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/graph/${year}`, { signal });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`Unified graph not found for year ${year}`);
@@ -817,10 +856,12 @@ export const simulationAPI = {
    */
   getCountryTemporalGraph: async (
     country: string,
-    year: number
+    year: number,
+    signal?: AbortSignal
   ): Promise<{ country: string; year: number; edges: CountryGraphEdge[]; n_edges: number }> => {
-    const res = await fetch(
-      `${API_BASE}/api/temporal/graph/${encodeURIComponent(country)}/${year}`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/graph/${encodeURIComponent(country)}/${year}`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -836,10 +877,12 @@ export const simulationAPI = {
    * GET /api/temporal/graph/{country}/years
    */
   getCountryGraphYears: async (
-    country: string
+    country: string,
+    signal?: AbortSignal
   ): Promise<{ country: string; years: number[]; total: number }> => {
-    const res = await fetch(
-      `${API_BASE}/api/temporal/graph/${encodeURIComponent(country)}/years`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/graph/${encodeURIComponent(country)}/years`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -855,7 +898,8 @@ export const simulationAPI = {
    * GET /api/temporal/transitions/{country}
    */
   getCountryTransitions: async (
-    country: string
+    country: string,
+    signal?: AbortSignal
   ): Promise<{
     country: string;
     has_transitions: boolean;
@@ -868,8 +912,9 @@ export const simulationAPI = {
       gni_at_transition: number | null;
     }>;
   }> => {
-    const res = await fetch(
-      `${API_BASE}/api/temporal/transitions/${encodeURIComponent(country)}`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/transitions/${encodeURIComponent(country)}`,
+      { signal }
     );
     if (!res.ok) {
       throw new Error(`Failed to fetch country transitions: ${res.status}`);
@@ -885,9 +930,10 @@ export const simulationAPI = {
    * Get data quality metrics for a specific country
    * GET /api/temporal/data-quality/{country}
    */
-  getCountryDataQuality: async (country: string): Promise<CountryDataQuality> => {
-    const res = await fetch(
-      `${API_BASE}/api/temporal/data-quality/${encodeURIComponent(country)}`
+  getCountryDataQuality: async (country: string, signal?: AbortSignal): Promise<CountryDataQuality> => {
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/data-quality/${encodeURIComponent(country)}`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -902,8 +948,8 @@ export const simulationAPI = {
    * Get aggregated data quality for unified (all countries) view
    * GET /api/temporal/data-quality/unified
    */
-  getUnifiedDataQuality: async (): Promise<UnifiedDataQuality> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/temporal/data-quality/unified`);
+  getUnifiedDataQuality: async (signal?: AbortSignal): Promise<UnifiedDataQuality> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/data-quality/unified`, { signal });
     if (!res.ok) {
       throw new Error(`Failed to fetch unified data quality: ${res.status}`);
     }
@@ -916,10 +962,12 @@ export const simulationAPI = {
    */
   getStratifiedDataQuality: async (
     stratum: IncomeStratum,
-    year: number = 2020
+    year: number = 2020,
+    signal?: AbortSignal
   ): Promise<StratifiedDataQuality> => {
-    const res = await fetch(
-      `${API_BASE}/api/temporal/data-quality/stratified/${encodeURIComponent(stratum)}?year=${year}`
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/data-quality/stratified/${encodeURIComponent(stratum)}?year=${year}`,
+      { signal }
     );
     if (!res.ok) {
       if (res.status === 404) {
@@ -941,8 +989,8 @@ export const simulationAPI = {
    * Returns pie chart data, full country lists, GNI positions,
    * and how close each country is to transitioning tiers.
    */
-  getStratumDistribution: async (year: number): Promise<StratumDistribution> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/temporal/distribution/${year}`);
+  getStratumDistribution: async (year: number, signal?: AbortSignal): Promise<StratumDistribution> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/temporal/distribution/${year}`, { signal });
     if (!res.ok) {
       if (res.status === 400) {
         throw new Error(`Invalid year: ${year}`);
@@ -991,4 +1039,3 @@ export async function getAPIHealth(): Promise<HealthResponse> {
 export function getAPIBaseURL(): string {
   return API_BASE;
 }
-

@@ -24,6 +24,7 @@ import { useSimulationStore, useIsPanelOpen } from './stores/simulationStore'
 import { simulationAPI, type CountryGraphEdge } from './services/api'
 import { getCausalEdges, countryGraphToRawEdges } from './utils/causalEdges'
 import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
+import { SIM_MS_PER_YEAR } from './constants/time'
 import {
   computeRadialLayout,
   detectOverlaps,
@@ -141,6 +142,7 @@ interface ExpandableNode extends PositionedNode {
   childIds: string[]
   hasChildren: boolean
   importance: number  // Normalized SHAP importance (0-1) for node sizing
+  angle: number  // Angular position in radians (from RadialLayout)
 }
 
 /** Searchable node for fuzzy search (all 2,583 nodes) */
@@ -198,7 +200,8 @@ function toExpandableNode(layoutNode: LayoutNode): ExpandableNode {
     y: layoutNode.y,
     parentId: layoutNode.parent?.id || null,
     childIds: (raw.children || []).map(c => String(c)),  // Use raw data for all children
-    hasChildren: (raw.children?.length || 0) > 0  // Use raw data to check if expandable
+    hasChildren: (raw.children?.length || 0) > 0,  // Use raw data to check if expandable
+    angle: layoutNode.angle  // Angular position from layout
   }
 }
 
@@ -247,7 +250,7 @@ function App() {
   const [dataQualityBtnHovered, setDataQualityBtnHovered] = useState(false)
   const tooltipNodeRef = useRef<ExpandableNode | null>(null)  // Caches last hovered node for smooth tooltip fade
   const [ringStats, setRingStats] = useState<Array<{ label: string; count: number; minDistance: number }>>([])
-  const [fps, setFps] = useState<number>(0)
+  const [_fps, setFps] = useState<number>(0)
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -302,7 +305,11 @@ function App() {
     setStratum,
     loadAllClassifications,
     interventions: storeInterventions,
-    effectFilterPct
+    effectFilterPct,
+    isPlaying,
+    setPlaybackMode,
+    layoutReady,
+    setLayoutReady
   } = useSimulationStore()
   const isPanelOpen = useIsPanelOpen()
 
@@ -501,6 +508,9 @@ function App() {
 
   // Expansion state - tracks which nodes have their children visible
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+
+  // Pinned paths - individual node IDs visible after simulation (no sibling expansion)
+  const [pinnedPaths, setPinnedPaths] = useState<Set<string>>(new Set())
 
   // Track if initial expansion after data load has happened
   const initialExpansionDoneRef = useRef(false)
@@ -952,6 +962,7 @@ function App() {
     if (!rawData) return
     const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
 
+    setPinnedPaths(new Set())  // Clear pinned paths on manual interaction
     setExpandedNodes(prev => {
       const next = new Set(prev)
       const wasExpanded = next.has(nodeId)
@@ -985,6 +996,7 @@ function App() {
   // Expand all nodes
   const expandAll = useCallback(() => {
     if (!rawData) return
+    setPinnedPaths(new Set())
     // Use rawData to get ALL nodes (not just visible ones)
     const allExpandable = rawData.nodes
       .filter(n => n.children && n.children.length > 0)
@@ -994,6 +1006,7 @@ function App() {
 
   // Collapse all nodes
   const collapseAll = useCallback(() => {
+    setPinnedPaths(new Set())
     setExpandedNodes(new Set())
   }, [])
 
@@ -1065,6 +1078,7 @@ function App() {
 
   // Expand all nodes in a specific ring (that are currently visible)
   const expandRing = useCallback((ring: number) => {
+    setPinnedPaths(new Set())
     setExpandedNodes(prev => {
       const next = new Set(prev)
       // Find nodes in this ring that are visible (parent is expanded or is root) and have children
@@ -1083,6 +1097,7 @@ function App() {
   // Collapse all nodes in a specific ring
   const collapseRing = useCallback((ring: number) => {
     if (!rawData) return
+    setPinnedPaths(new Set())
     const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
 
     setExpandedNodes(prev => {
@@ -1110,39 +1125,348 @@ function App() {
     })
   }, [rawData])
 
-  // Auto-expand only the branches containing the actual intervened indicators.
-  // Uses the store's intervention list (not propagated effects) so only the exact threads expand.
+  /**
+   * Aggregate simulation effects up the hierarchy.
+   * Leaf indicators get their direct percent_change from the API.
+   * Parent nodes get the mean percent_change across ALL children (0 for unaffected).
+   * This naturally dilutes as you go up: a domain with 20 children where 2 shift by -50%
+   * gets an aggregate of -5%.
+   *
+   * Threshold rationale (2% absolute):
+   *   - Filters noise: tiny spillover effects (<1%) on distant branches are hidden
+   *   - Catches real signal: even one child at -40% in a group of 20 produces -2%
+   *   - At ring 1 (broadest aggregation), 2% means a genuinely widespread shift
+   *   - At ring 4 (small groups of 3-5), most groups with any affected child pass easily
+   *
+   * The 2% sits right at the boundary of "would a human notice this in the data" —
+   * below it, the aggregate change is indistinguishable from measurement noise in
+   * development indicators.
+   */
+  /**
+   * Aggregate simulation effects for all hierarchy nodes.
+   * Leaves: direct percent_change from API.
+   * Parents: affected-only mean + coverage ratio.
+   * Returns { pct, coverage, isLeaf } per node.
+   */
+  const aggregateEffects = useMemo(() => {
+    const effects = new Map<string, { pct: number; coverage: number; isLeaf: boolean }>()
+    if (!temporalResults?.effects || !rawData) return effects
+
+    // In simulation playback: use current year's effects for tint
+    // Otherwise: use final year
+    let yearEffects: Record<string, { percent_change: number; baseline: number }>
+    let yearKeyUsed: string
+    if (playbackMode === 'simulation') {
+      const simYear = temporalResults.base_year + currentYearIndex
+      yearKeyUsed = String(simYear)
+      yearEffects = temporalResults.effects[yearKeyUsed] ?? {}
+    } else {
+      const yearKeys = Object.keys(temporalResults.effects).sort()
+      yearKeyUsed = yearKeys[yearKeys.length - 1] ?? ''
+      yearEffects = yearKeyUsed ? temporalResults.effects[yearKeyUsed] : {}
+    }
+    const PCT_EPS = 0.5 // minimum % to count a child as "affected"
+
+    // Seed leaf effects — include all non-zero effects (baseline filter
+    // was too aggressive, excluded bridge nodes with small baselines)
+    for (const [id, eff] of Object.entries(yearEffects)) {
+      if (Math.abs(eff.percent_change) > 0.001) {
+        effects.set(id, { pct: eff.percent_change, coverage: 1.0, isLeaf: true })
+      }
+    }
+
+    // Build children lookup
+    const childrenOf = new Map<string, string[]>()
+    for (const n of rawData.nodes) {
+      if (n.children && n.children.length > 0) {
+        childrenOf.set(String(n.id), n.children.map(String))
+      }
+    }
+
+    // Aggregate bottom-up: importance-weighted percent change.
+    // Parent importance = sum(children importances). The simulation shifts each
+    // child's value by percent_change. The parent's aggregate change is:
+    //   pct = sum(child_imp * child_pct) / sum(child_imp)
+    // This is what the sim actually did to this domain's aggregate value,
+    // weighted by each child's contribution to the parent.
+    const impOf = new Map<string, number>()
+    for (const n of rawData.nodes) {
+      impOf.set(String(n.id), n.importance ?? 0)
+    }
+
+    const nodesByLayerDesc = [...rawData.nodes].sort((a, b) => b.layer - a.layer)
+    for (const n of nodesByLayerDesc) {
+      const id = String(n.id)
+      if (effects.has(id)) continue // Leaf already has a direct effect
+
+      const children = childrenOf.get(id)
+      if (!children || children.length === 0) continue
+
+      let weightedSum = 0
+      let totalWeight = 0
+      let affectedCount = 0
+      for (const childId of children) {
+        const childImp = impOf.get(childId) ?? 0
+        totalWeight += childImp
+        const childEffect = effects.get(childId)
+        if (childEffect) {
+          weightedSum += childImp * childEffect.pct
+          if (Math.abs(childEffect.pct) >= PCT_EPS) affectedCount++
+        }
+      }
+
+      if (affectedCount === 0 || totalWeight < 1e-9) continue
+
+      const coverage = affectedCount / children.length
+      const pct = weightedSum / totalWeight
+
+      effects.set(id, { pct, coverage, isLeaf: false })
+    }
+
+    return effects
+  }, [temporalResults, rawData, playbackMode, currentYearIndex])
+
+  // Ref for progressive reveal: nodes that have ever been affected stay pinned
+  const everAffectedRef = useRef<Set<string>>(new Set())
+
+  // Auto-expand: pin intervention indicators + ancestors on simulation return.
+  // Only interventions are shown initially — progressive pinning reveals affected nodes
+  // during playback (staged reveal: intervention pulse first, then cascade).
   useEffect(() => {
     if (!temporalResults || !rawData || storeInterventions.length === 0) return
-
-    // Get the indicator IDs that were actually intervened on
-    const interventionIds = storeInterventions
-      .map(i => i.indicator)
-      .filter(Boolean)
-
-    if (interventionIds.length === 0) return
 
     // Build parent lookup
     const parentOf = new Map<string, string>()
     for (const n of rawData.nodes) {
-      if (n.parent) parentOf.set(String(n.id), String(n.parent))
+      if (n.parent !== undefined) parentOf.set(String(n.id), String(n.parent))
     }
 
-    // Walk up from each intervened indicator, expand only those ancestors
-    const toExpand = new Set<string>()
+    const pins = new Set<string>()
+
+    // Always pin root + all ring 1 nodes (domains always visible)
+    for (const n of rawData.nodes) {
+      if (n.layer <= 1) pins.add(String(n.id))
+    }
+
+    // Set of intervention indicator IDs
+    const interventionIds = new Set(
+      storeInterventions.map(i => i.indicator).filter(Boolean)
+    )
+
+    // Pin intervention indicators + full ancestor chain
     for (const id of interventionIds) {
-      let current = parentOf.get(id)
-      while (current) {
-        toExpand.add(current)
-        current = parentOf.get(current)
+      pins.add(id)
+      let cur = parentOf.get(id)
+      while (cur) { pins.add(cur); cur = parentOf.get(cur) }
+    }
+
+    // NOTE: topLeafIds are NOT pinned here — only interventions.
+    // Progressive pinning (below) handles leaf expansion during playback,
+    // giving a staged reveal: intervention pulse first, then affected nodes.
+
+    // Prune single-child intermediate nodes (ring 2-4).
+    // If a node has exactly 1 pinned child, it's a pass-through hop — remove it.
+    // Branch points (2+ pinned children) stay visible.
+    const layerOf = new Map(rawData.nodes.map(n => [String(n.id), n.layer]))
+    const childrenOf = new Map<string, string[]>()
+    for (const n of rawData.nodes) {
+      if (n.children && n.children.length > 0) {
+        childrenOf.set(String(n.id), n.children.map(String))
       }
     }
 
-    if (toExpand.size === 0) return
-    setExpandedNodes(toExpand)
+    // Iterative pruning: removing a node may make its parent a single-child too
+    let pruned = true
+    while (pruned) {
+      pruned = false
+      for (const id of [...pins]) {
+        const layer = layerOf.get(id) ?? 0
+        if (layer <= 1) continue // Never prune root or ring 1
+
+        const children = childrenOf.get(id)
+        if (!children) continue // Leaf node, keep it
+
+        const pinnedChildCount = children.filter(c => pins.has(c)).length
+        if (pinnedChildCount <= 1) {
+          pins.delete(id)
+          pruned = true
+        }
+      }
+    }
+
+    if (pins.size <= 1) return
+
+    // Reset everAffected on new simulation run (empty — progressive pinning fills it)
+    everAffectedRef.current = new Set()
+
+    setExpandedNodes(new Set())
+    setPinnedPaths(pins)
   }, [temporalResults, rawData, storeInterventions])
 
-  // Compute visible nodes based on expansion state
+  /**
+   * Progressive pinning during simulation playback.
+   * As the year scrubs forward, nodes that become affected are added to everAffectedRef
+   * and pinnedPaths grows. Rewinding keeps expanded nodes but tint tracks current year.
+   * Short hold: nodes stay pinned for 2 years after last appearance above threshold.
+   */
+  const lastSeenYearRef = useRef<Map<string, number>>(new Map())
+  const HOLD_YEARS = 2  // Keep nodes pinned for 2 extra years after disappearing
+
+  // Track whether playback has started at least once for this simulation run
+  const playbackStartedRef = useRef(false)
+  useEffect(() => {
+    if (isPlaying && playbackMode === 'simulation') {
+      playbackStartedRef.current = true
+    }
+  }, [isPlaying, playbackMode])
+  // Reset when new results arrive
+  useEffect(() => {
+    playbackStartedRef.current = false
+  }, [temporalResults])
+
+  useEffect(() => {
+    if (playbackMode !== 'simulation' || !temporalResults?.effects || !rawData) return
+    if (storeInterventions.length === 0) return
+    // Don't expand nodes until playback has started at least once — keeps
+    // intervention-only view stable until TimelinePlayer begins advancing.
+    // Once started, scrubbing (isPlaying=false) still updates progressive pins.
+    if (!playbackStartedRef.current) return
+
+    const { base_year } = temporalResults
+    const simYear = base_year + currentYearIndex
+    const yearKey = String(simYear)
+    const yearEffects = temporalResults.effects[yearKey]
+
+    if (!yearEffects) return
+
+    // Get top-N for current year
+    const allEffects = Object.entries(yearEffects)
+      .filter(([, e]) => Math.abs(e.percent_change) > 0.01 && Math.abs(e.baseline) > 0.01)
+      .sort((a, b) => Math.abs(b[1].percent_change) - Math.abs(a[1].percent_change))
+
+    const keepCount = allEffects.length > 1 && effectFilterPct < 1
+      ? Math.max(1, Math.round(allEffects.length * effectFilterPct))
+      : allEffects.length
+
+    const currentYearTopIds = allEffects.slice(0, keepCount).map(([id]) => id)
+
+    // Update last-seen timestamps
+    for (const id of currentYearTopIds) {
+      lastSeenYearRef.current.set(id, simYear)
+    }
+
+    // Add to ever-affected set
+    for (const id of currentYearTopIds) {
+      everAffectedRef.current.add(id)
+    }
+
+    // Build active set: everAffected minus nodes that dropped off > HOLD_YEARS ago
+    const activeIds = new Set<string>()
+    for (const id of everAffectedRef.current) {
+      const lastSeen = lastSeenYearRef.current.get(id) ?? simYear
+      if (simYear - lastSeen <= HOLD_YEARS) {
+        activeIds.add(id)
+      }
+    }
+
+    // Build parent lookup
+    const parentOf = new Map<string, string>()
+    for (const n of rawData.nodes) {
+      if (n.parent !== undefined) parentOf.set(String(n.id), String(n.parent))
+    }
+
+    const pins = new Set<string>()
+
+    // Always pin root + ring 1
+    for (const n of rawData.nodes) {
+      if (n.layer <= 1) pins.add(String(n.id))
+    }
+
+    // Pin interventions + ancestors
+    for (const intv of storeInterventions) {
+      if (intv.indicator) {
+        pins.add(intv.indicator)
+        let cur = parentOf.get(intv.indicator)
+        while (cur) { pins.add(cur); cur = parentOf.get(cur) }
+      }
+    }
+
+    // Pin active affected + ancestors
+    for (const id of activeIds) {
+      pins.add(id)
+      let cur = parentOf.get(id)
+      while (cur) { pins.add(cur); cur = parentOf.get(cur) }
+    }
+
+    // Bridge nodes from causal_paths
+    const causalPaths = temporalResults.causal_paths
+    if (causalPaths) {
+      for (const leafId of activeIds) {
+        const visited = new Set<string>()
+        let curId = leafId
+        let depth = 0
+        while (depth < 10) {
+          const entry = causalPaths[curId]
+          if (!entry || !entry.source || entry.hop === 0) break
+          if (visited.has(entry.source)) break
+          visited.add(entry.source)
+          pins.add(entry.source)
+          let ancestor = parentOf.get(entry.source)
+          while (ancestor) { pins.add(ancestor); ancestor = parentOf.get(ancestor) }
+          curId = entry.source
+          depth++
+        }
+      }
+    }
+
+    // Prune single-child intermediates
+    const layerOf = new Map(rawData.nodes.map(n => [String(n.id), n.layer]))
+    const childrenOf = new Map<string, string[]>()
+    for (const n of rawData.nodes) {
+      if (n.children && n.children.length > 0) {
+        childrenOf.set(String(n.id), n.children.map(String))
+      }
+    }
+
+    let pruned = true
+    while (pruned) {
+      pruned = false
+      for (const id of [...pins]) {
+        const layer = layerOf.get(id) ?? 0
+        if (layer <= 1) continue
+        const children = childrenOf.get(id)
+        if (!children) continue
+        const pinnedChildCount = children.filter(c => pins.has(c)).length
+        if (pinnedChildCount <= 1) {
+          pins.delete(id)
+          pruned = true
+        }
+      }
+    }
+
+    if (pins.size > 1) {
+      setPinnedPaths(pins)
+    }
+  }, [playbackMode, currentYearIndex, temporalResults, rawData, storeInterventions, effectFilterPct, isPlaying])
+
+  // Clean up simulation visuals when panel closes
+  // Panel open → simulation visuals active (fill/borders depending on playback state)
+  // Panel closed → revert to regular historical view
+  useEffect(() => {
+    if (!isPanelOpen && playbackMode === 'simulation') {
+      setPlaybackMode('historical')
+      setPinnedPaths(new Set())
+      everAffectedRef.current = new Set()
+      lastSeenYearRef.current = new Map()
+      // Expand root so ring 1 (domains) is visible instead of just the QoL node
+      const rootNode = allNodes.find(n => n.ring === 0)
+      if (rootNode) {
+        setExpandedNodes(new Set([rootNode.id]))
+      }
+    }
+  }, [isPanelOpen, playbackMode, setPlaybackMode, allNodes])
+
+  // Compute visible nodes based on expansion state and pinned paths
   const visibleNodes = useMemo(() => {
     if (allNodes.length === 0) return []
 
@@ -1169,14 +1493,58 @@ function App() {
       addVisibleChildren(rootNode.id)
     }
 
-    return allNodes.filter(n => visible.has(n.id))
-  }, [allNodes, expandedNodes])
+    // Pinned paths: individual nodes visible (no sibling expansion)
+    for (const nodeId of pinnedPaths) {
+      visible.add(nodeId)
+    }
 
-  // Compute visible edges based on visible nodes
+    return allNodes.filter(n => visible.has(n.id))
+  }, [allNodes, expandedNodes, pinnedPaths])
+
+  // Compute visible edges: connect each visible node to its nearest visible ancestor.
+  // When intermediate nodes are pruned, this creates skip-edges across ring gaps.
   const visibleEdges = useMemo(() => {
     const visibleIds = new Set(visibleNodes.map(n => n.id))
-    return allEdges.filter(e => visibleIds.has(e.sourceId) && visibleIds.has(e.targetId))
-  }, [allEdges, visibleNodes])
+
+    // If no pinned paths active, use the simple filter (normal expansion)
+    if (pinnedPaths.size === 0) {
+      return allEdges.filter(e => visibleIds.has(e.sourceId) && visibleIds.has(e.targetId))
+    }
+
+    // Build parent lookup from rawData for walking up
+    const parentOfRaw = new Map<string, string>()
+    const ringOfRaw = new Map<string, number>()
+    if (rawData) {
+      for (const n of rawData.nodes) {
+        if (n.parent !== undefined) parentOfRaw.set(String(n.id), String(n.parent))
+        ringOfRaw.set(String(n.id), n.layer)
+      }
+    }
+
+    // For each visible non-root node, find nearest visible ancestor
+    const edges: StructuralEdge[] = []
+    const nodeMap = new Map(visibleNodes.map(n => [n.id, n]))
+    for (const node of visibleNodes) {
+      if (node.ring === 0) continue
+      // Walk up through raw parents until we find a visible one
+      let cur = parentOfRaw.get(node.id)
+      while (cur && !visibleIds.has(cur)) {
+        cur = parentOfRaw.get(cur)
+      }
+      if (cur && visibleIds.has(cur)) {
+        const parentNode = nodeMap.get(cur)
+        if (parentNode) {
+          edges.push({
+            sourceId: cur,
+            targetId: node.id,
+            sourceRing: parentNode.ring,
+            targetRing: node.ring
+          })
+        }
+      }
+    }
+    return edges
+  }, [allEdges, visibleNodes, pinnedPaths, rawData])
 
   // Memoized map of nodes by ring for percentile calculations (avoids recreation in render)
   const nodesByRingMemo = useMemo(() => {
@@ -1261,8 +1629,9 @@ function App() {
 
       const svg = d3.select(svgRef.current)
 
-      // Always collapse all expanded nodes
+      // Always collapse all expanded nodes and clear pinned paths
       setExpandedNodes(new Set())
+      setPinnedPaths(new Set())
       currentTransformRef.current = null
 
       // Zoom to show root and ring 1 (outcomes)
@@ -1609,23 +1978,105 @@ function App() {
       addVisibleChildren(String(rootNode.id))
     }
 
-    // Filter to visible nodes only (from effectiveNodes which already has country importance)
-    const visibleRawNodes = effectiveNodes.filter(n => visibleNodeIds.has(String(n.id)))
+    // Pinned paths: individual nodes visible (no sibling expansion)
+    for (const nodeId of pinnedPaths) {
+      if (nodeById.has(nodeId)) {
+        visibleNodeIds.add(nodeId)
+      }
+    }
+
+    // When pinnedPaths is active, remap parent references so each visible node
+    // points to its nearest visible ancestor. This compresses tree depth naturally:
+    // e.g. a ring-5 indicator whose ring 2-4 ancestors were pruned remaps its parent
+    // to its ring-1 ancestor, landing at tree depth 2 in the layout.
+    // No gap-fill ancestors needed — the layout derives ring from tree depth.
+    let parentOverrides: Map<string, string | undefined> | null = null
+    if (pinnedPaths.size > 0) {
+      parentOverrides = new Map()
+      const fullNodeById = new Map(effectiveNodes.map(n => [String(n.id), n]))
+      for (const nodeId of visibleNodeIds) {
+        const node = fullNodeById.get(nodeId)
+        if (!node?.parent) continue
+        const rawParentId = String(node.parent)
+        if (visibleNodeIds.has(rawParentId)) continue // Parent already visible, no remap needed
+        // Walk up raw hierarchy to find nearest visible ancestor
+        let cur = rawParentId
+        while (cur && !visibleNodeIds.has(cur)) {
+          const pn = fullNodeById.get(cur)
+          cur = pn?.parent !== undefined ? String(pn.parent) : ''
+        }
+        parentOverrides.set(nodeId, cur || undefined)
+      }
+    }
+
+    // Filter to visible nodes only, applying parent remaps for pinned mode
+    const visibleRawNodes = effectiveNodes
+      .filter(n => visibleNodeIds.has(String(n.id)))
+      .map(n => {
+        if (!parentOverrides) return n
+        const id = String(n.id)
+        if (!parentOverrides.has(id)) return n
+        const newParent = parentOverrides.get(id)
+        return { ...n, parent: newParent !== undefined ? Number(newParent) : undefined }
+      })
 
     // Update viewport layout with current visible node count
     vLayout.updateContext({ visibleNodes: visibleRawNodes.length })
     const currentLayoutValues = vLayout.getLayoutValues()
     setLayoutValues(currentLayoutValues)
 
+    // For pinned mode, compute actual tree depth (after parent remapping) for ring radii.
+    // This ensures nodesByRing matches what computeRadialLayout will derive from tree depth.
+    let depthOf: Map<string, number> | null = null
+    if (pinnedPaths.size > 0) {
+      depthOf = new Map()
+      const childrenOf = new Map<string, string[]>()
+      for (const n of visibleRawNodes) {
+        const id = String(n.id)
+        if (n.parent !== undefined) {
+          const pid = String(n.parent)
+          if (!childrenOf.has(pid)) childrenOf.set(pid, [])
+          childrenOf.get(pid)!.push(id)
+        }
+      }
+      // BFS from root to compute depths
+      const root = visibleRawNodes.find(n => n.parent === undefined || n.parent === null)
+      if (root) {
+        const queue = [{ id: String(root.id), depth: 0 }]
+        depthOf.set(String(root.id), 0)
+        while (queue.length > 0) {
+          const { id, depth } = queue.shift()!
+          const kids = childrenOf.get(id) ?? []
+          for (const kid of kids) {
+            depthOf.set(kid, depth + 1)
+            queue.push({ id: kid, depth: depth + 1 })
+          }
+        }
+      }
+    }
+
     // Group nodes by ring for radius calculation
     const nodesByRing = new Map<number, Array<{ importance?: number }>>()
     visibleRawNodes.forEach(n => {
-      if (!nodesByRing.has(n.layer)) nodesByRing.set(n.layer, [])
-      nodesByRing.get(n.layer)!.push({ importance: n.importance })
+      const id = String(n.id)
+      // In pinned mode, use tree depth as ring index (matches layout); otherwise use layer
+      const ring = depthOf ? (depthOf.get(id) ?? n.layer) : n.layer
+      if (!nodesByRing.has(ring)) nodesByRing.set(ring, [])
+      nodesByRing.get(ring)!.push({ importance: n.importance })
     })
 
-    // Calculate DYNAMIC ring radii using viewport-aware layout
-    const dynamicRadii = vLayout.calculateRingRadii(nodesByRing, 6)
+    // Determine how many rings are actually needed
+    const maxRing = depthOf
+      ? Math.max(0, ...depthOf.values()) + 1
+      : 6
+
+    // Calculate DYNAMIC ring radii using viewport-aware layout — natural density-based
+    const rawRadii = vLayout.calculateRingRadii(nodesByRing, Math.max(maxRing, 2))
+    // Pad to 6 entries so generateRingConfigs always has enough
+    const dynamicRadii = [...rawRadii]
+    while (dynamicRadii.length < 6) {
+      dynamicRadii.push(dynamicRadii[dynamicRadii.length - 1] + 100)
+    }
 
     // Update ringRadii state so sliders reflect current values
     setRingRadii(dynamicRadii)
@@ -1719,7 +2170,7 @@ function App() {
       drivers: driverCount,
       overlaps: overlaps.length
     })
-  }, [effectiveNodes, nodePadding, expandedNodes])  // Uses effectiveNodes for country-specific importance
+  }, [effectiveNodes, nodePadding, expandedNodes, pinnedPaths])  // Uses effectiveNodes for country-specific importance
 
   // Render visible nodes and edges (called when expansion state changes)
   const renderVisualization = useCallback(() => {
@@ -1878,44 +2329,88 @@ function App() {
 
     // === HELPER FUNCTIONS ===
 
-    // Pre-compute simulation effect lookup for node coloring
-    const simEffectLookup = new Map<string, number>()
-    if (temporalResults?.effects) {
-      const yk = Object.keys(temporalResults.effects).sort()
-      const fyk = yk[yk.length - 1]
-      const fe = fyk ? temporalResults.effects[fyk] : {}
-      for (const [id, eff] of Object.entries(fe)) {
-        const e = eff as { percent_change?: number }
-        if (e.percent_change !== undefined && Math.abs(e.percent_change) > 0.001) {
-          simEffectLookup.set(id, e.percent_change)
+    // Use pre-computed aggregate effects (leaf + parent nodes) for border rendering
+    // simEffectLookup: Map<string, { pct, coverage, isLeaf }>
+    const simEffectLookup = aggregateEffects
+
+    // Set of node IDs that have at least one visible child (used for parent eligibility)
+    const hasVisibleChild = new Set<string>()
+    for (const n of visibleNodes) {
+      if (n.parentId) hasVisibleChild.add(n.parentId)
+    }
+
+    // Build top-K eligible parents per ring for border display.
+    // Parents need at least one visible child AND |pct| >= 1%.
+    const TOP_K_PER_RING = 10
+    const PARENT_MIN_PCT = 1.0
+    const LEAF_MIN_PCT = 0.5
+
+    const borderEligible = new Set<string>()
+    // Leaves: eligible if |pct| >= LEAF_MIN_PCT
+    // Parents: gate on coverage + pct, then top-K per ring
+    const parentsByRing = new Map<number, Array<{ id: string; score: number }>>()
+    for (const node of visibleNodes) {
+      const eff = simEffectLookup.get(node.id)
+      if (!eff) continue
+      if (eff.isLeaf) {
+        if (Math.abs(eff.pct) >= LEAF_MIN_PCT) borderEligible.add(node.id)
+      } else {
+        // Parent gating: must have at least one visible child
+        if (!hasVisibleChild.has(node.id)) continue
+        if (Math.abs(eff.pct) >= PARENT_MIN_PCT) {
+          const score = Math.abs(eff.pct)
+          if (!parentsByRing.has(node.ring)) parentsByRing.set(node.ring, [])
+          parentsByRing.get(node.ring)!.push({ id: node.id, score })
         }
       }
     }
+    // Top-K parents per ring
+    for (const [, parents] of parentsByRing) {
+      parents.sort((a, b) => b.score - a.score)
+      for (const p of parents.slice(0, TOP_K_PER_RING)) {
+        borderEligible.add(p.id)
+      }
+    }
 
+    // Set of intervention indicator IDs (for distinct highlight treatment)
+    const interventionNodeIds = new Set(
+      storeInterventions.map(i => i.indicator).filter(Boolean)
+    )
+
+    /**
+     * Get node fill color — blends toward green/red when simulation-affected.
+     * Intensity: clamp(|percent_change| / 50, 0, 0.5) — subtle, max 50% blend.
+     * Only in global view, only for non-intervention affected nodes.
+     * Bridge nodes (in causal_paths but not in aggregateEffects) get no tint.
+     */
     const getColor = (n: ExpandableNode): string => {
       if (n.ring === 0) return '#78909C'
+      const domainColor = DOMAIN_COLORS[n.semanticPath.domain] || '#9E9E9E'
 
-      // Tint node fill when simulation effects are active
-      if (simEffectLookup.size > 0) {
-        const pct = simEffectLookup.get(n.id)
-        if (pct !== undefined) {
-          // Blend: stronger effect = more saturated green/red
-          const intensity = Math.min(1, Math.abs(pct) / 50) // 50% change = full color
-          const base = pct >= 0 ? [76, 175, 80] : [244, 67, 54] // green : red
-          const domain = DOMAIN_COLORS[n.semanticPath.domain] || '#9E9E9E'
-          // Parse domain hex
-          const dR = parseInt(domain.slice(1, 3), 16)
-          const dG = parseInt(domain.slice(3, 5), 16)
-          const dB = parseInt(domain.slice(5, 7), 16)
-          // Lerp toward effect color
-          const r = Math.round(dR + (base[0] - dR) * intensity * 0.6)
-          const g = Math.round(dG + (base[1] - dG) * intensity * 0.6)
-          const b = Math.round(dB + (base[2] - dB) * intensity * 0.6)
-          return `rgb(${r},${g},${b})`
-        }
-      }
+      // Only tint in global view when simulation results exist
+      if (viewMode !== 'global' && viewMode !== 'split') return domainColor
+      if (!temporalResults || interventionNodeIds.has(n.id)) return domainColor
 
-      return DOMAIN_COLORS[n.semanticPath.domain] || '#9E9E9E'
+      const eff = simEffectLookup.get(n.id)
+      if (!eff || !eff.isLeaf) return domainColor  // Only leaves get colored
+
+      // Neon simulation colors — distinct from domain greens/reds:
+      //   Economic=#4CAF50 (muted green), Security=#F44336 (muted red)
+      //   Neon positive=#39FF14 (lime), Neon negative=#FF1744 (neon red)
+      const absPct = Math.abs(eff.pct)
+      if (absPct < 0.01) return domainColor
+
+      // State machine:
+      //   simPlaybackActive (timeline playing/scrubbing) → neon fill
+      //   panel open, playback stopped → domain color (borders handle the effect)
+      //   panel closed → domain color (cleanup effect reverts to historical)
+      if (!simPlaybackActive) return domainColor
+
+      // Dynamic intensity: sqrt curve so small effects are visible, large ones saturate
+      // At 5% change → 0.45, 20% → 0.63, 50%+ → 1.0
+      const t = Math.min(1, Math.sqrt(absPct / 50))
+      const neonTarget = eff.pct >= 0 ? '#39FF14' : '#FF1744'
+      return d3.interpolateRgb(domainColor, neonTarget)(0.3 + t * 0.7)
     }
 
     // Node sizing uses importance (0-1) mapped to area
@@ -1956,16 +2451,18 @@ function App() {
           return vLayout.getNodeRadius(cachedImp)
         }
       }
-      // Simulation mode: apply temporal effects
-      else if (playbackMode === 'simulation' && temporalResults && currentYear > 0) {
-        const yearKey = `year_${currentYear}`
-        const yearEffects = temporalResults.effects[yearKey]
-        if (yearEffects && yearEffects[n.id]) {
-          const effect = yearEffects[n.id]
-          const importance = n.importance || 0
-          const scaleFactor = 1 + Math.max(-1, Math.min(1, effect.percent_change / 100))
-          return vLayout.getNodeRadius(Math.max(0, Math.min(1, importance * scaleFactor)))
+      // Simulation mode: baseline importance shifted by percent_change
+      else if (playbackMode === 'simulation') {
+        const baseImp = lastValidShapRef.current.get(nodeId) ?? n.importance
+        if (temporalResults) {
+          const simYear = temporalResults.base_year + currentYearIndex
+          const yearEffects = temporalResults.effects[String(simYear)]
+          if (yearEffects && yearEffects[n.id]) {
+            const pctChange = yearEffects[n.id].percent_change / 100
+            return vLayout.getNodeRadius(Math.max(0, baseImp * (1 + pctChange)))
+          }
         }
+        return vLayout.getNodeRadius(baseImp)
       }
 
       // Last resort: check cache before using floor
@@ -1999,6 +2496,89 @@ function App() {
       else baseWidth = 0.75
       const radius = getSize(node)
       return Math.min(baseWidth, radius * 0.5)
+    }
+
+    /**
+     * Get simulation-aware stroke properties for an affected node.
+     *
+     * Eligibility gating (computed above in borderEligible):
+     *   Leaf: |pct| >= 0.5%
+     *   Parent: coverage >= 15% AND |pct| >= 1.0% AND in top-K by score per ring
+     *
+     * Width: saturating curve — width = minPx + maxExtraPx * (1 - e^(-|pct|/s))
+     *   Leaf:   minPx=0.6, maxExtraPx=2.4, s=6
+     *   Parent: minPx=0.4, maxExtraPx=1.6, s=6
+     *
+     * Color alpha scales by coverage for parents (honest visual weight).
+     * Ineligible parents get no border (subtle glow handled separately).
+     */
+    // Borders only show after simulation playback finishes (not during active play)
+    const simPlaybackActive = playbackMode === 'simulation' && isPlaying
+
+    const getSimBorder = (node: ExpandableNode): { color: string; width: number; opacity: number } | null => {
+      if (simPlaybackActive) return null  // During playback: fill, not borders
+      if (!isPanelOpen) return null        // Panel closed: no sim visuals
+      if (node.ring === 0) return null
+      if (interventionNodeIds.has(node.id)) return null
+      // Don't show border on parent nodes that have no visible children
+      if (node.hasChildren && !hasVisibleChild.has(node.id)) return null
+
+      const eff = simEffectLookup.get(node.id)
+      if (!eff) return null
+
+      // Must be in the eligible set (gating + top-K)
+      if (!borderEligible.has(node.id)) return null
+
+      const absPct = Math.abs(eff.pct)
+      const S = 6 // saturation constant: 6% gives a decent ring, 20% saturates
+      // Effect intensity: 0→0, 6%→0.63, 20%→0.96, 50%→1.0
+      const intensity = 1 - Math.exp(-absPct / S)
+
+      let width: number
+      let opacity: number
+
+      if (eff.isLeaf) {
+        // Border proportional to node radius so it doesn't overwhelm small nodes
+        const radius = getSize(node)
+        // 10-25% of radius, scaled by effect intensity
+        width = radius * (0.1 + 0.15 * intensity)
+        // Minimum 0.5px for visibility, cap at 2px
+        width = Math.max(0.5, Math.min(2, width))
+        opacity = 1.0
+      } else {
+        const radius = getSize(node)
+        width = radius * (0.08 + 0.12 * intensity)
+        width = Math.max(0.4, Math.min(1.5, width))
+        opacity = Math.max(0.2, Math.min(1.0, 0.2 + 0.8 * eff.coverage))
+      }
+
+      return {
+        color: eff.pct >= 0 ? '#39FF14' : '#FF1744',
+        width,
+        opacity
+      }
+    }
+
+    /**
+     * Subtle glow for ineligible parent nodes that have SOME effect
+     * but didn't pass the coverage/magnitude gating. Returns opacity 0-0.25.
+     */
+    const getSimGlowForIneligible = (node: ExpandableNode): { color: string; opacity: number } | null => {
+      if (simPlaybackActive || !isPanelOpen) return null  // Only show when panel open + playback stopped
+      if (node.ring === 0 || !node.hasChildren) return null
+      if (interventionNodeIds.has(node.id)) return null
+      if (borderEligible.has(node.id)) return null // Already has a border
+
+      const eff = simEffectLookup.get(node.id)
+      if (!eff || eff.isLeaf) return null
+
+      const alpha = Math.min(0.25, Math.abs(eff.pct) * eff.coverage / 20)
+      if (alpha < 0.03) return null // Too faint to bother
+
+      return {
+        color: eff.pct >= 0 ? '#39FF14' : '#FF1744',
+        opacity: alpha
+      }
     }
 
     const getParentPosition = (node: ExpandableNode): { x: number; y: number } => {
@@ -2539,92 +3119,15 @@ function App() {
         .attr('opacity', 0.35)
     }
 
-    // === SIMULATION EFFECT GLOW (green/red per node) ===
-    // When temporalResults exist, highlight every affected node proportional to change
+    // === SIMULATION: intervention node glow + affected node borders ===
+    // Affected nodes use direct stroke on circle.node (via getSimBorder).
+    // Intervention nodes get a dedicated glow ring on the sim glow layer.
     {
-      // Build effect map from final year of temporal results
-      const simEffectMap = new Map<string, number>()  // nodeId -> percent_change
-
-      if (temporalResults?.effects) {
-        const yearKeys = Object.keys(temporalResults.effects).sort()
-        const finalYearKey = yearKeys[yearKeys.length - 1]
-        const finalEffects = finalYearKey ? temporalResults.effects[finalYearKey] : {}
-
-        // Collect all non-zero effects and apply percentile filter (top 50%)
-        const allEffects: Array<[string, number]> = []
-        for (const [indicatorId, effect] of Object.entries(finalEffects)) {
-          const e = effect as { percent_change?: number }
-          if (e.percent_change !== undefined && Math.abs(e.percent_change) > 0.01) {
-            allEffects.push([indicatorId, e.percent_change])
-          }
-        }
-
-        // Percentile cutoff: only glow effects above the user-selected threshold
-        if (allEffects.length > 1 && effectFilterPct < 1) {
-          allEffects.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-          const cutoffIdx = Math.floor(allEffects.length * (1 - effectFilterPct))
-          const cutoffMag = Math.abs(allEffects[Math.min(cutoffIdx, allEffects.length - 1)][1])
-          for (const [id, pct] of allEffects) {
-            if (Math.abs(pct) >= cutoffMag) {
-              simEffectMap.set(id, pct)
-            }
-          }
-        } else {
-          for (const [id, pct] of allEffects) {
-            simEffectMap.set(id, pct)
-          }
-        }
-      }
-
-      // Resolve visible nodes: if indicator node isn't visible, glow its visible ancestor
-      type SimGlowData = ExpandableNode & { percentChange: number }
-      const simGlowTargets = new Map<string, SimGlowData>()
-
-      for (const [indicatorId, pctChange] of simEffectMap.entries()) {
-        if (visibleNodeIds.has(indicatorId)) {
-          const node = visibleNodes.find(n => n.id === indicatorId)
-          if (node) {
-            // If already mapped (ancestor aggregation), use strongest effect
-            const existing = simGlowTargets.get(indicatorId)
-            if (!existing || Math.abs(pctChange) > Math.abs(existing.percentChange)) {
-              simGlowTargets.set(indicatorId, { ...node, percentChange: pctChange })
-            }
-          }
-        } else {
-          // Walk up to find visible ancestor
-          let currentId = indicatorId
-          let foundAncestor: ExpandableNode | null = null
-          while (!foundAncestor && currentId) {
-            const rawNode = rawData?.nodes.find(n => String(n.id) === currentId)
-            if (rawNode?.parent) {
-              const parentId = String(rawNode.parent)
-              if (visibleNodeIds.has(parentId)) {
-                foundAncestor = visibleNodes.find(n => n.id === parentId) || null
-              }
-              currentId = parentId
-            } else {
-              break
-            }
-          }
-          if (foundAncestor) {
-            const existing = simGlowTargets.get(foundAncestor.id)
-            if (!existing || Math.abs(pctChange) > Math.abs(existing.percentChange)) {
-              simGlowTargets.set(foundAncestor.id, { ...foundAncestor, percentChange: pctChange })
-            }
-          }
-        }
-      }
-
-      const simGlowNodes = Array.from(simGlowTargets.values())
-
-      // Max percent change for normalizing opacity
-      const maxAbsPct = simGlowNodes.length > 0
-        ? Math.max(...simGlowNodes.map(n => Math.abs(n.percentChange)))
-        : 1
+      const interventionGlowNodes = visibleNodes.filter(n => interventionNodeIds.has(n.id))
 
       const simGlowSelection = simGlowLayer
-        .selectAll<SVGCircleElement, SimGlowData>('circle.glow-sim')
-        .data(simGlowNodes, d => d.id)
+        .selectAll<SVGCircleElement, ExpandableNode>('circle.glow-sim')
+        .data(interventionGlowNodes, d => d.id)
 
       // Remove old
       simGlowSelection.exit()
@@ -2635,10 +3138,8 @@ function App() {
         .attr('cx', d => d.x)
         .attr('cy', d => d.y)
         .attr('r', d => getSize(d) + 4)
-        .attr('stroke', d => d.percentChange >= 0 ? '#4CAF50' : '#f44336')
-        .attr('opacity', d => 0.15 + 0.55 * (Math.abs(d.percentChange) / maxAbsPct))
 
-      // Enter new
+      // Enter new — with breathing pulse animation
       simGlowSelection.enter()
         .append('circle')
         .attr('class', 'glow-sim')
@@ -2646,15 +3147,57 @@ function App() {
         .attr('cy', d => d.y)
         .attr('r', d => getSize(d) + 4)
         .attr('fill', 'none')
-        .attr('stroke', d => d.percentChange >= 0 ? '#4CAF50' : '#f44336')
-        .attr('stroke-width', d => 2 + 3 * (Math.abs(d.percentChange) / maxAbsPct))
+        .attr('stroke', '#00E5FF')
+        .attr('stroke-width', 2.5)
+        .attr('opacity', 0)
+        .style('filter', 'blur(4px)')
+        .style('pointer-events', 'none')
+        .style('animation', `intervention-pulse ${SIM_MS_PER_YEAR}ms ease-in-out infinite`)
+        .transition()
+        .duration(600)
+        .ease(d3.easeCubicOut)
+        .attr('opacity', 0.7)
+
+      // Subtle glow for ineligible parent nodes (weak effect, didn't pass gating)
+      const ineligibleGlowNodes = visibleNodes.filter(n => {
+        const g = getSimGlowForIneligible(n)
+        return g !== null
+      })
+
+      const ineligibleSelection = simGlowLayer
+        .selectAll<SVGCircleElement, ExpandableNode>('circle.glow-sim-weak')
+        .data(ineligibleGlowNodes, d => d.id)
+
+      ineligibleSelection.exit()
+        .transition().duration(300).attr('opacity', 0).remove()
+
+      ineligibleSelection
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 3)
+
+      ineligibleSelection.enter()
+        .append('circle')
+        .attr('class', 'glow-sim-weak')
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 3)
+        .attr('fill', 'none')
+        .attr('stroke', d => {
+          const g = getSimGlowForIneligible(d)
+          return g ? g.color : '#999'
+        })
+        .attr('stroke-width', 1.5)
         .attr('opacity', 0)
         .style('filter', 'blur(3px)')
         .style('pointer-events', 'none')
         .transition()
         .duration(600)
         .ease(d3.easeCubicOut)
-        .attr('opacity', d => 0.15 + 0.55 * (Math.abs(d.percentChange) / maxAbsPct))
+        .attr('opacity', d => {
+          const g = getSimGlowForIneligible(d)
+          return g ? g.opacity : 0
+        })
     }
 
     // === EDGES with enter/update/exit ===
@@ -2784,6 +3327,24 @@ function App() {
       const dy = Math.abs(targetY - currentCy)
       const needsMove = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
 
+      // Compute simulation border for this node
+      // During active playback: affected LEAF nodes get no stroke (solid fill only)
+      const effLookup = simEffectLookup.get(d.id)
+      const isAffectedDuringPlayback = simPlaybackActive && effLookup?.isLeaf && Math.abs(effLookup.pct) >= 0.01
+      const simBorder = getSimBorder(d)
+      const strokeColor = isAffectedDuringPlayback
+        ? getColor(d)  // match fill = invisible border
+        : simBorder
+          ? simBorder.color
+          : isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E')
+      const strokeWidth = isAffectedDuringPlayback
+        ? 0.5
+        : simBorder
+          ? simBorder.width
+          : isNodeFloored(d.importance) ? Math.min(1, getSize(d) * 0.5) : getBorderWidth(d)
+      const strokeOpacity = isAffectedDuringPlayback ? 0 : (simBorder ? simBorder.opacity : 1.0)
+      const dashArray = (!simBorder && !isAffectedDuringPlayback && isNodeFloored(d.importance)) ? '2,2' : 'none'
+
       if (needsMove) {
         // Node position differs from target - animate to new position
         nodeEl
@@ -2795,6 +3356,10 @@ function App() {
           .attr('cy', targetY)
           .attr('r', getSize(d))
           .attr('fill', getColor(d))
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth)
+          .attr('stroke-opacity', strokeOpacity)
+          .attr('stroke-dasharray', dashArray)
       } else if (!shouldSkipRotation) {
         // Position matches but may need size/color update
         nodeEl
@@ -2804,6 +3369,10 @@ function App() {
           .ease(d3.easeCubicOut)
           .attr('r', getSize(d))
           .attr('fill', getColor(d))
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth)
+          .attr('stroke-opacity', strokeOpacity)
+          .attr('stroke-dasharray', dashArray)
       }
       // Note: opacity is always 1 since uncovered nodes are filtered out by effectiveNodes
     })
@@ -2817,13 +3386,37 @@ function App() {
       .attr('cy', d => getParentPosition(d).y)
       .attr('r', 0)
       .attr('fill', d => getColor(d))
-      .attr('stroke', d => isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E'))
+      .attr('stroke', d => {
+        const eLookup = simEffectLookup.get(d.id)
+        const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
+        if (affectedDuringPlayback) return getColor(d)
+        const sb = getSimBorder(d)
+        return sb ? sb.color : isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E')
+      })
       .attr('stroke-width', d => {
+        const eLookup = simEffectLookup.get(d.id)
+        const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
+        if (affectedDuringPlayback) return 0.5
+        const sb = getSimBorder(d)
+        if (sb) return sb.width
         const radius = getSize(d)
         if (isNodeFloored(d.importance)) return Math.min(1, radius * 0.5)
         return getBorderWidth(d)
       })
-      .attr('stroke-dasharray', d => isNodeFloored(d.importance) ? '2,2' : 'none')
+      .attr('stroke-opacity', d => {
+        const eLookup = simEffectLookup.get(d.id)
+        const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
+        if (affectedDuringPlayback) return 0
+        const sb = getSimBorder(d)
+        return sb ? sb.opacity : 1.0
+      })
+      .attr('stroke-dasharray', d => {
+        const eLookup = simEffectLookup.get(d.id)
+        const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
+        if (affectedDuringPlayback) return 'none'
+        const sb = getSimBorder(d)
+        return (!sb && isNodeFloored(d.importance)) ? '2,2' : 'none'
+      })
       .style('cursor', d => d.hasChildren ? 'pointer' : 'default')
       .style('opacity', 0)
       .transition()
@@ -2941,7 +3534,8 @@ function App() {
           const node = nodeDataMap.get(nodeId)
           if (node) {
             const radius = getSize(node)
-            const baseStroke = isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node)
+            const sb = getSimBorder(node)
+            const baseStroke = sb ? sb.width : isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node)
             const hoverStroke = Math.min(baseStroke + 1, radius * 0.8)
             d3.select(target)
               .attr('r', radius * 1.3)
@@ -2960,7 +3554,8 @@ function App() {
           const node = nodeDataMap.get(nodeId)
           if (node) {
             const radius = getSize(node)
-            const baseStroke = isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node)
+            const sb = getSimBorder(node)
+            const baseStroke = sb ? sb.width : isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node)
             d3.select(target)
               .attr('r', radius)
               .attr('stroke-width', baseStroke)
@@ -2974,6 +3569,7 @@ function App() {
     const labelNodes = visibleNodes.filter(n => {
       if (n.ring === 0) return true
       if (n.parentId && expandedNodes.has(n.parentId)) return true
+      if (pinnedPaths.has(n.id)) return true
       return false
     })
 
@@ -3096,6 +3692,7 @@ function App() {
 
       // Calculate font size based on ring
       let fontSize: number
+      const isSimAffected = simEffectLookup.has(d.id) || interventionNodeIds.has(d.id)
       if (d.ring === 0) {
         // Ring 0 (QoL): Fixed max size
         fontSize = vLayout.getFontSize(1.0, d.ring)
@@ -3108,6 +3705,14 @@ function App() {
         fontSize = ring1Min + (ring1Max - ring1Min) * Math.sqrt(importance)
         // DEBUG: Log all Ring 1 font sizes
         debug.render(`  ${label}: ${fontSize.toFixed(1)}px (importance=${importance.toFixed(4)})`)
+      } else if (isSimAffected) {
+        // Affected/intervention nodes at ring 2+: boost to ring 1 size range
+        const baseMax = vLayout.getFontSize(1, 1)
+        const scaleFactor = baseMax / 16
+        const ring1Min = 4 * scaleFactor
+        const ring1Max = 8 * scaleFactor
+        // Use midpoint of ring 1 range — readable from any zoom
+        fontSize = (ring1Min + ring1Max) / 2
       } else {
         // Ring 2+: Importance-based with boost
         const baseFontSize = vLayout.getFontSize(importance, d.ring)
@@ -3321,7 +3926,14 @@ function App() {
         return isLabelVisible(d.ring, pos.fontSize, currentScale) ? 1 : 0
       })
 
-  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio, temporalResults, currentYear, historicalTimeline, temporalShapTimeline, stratifiedShapTimeline, selectedStratum, playbackMode, currentYearIndex, effectiveNodes, precomputedShapCache])
+    // Signal layout ready after all D3 transitions complete
+    if (!layoutReady && playbackMode === 'simulation') {
+      // nodeAnimationEndTime = max transition delay+duration computed above
+      const settleMs = nodeAnimationEndTime + 200  // +200ms buffer for paint
+      setTimeout(() => setLayoutReady(true), settleMs)
+    }
+
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, localViewTargets, viewMode, splitRatio, temporalResults, currentYear, historicalTimeline, temporalShapTimeline, stratifiedShapTimeline, selectedStratum, playbackMode, currentYearIndex, effectiveNodes, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady])
 
   // Fetch data once on mount
   useEffect(() => {
@@ -4136,25 +4748,6 @@ function App() {
           )}
         </div>
       </div>
-
-      {/* FPS Counter (dev mode only) - bottom right, hidden by default */}
-      {/* Uncomment to enable: import.meta.env.DEV && fps > 0 && ( */}
-      {false && (
-        <div style={{
-          position: 'absolute',
-          bottom: 10,
-          right: 10,
-          padding: '4px 8px',
-          fontSize: 11,
-          fontFamily: 'monospace',
-          background: fps >= 50 ? 'rgba(76, 175, 80, 0.9)' : fps >= 30 ? 'rgba(255, 152, 0, 0.9)' : 'rgba(244, 67, 54, 0.9)',
-          color: 'white',
-          borderRadius: 4,
-          zIndex: 100
-        }}>
-          {fps} FPS
-        </div>
-      )}
 
       {/* Hover tooltip panel - always rendered for smooth transitions */}
       {(() => {

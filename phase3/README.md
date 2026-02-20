@@ -1,6 +1,6 @@
-# Semantic Hierarchy Visualization v2.1
+# Semantic Hierarchy Visualization (Phase 3)
 
-Interactive D3.js visualization of semantic hierarchies in a concentric ring layout.
+Interactive D3 + React visualization with policy simulation controls backed by the v3.1 API.
 
 ## Features
 
@@ -17,7 +17,17 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 in your browser.
+Open http://localhost:5174 in your browser.
+
+Backend API default: http://localhost:8000
+
+Canonical simulation endpoints:
+- `POST /api/simulate/v31`
+- `POST /api/simulate/v31/temporal`
+
+Compatibility aliases (deprecated, still supported):
+- `POST /api/simulate` -> `/api/simulate/v31`
+- `POST /api/simulate/temporal` -> `/api/simulate/v31/temporal`
 
 ## Build
 
@@ -31,4 +41,4 @@ npm run preview
 This version only supports v2.1 data format. The data file should be placed at
 `/public/data/v2_1_visualization_final.json`.
 
-See `CLAUDE.md` for detailed architecture documentation.
+See `/home/sandesh/Documents/Global_Project/viz/phase3/CLAUDE.md` for architecture notes.

@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
+import { INTERVENTION_YEAR_MAX, SIM_MS_PER_YEAR } from '../../constants/time'
 
 type PlayerState = 'docked' | 'expanded' | 'collapsed' | 'docking'
 
@@ -35,7 +36,8 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     isPlaying,
     setCurrentYearIndex,
     play,
-    pause
+    pause,
+    layoutReady
   } = useSimulationStore()
 
   const intervalRef = useRef<number | null>(null)
@@ -53,16 +55,56 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     setPendingPlay(false)
   }, [selectedCountry])
 
+  // Auto-expand when simulation results arrive (or re-run triggers)
+  const prevSimStateRef = useRef<{ results: typeof temporalResults; yearIdx: number }>({
+    results: temporalResults, yearIdx: currentYearIndex
+  })
+  const waitingForLayoutRef = useRef(false)
+
+  useEffect(() => {
+    const prev = prevSimStateRef.current
+    // Detect: new results arrived, OR same results but yearIndex reset to 1 (re-run / cache hit)
+    // applyResults sets currentYearIndex=1 (skip base year, start at intervention year)
+    const isNewRun = temporalResults && playbackMode === 'simulation' && (
+      temporalResults !== prev.results ||
+      (currentYearIndex === 1 && prev.yearIdx !== 1)
+    )
+    prevSimStateRef.current = { results: temporalResults, yearIdx: currentYearIndex }
+
+    if (isNewRun && !isPlaying) {
+      // Expand timeline immediately; playback waits for layoutReady signal
+      setPlayerState('expanded')
+      waitingForLayoutRef.current = true
+    }
+  }, [temporalResults, playbackMode, currentYearIndex, isPlaying])
+
+  // Start playback once layout signals ready (with brief pause to show intervention pulse)
+  useEffect(() => {
+    if (waitingForLayoutRef.current && layoutReady) {
+      waitingForLayoutRef.current = false
+      // Brief pause to let the intervention node pulse be visible before expanding
+      const timer = setTimeout(() => play(), 800)
+      return () => clearTimeout(timer)
+    }
+  }, [layoutReady, play])
+
   // Get years array based on mode
   const years = playbackMode === 'historical'
     ? (historicalTimeline?.years || [])
-    : Array.from({ length: (temporalResults?.horizon_years || 10) + 1 }, (_, i) => (temporalResults?.base_year || 2024) + i)
+    : Array.from(
+      { length: (temporalResults?.horizon_years || 10) + 1 },
+      (_, i) => (temporalResults?.base_year || INTERVENTION_YEAR_MAX) + i
+    )
 
   const maxIndex = years.length - 1
   const actualYear = years[currentYearIndex] || null
 
-  // Speed: 300ms for unified (35 years), 700ms for country-specific (~26 years)
-  const MS_PER_YEAR = selectedCountry ? 700 : 300
+  // Speed per year tick:
+  // Historical: 300ms unified (35 years), 700ms country-specific (~26 years)
+  // Simulation: SIM_MS_PER_YEAR (shared constant, also drives pulse cycle)
+  const MS_PER_YEAR = playbackMode === 'simulation'
+    ? SIM_MS_PER_YEAR
+    : (selectedCountry ? 700 : 300)
 
   // Handle pending play after expansion animation completes
   useEffect(() => {
@@ -78,34 +120,44 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
 
   // Playback interval effect - smooth linear progression
   // In local view, wait for edges to load before starting playback
+  // Simulation year 1 gets an extra-long first tick so nodes can animate in
   const shouldPlay = isPlaying && years.length > 0 && !isDragging && !(isLocalView && edgesLoading)
+  const firstTickTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
-    if (shouldPlay) {
-      intervalRef.current = window.setInterval(() => {
-        const state = useSimulationStore.getState()
-        const maxIdx = playbackMode === 'historical'
-          ? (state.historicalTimeline?.years.length || 1) - 1
-          : state.horizonYears
+    if (!shouldPlay) {
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+      if (firstTickTimerRef.current) { clearTimeout(firstTickTimerRef.current); firstTickTimerRef.current = null }
+      return
+    }
 
-        if (state.currentYearIndex >= maxIdx) {
-          state.pause()
-        } else {
-          state.setCurrentYearIndex(state.currentYearIndex + 1)
-        }
-      }, MS_PER_YEAR)
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
+    const tick = () => {
+      const state = useSimulationStore.getState()
+      const maxIdx = playbackMode === 'historical'
+        ? (state.historicalTimeline?.years.length || 1) - 1
+        : state.horizonYears
+
+      if (state.currentYearIndex >= maxIdx) {
+        state.pause()
+      } else {
+        state.setCurrentYearIndex(state.currentYearIndex + 1)
       }
     }
 
+    // First tick: longer delay in sim mode so year-1 nodes can animate in
+    const { currentYearIndex: startIdx } = useSimulationStore.getState()
+    const isFirstSimTick = playbackMode === 'simulation' && startIdx <= 1
+    const firstDelay = isFirstSimTick ? MS_PER_YEAR + SIM_MS_PER_YEAR : MS_PER_YEAR
+
+    // setTimeout for first tick (variable delay), then setInterval for steady pace
+    firstTickTimerRef.current = window.setTimeout(() => {
+      tick()
+      intervalRef.current = window.setInterval(tick, MS_PER_YEAR)
+    }, firstDelay)
+
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
+      if (firstTickTimerRef.current) { clearTimeout(firstTickTimerRef.current); firstTickTimerRef.current = null }
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
     }
   }, [shouldPlay, playbackMode, MS_PER_YEAR])
 
@@ -207,6 +259,29 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     const index = getIndexFromPosition(touch.clientX)
     setCurrentYearIndex(index)
   }, [isSimulating, maxIndex, isPlaying, pause, getIndexFromPosition, setCurrentYearIndex])
+
+  const handleTrackKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (isSimulating || maxIndex <= 0) return
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      setCurrentYearIndex(Math.min(maxIndex, currentYearIndex + 1))
+      return
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      setCurrentYearIndex(Math.max(0, currentYearIndex - 1))
+      return
+    }
+    if (event.key === 'Home') {
+      event.preventDefault()
+      setCurrentYearIndex(0)
+      return
+    }
+    if (event.key === 'End') {
+      event.preventDefault()
+      setCurrentYearIndex(maxIndex)
+    }
+  }, [currentYearIndex, isSimulating, maxIndex, setCurrentYearIndex])
 
   // Handle drag move and end - attach to window for reliable tracking
   useEffect(() => {
@@ -320,6 +395,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
             onClick={handleDockedClick}
             disabled={isSimulating}
             title="Play Timeline"
+            aria-label="Play timeline"
           >
             <svg width="20" height="20" viewBox="0 0 14 14" fill="currentColor">
               <path d="M2 1.5v11a.5.5 0 00.75.43l9.5-5.5a.5.5 0 000-.86l-9.5-5.5A.5.5 0 002 1.5z" />
@@ -337,13 +413,14 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
   // Expanded, collapsed, or docking state
   return (
     <>
-      <div className={`timeline-player ${playerState} ${isPlaying ? 'playing' : ''} ${isDragging ? 'dragging' : ''}`}>
+      <div className={`timeline-player ${playerState} ${isPlaying ? 'playing' : ''} ${isDragging ? 'dragging' : ''} ${playbackMode === 'simulation' ? 'sim-mode' : ''}`}>
         {/* Play/Pause Button */}
         <button
-          className={`play-btn ${isSimulating ? 'disabled' : ''}`}
+          className={`play-btn ${isSimulating ? 'disabled' : ''} ${playbackMode === 'simulation' ? 'sim-mode' : ''}`}
           onClick={handlePlayPause}
           disabled={isSimulating}
           title={isPlaying ? 'Pause' : 'Play Timeline'}
+          aria-label={isPlaying ? 'Pause timeline' : 'Play timeline'}
         >
           {isSimulating ? (
             <span className="spinner" />
@@ -362,6 +439,11 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
         {/* Current year always visible */}
         <span className={`year-display-always ${isDocking ? 'fading' : ''}`}>
           {actualYear}
+          {playbackMode === 'simulation' && temporalResults?.affected_per_year && actualYear != null && (
+            <span style={{ fontSize: '9px', color: '#999', marginLeft: '4px' }}>
+              ({temporalResults.affected_per_year[String(actualYear)] ?? 0})
+            </span>
+          )}
         </span>
 
         {/* Expandable content - only visible when expanded */}
@@ -375,6 +457,14 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
             className={`timeline-track ${isSimulating ? 'disabled' : ''} ${isDragging ? 'dragging' : ''}`}
             onMouseDown={handleMouseDown}
             onTouchStart={handleTouchStart}
+            onKeyDown={handleTrackKeyDown}
+            role="slider"
+            tabIndex={isSimulating ? -1 : 0}
+            aria-label="Timeline year"
+            aria-valuemin={years[0] ?? 0}
+            aria-valuemax={years[maxIndex] ?? 0}
+            aria-valuenow={actualYear ?? years[0] ?? 0}
+            aria-valuetext={actualYear ? `Year ${actualYear}` : 'No year selected'}
           >
             <div className="track-line" />
 
@@ -431,6 +521,13 @@ const timelineStyles = `
   .docked-btn:hover:not(.disabled) {
     background: #f0f0f0;
     color: #333;
+  }
+
+  .docked-btn:focus-visible,
+  .play-btn:focus-visible,
+  .timeline-track:focus-visible {
+    outline: 2px solid #3B82F6;
+    outline-offset: 2px;
   }
 
   .docked-btn.disabled {
@@ -543,6 +640,14 @@ const timelineStyles = `
     background: #2563EB;
   }
 
+  .play-btn.sim-mode {
+    background: #F97316;
+  }
+
+  .play-btn.sim-mode:hover:not(.disabled) {
+    background: #EA580C;
+  }
+
   .play-btn.disabled {
     background: #93C5FD;
     cursor: wait;
@@ -624,6 +729,10 @@ const timelineStyles = `
     transform: translateX(-50%);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
     cursor: grab;
+  }
+
+  .timeline-player.sim-mode .cursor {
+    background: #F97316;
   }
 
   .cursor.dragging {

@@ -10,6 +10,7 @@
 
 import { useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
+import { SIMULATION_YEAR_MAX, SIMULATION_YEAR_MIN } from '../../constants/time'
 
 // ============================================
 // Main Component
@@ -32,12 +33,14 @@ export function SimulationRunner() {
     savedScenarios,
     saveScenario,
     loadScenario,
-    deleteScenario
+    deleteScenario,
+    selectedStratum
   } = useSimulationStore()
 
   const [showSaveInput, setShowSaveInput] = useState(false)
   const [scenarioName, setScenarioName] = useState('')
   const [showScenarioList, setShowScenarioList] = useState(false)
+  const [activeThumb, setActiveThumb] = useState<'start' | 'end' | null>(null)
   const scenarioListRef = useRef<HTMLDivElement>(null)
 
   // Close scenario dropdown on outside click
@@ -70,13 +73,17 @@ export function SimulationRunner() {
     clearResults()
   }, [clearResults])
 
+  // Derive scope label from current graph view
+  const scopeLabel = selectedCountry
+    ? selectedCountry
+    : selectedStratum === 'unified'
+      ? 'Global (unified)'
+      : `${selectedStratum.charAt(0).toUpperCase() + selectedStratum.slice(1)} countries`
+
   // Determine button state and message
   const getButtonState = () => {
     if (isSimulating) {
       return { disabled: true, text: 'Simulating...', className: 'loading' }
-    }
-    if (!selectedCountry) {
-      return { disabled: true, text: 'Select a Country', className: 'disabled' }
     }
     if (interventions.length === 0) {
       return { disabled: true, text: 'Add Interventions', className: 'disabled' }
@@ -91,15 +98,16 @@ export function SimulationRunner() {
 
   // Count valid interventions
   const validInterventions = interventions.filter(i => i.indicator).length
+  const isThumbOverlap = Math.abs(simulationEndYear - simulationStartYear) <= 1
 
   return (
     <div className="simulation-runner">
       {/* Status Summary */}
       <div className="status-summary">
         <div className="status-item">
-          <span className="status-label">Country:</span>
-          <span className={`status-value ${selectedCountry ? 'set' : 'unset'}`}>
-            {selectedCountry || 'Not selected'}
+          <span className="status-label">Scope:</span>
+          <span className="status-value set">
+            {scopeLabel}
           </span>
         </div>
         <div className="status-item">
@@ -111,7 +119,7 @@ export function SimulationRunner() {
       </div>
 
       {/* Simulation Timeline Range — dual thumb on single track */}
-      {selectedCountry && (
+      {(
         <div className="sim-timeline-range">
           <div className="sim-timeline-label">
             <span>Simulation Range</span>
@@ -120,40 +128,58 @@ export function SimulationRunner() {
             </span>
           </div>
           <div className="sim-dual-slider">
-            <span className="sim-timeline-bound">1990</span>
-            <div className="sim-dual-track">
+            <span className="sim-timeline-bound">{SIMULATION_YEAR_MIN}</span>
+            <div className={`sim-dual-track ${isThumbOverlap ? 'overlap' : ''}`} role="group" aria-label="Simulation year range">
               {/* Filled region between thumbs */}
               <div
                 className="sim-dual-fill"
                 style={{
-                  left: `${((simulationStartYear - 1990) / (2030 - 1990)) * 100}%`,
-                  right: `${((2030 - simulationEndYear) / (2030 - 1990)) * 100}%`
+                  left: `${((simulationStartYear - SIMULATION_YEAR_MIN) / (SIMULATION_YEAR_MAX - SIMULATION_YEAR_MIN)) * 100}%`,
+                  right: `${((SIMULATION_YEAR_MAX - simulationEndYear) / (SIMULATION_YEAR_MAX - SIMULATION_YEAR_MIN)) * 100}%`
                 }}
               />
               <input
                 type="range"
-                min={1990}
-                max={2030}
+                min={SIMULATION_YEAR_MIN}
+                max={SIMULATION_YEAR_MAX}
                 value={simulationStartYear}
                 onChange={(e) => {
                   const v = Number(e.target.value)
                   if (v < simulationEndYear) setSimulationStartYear(v)
                 }}
-                className="sim-thumb sim-thumb-start"
+                onMouseDown={() => setActiveThumb('start')}
+                onTouchStart={() => setActiveThumb('start')}
+                onFocus={() => setActiveThumb('start')}
+                onBlur={() => setActiveThumb(prev => (prev === 'start' ? null : prev))}
+                className={`sim-thumb sim-thumb-start ${activeThumb === 'start' ? 'sim-thumb-active' : ''}`}
+                aria-label="Simulation start year"
+                aria-valuemin={SIMULATION_YEAR_MIN}
+                aria-valuemax={simulationEndYear - 1}
+                aria-valuenow={simulationStartYear}
+                aria-valuetext={`Start year ${simulationStartYear}`}
               />
               <input
                 type="range"
-                min={1990}
-                max={2030}
+                min={SIMULATION_YEAR_MIN}
+                max={SIMULATION_YEAR_MAX}
                 value={simulationEndYear}
                 onChange={(e) => {
                   const v = Number(e.target.value)
                   if (v > simulationStartYear) setSimulationEndYear(v)
                 }}
-                className="sim-thumb sim-thumb-end"
+                onMouseDown={() => setActiveThumb('end')}
+                onTouchStart={() => setActiveThumb('end')}
+                onFocus={() => setActiveThumb('end')}
+                onBlur={() => setActiveThumb(prev => (prev === 'end' ? null : prev))}
+                className={`sim-thumb sim-thumb-end ${activeThumb === 'end' ? 'sim-thumb-active' : ''}`}
+                aria-label="Simulation end year"
+                aria-valuemin={simulationStartYear + 1}
+                aria-valuemax={SIMULATION_YEAR_MAX}
+                aria-valuenow={simulationEndYear}
+                aria-valuetext={`End year ${simulationEndYear}`}
               />
             </div>
-            <span className="sim-timeline-bound">2030</span>
+            <span className="sim-timeline-bound">{SIMULATION_YEAR_MAX}</span>
           </div>
         </div>
       )}
@@ -163,6 +189,7 @@ export function SimulationRunner() {
         className={`run-btn ${buttonState.className}`}
         onClick={handleRunSimulation}
         disabled={buttonState.disabled}
+        aria-busy={isSimulating}
       >
         {isSimulating && <span className="spinner" />}
         {buttonState.text}
@@ -183,7 +210,7 @@ export function SimulationRunner() {
                 autoFocus
               />
               <button className="scenario-btn save" onClick={handleSave}>Save</button>
-              <button className="scenario-btn cancel" onClick={() => setShowSaveInput(false)}>×</button>
+              <button className="scenario-btn cancel" onClick={() => setShowSaveInput(false)} aria-label="Cancel scenario save">×</button>
             </div>
           ) : (
             <div className="scenario-btn-row">
@@ -197,16 +224,27 @@ export function SimulationRunner() {
                   <button
                     className="scenario-btn load"
                     onClick={() => setShowScenarioList(!showScenarioList)}
+                    aria-expanded={showScenarioList}
+                    aria-controls="saved-scenarios-list"
                   >
                     📂 Load ({savedScenarios.length})
                   </button>
                   {showScenarioList && (
-                    <div className="scenario-dropdown">
+                    <div className="scenario-dropdown" id="saved-scenarios-list" role="listbox" aria-label="Saved scenarios">
                       {savedScenarios.map((s) => (
                         <div key={s.id} className="scenario-item">
                           <div
                             className="scenario-item-main"
                             onClick={() => { loadScenario(s.id); setShowScenarioList(false); }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                loadScenario(s.id)
+                                setShowScenarioList(false)
+                              }
+                            }}
+                            role="option"
+                            tabIndex={0}
                           >
                             <span className="scenario-item-name">{s.name}</span>
                             <span className="scenario-item-meta">
@@ -217,6 +255,7 @@ export function SimulationRunner() {
                             className="scenario-delete-btn"
                             onClick={(e) => { e.stopPropagation(); deleteScenario(s.id); }}
                             title="Delete"
+                            aria-label={`Delete scenario ${s.name}`}
                           >×</button>
                         </div>
                       ))}
@@ -234,7 +273,7 @@ export function SimulationRunner() {
         <div className="runner-error">
           <span className="error-icon">!</span>
           <span className="error-text">{error}</span>
-          <button className="dismiss-btn" onClick={clearError}>×</button>
+          <button className="dismiss-btn" onClick={clearError} aria-label="Dismiss simulation error">×</button>
         </div>
       )}
 
@@ -499,6 +538,15 @@ export function SimulationRunner() {
           outline: none;
           margin: 0;
           padding: 0;
+          z-index: 2;
+        }
+
+        .sim-thumb.sim-thumb-active {
+          z-index: 5;
+        }
+
+        .sim-thumb.sim-thumb-end {
+          z-index: 3;
         }
 
         .sim-thumb::-webkit-slider-thumb {
@@ -530,6 +578,24 @@ export function SimulationRunner() {
 
         .sim-thumb::-moz-range-thumb:hover {
           box-shadow: 0 0 0 5px rgba(59,130,246,0.25);
+        }
+
+        .sim-dual-track.overlap .sim-thumb-start::-webkit-slider-thumb,
+        .sim-dual-track.overlap .sim-thumb-start::-moz-range-thumb {
+          background: #1E40AF;
+        }
+
+        .sim-dual-track.overlap .sim-thumb-end::-webkit-slider-thumb,
+        .sim-dual-track.overlap .sim-thumb-end::-moz-range-thumb {
+          background: #60A5FA;
+        }
+
+        .sim-thumb:focus-visible::-webkit-slider-thumb {
+          box-shadow: 0 0 0 6px rgba(59,130,246,0.3);
+        }
+
+        .sim-thumb:focus-visible::-moz-range-thumb {
+          box-shadow: 0 0 0 6px rgba(59,130,246,0.3);
         }
 
         .scenario-actions {
@@ -635,6 +701,15 @@ export function SimulationRunner() {
           background: #f0f7ff;
         }
 
+        .scenario-item-main:focus-visible,
+        .run-btn:focus-visible,
+        .dismiss-btn:focus-visible,
+        .scenario-btn:focus-visible,
+        .clear-btn:focus-visible {
+          outline: 2px solid #3B82F6;
+          outline-offset: 2px;
+        }
+
         .scenario-item-name {
           font-size: 12px;
           font-weight: 500;
@@ -680,6 +755,7 @@ interface TemporalResultsDropdownProps {
 function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDropdownProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const { indicators, effectFilterPct, setEffectFilterPct } = useSimulationStore()
+  const tableId = 'temporal-results-table'
 
   // Build indicator name lookup
   const indicatorNames = useMemo(() => {
@@ -704,20 +780,20 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
           simulated: e.simulated,
           absoluteChange: e.absolute_change,
           percentChange: e.percent_change,
-          absPct: Math.abs(e.percent_change)
+          absPct: Math.abs(e.percent_change),
+          absChange: Math.abs(e.absolute_change)
         }
       })
-      .filter(row => row.absPct > 0.01)
+      .filter(row => row.absChange > 0.001 && Math.abs(row.baseline) > 0.01)
       .sort((a, b) => b.absPct - a.absPct)
 
     const totalNonZero = allRows.length
 
-    // Percentile filter: keep only effects above the threshold
+    // Percentile filter: keep top N items by magnitude (deterministic via slice)
     // effectFilterPct=1 means show all, 0.5 means top 50%, 0.1 means top 10%
     if (allRows.length > 1 && effectFilterPct < 1) {
-      const cutoffIndex = Math.floor(allRows.length * (1 - effectFilterPct))
-      const cutoffMagnitude = allRows[Math.min(cutoffIndex, allRows.length - 1)].absPct
-      const filtered = allRows.filter(r => r.absPct >= cutoffMagnitude)
+      const keepCount = Math.max(1, Math.round(allRows.length * effectFilterPct))
+      const filtered = allRows.slice(0, keepCount)
       return { affectedCount: filtered.length, totalNonZero, rows: filtered }
     }
 
@@ -757,9 +833,12 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
   return (
     <div className="results-status">
       {/* Header row — always visible, clickable */}
-      <div
+      <button
+        type="button"
         className="results-dropdown-header"
         onClick={() => setIsExpanded(!isExpanded)}
+        aria-expanded={isExpanded}
+        aria-controls={tableId}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="check-icon">✓</span>
@@ -771,27 +850,32 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
         <span style={{ fontSize: 10, color: '#888' }}>
           {temporalResults.base_year} → {temporalResults.base_year + temporalResults.horizon_years}
         </span>
-      </div>
+      </button>
 
       {/* Filter slider — always visible when results exist */}
       <div className="effect-filter-row">
         <label className="effect-filter-label">
-          Show: top {Math.round(effectFilterPct * 100)}%
+          Show: top {affectedCount} ({Math.round(effectFilterPct * 100)}%)
         </label>
         <input
           type="range"
-          min={10}
+          min={1}
           max={100}
-          step={5}
+          step={1}
           value={Math.round(effectFilterPct * 100)}
           onChange={(e) => setEffectFilterPct(Number(e.target.value) / 100)}
           className="effect-filter-slider"
+          aria-label="Effect visibility percentile"
+          aria-valuemin={1}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(effectFilterPct * 100)}
+          aria-valuetext={`Show top ${Math.round(effectFilterPct * 100)} percent of effects`}
         />
       </div>
 
       {/* Expanded table */}
       {isExpanded && (
-        <div className="dropdown-table-wrapper">
+        <div className="dropdown-table-wrapper" id={tableId}>
           <table className="dropdown-table">
             <thead>
               <tr>
@@ -817,7 +901,7 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
         </div>
       )}
 
-      <button className="clear-btn" onClick={onClear}>
+      <button className="clear-btn" onClick={onClear} aria-label="Clear simulation results">
         Clear Results
       </button>
 
@@ -828,6 +912,11 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
           align-items: center;
           cursor: pointer;
           user-select: none;
+          width: 100%;
+          border: none;
+          background: transparent;
+          padding: 0;
+          text-align: left;
         }
 
         .results-dropdown-header:hover {
@@ -948,6 +1037,13 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
           border-radius: 50%;
           border: none;
           cursor: pointer;
+        }
+
+        .results-dropdown-header:focus-visible,
+        .effect-filter-slider:focus-visible,
+        .clear-btn:focus-visible {
+          outline: 2px solid #3B82F6;
+          outline-offset: 2px;
         }
       `}</style>
     </div>

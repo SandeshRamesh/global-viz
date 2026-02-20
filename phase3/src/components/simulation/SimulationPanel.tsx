@@ -37,6 +37,9 @@ export function SimulationPanel() {
 
   return (
     <div
+      role="dialog"
+      aria-modal="false"
+      aria-label="Simulation controls"
       style={{
         position: 'absolute',
         bottom: 70,
@@ -70,6 +73,7 @@ export function SimulationPanel() {
         <button
           onClick={closePanel}
           title="Close (Esc)"
+          aria-label="Close simulation panel"
           style={{
             background: 'none',
             border: 'none',
@@ -110,6 +114,13 @@ export function SimulationPanel() {
         </div>
 
       </div>
+
+      <style>{`
+        button:focus-visible {
+          outline: 2px solid #3B82F6;
+          outline-offset: 2px;
+        }
+      `}</style>
     </div>
   )
 }

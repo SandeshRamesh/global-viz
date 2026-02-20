@@ -62,22 +62,49 @@ api/
 | `/api/simulate/v31` | V3.1 instant simulation |
 | `/api/simulate/v31/temporal` | V3.1 temporal simulation |
 
-## Current Work: Phase 3 (Weeks 9-11)
+## Completed: Phase 3 Simulation Polish (Week 9)
 
-Phase 2 is complete as of 2026-02-18. Active development has moved to Phase 3.
+- Selective branch expansion (pinnedPaths): post-simulation shows only direct paths to affected indicators
+- Parent aggregate effects: affected-only mean + coverage ratio (not diluted mean-with-zeros)
+- Border gating: leaves need |pct| >= 0.5%, parents need coverage >= 15% AND |pct| >= 1.0%, top-K per ring
+- Saturating-curve border widths: `width = minPx + maxExtraPx * (1 - e^(-|pct|/6))` — skinny, proportional
+- Coverage-based opacity for parent borders (honest visual weight)
+- Subtle glow for ineligible parents (faint hint without clutter)
+- Single-child intermediate pruning with skip-edges
+- Ring compression via parent remapping (compact layout, natural radii)
+- Temporal edge count badge per intervention (causal edges in year X)
+- Simulation error enrichment (base year context + suggested fix)
+- Baseline year warning in InterventionBuilder
 
-**P0 - Critical (Phase 3):**
-- [ ] Scenario comparison (overlay mode) - deferred from Phase 2
-- [ ] Methodology panel (explain causal discovery approach)
-- [ ] Sensitivity analysis (perturb edge weights, observe outcome variance)
+## Current Work: Phase 3 → Launch
 
-**P1 - Important (Phase 3):**
-- [ ] Click-node-to-intervene flow - deferred from Phase 2
-- [ ] Top N quick filter for indicators - deferred from Phase 2
-- [ ] Export suite (PNG, CSV, shareable URL)
+Phase 2 complete as of 2026-02-18. Simulation polish complete 2026-02-19.
+Remaining work follows this priority order through launch and beyond.
 
-**P2 - Nice-to-have (Phase 3):**
-- [ ] Pre-built scenario templates (WHO, Education, Infrastructure) - deferred from Phase 2
+### Pre-Launch
+
+1. **Simulation on timeline playback** — show simulation results organically during timeline scrubbing (node sizes reflect simulated values as year advances)
+2. **Pre-built scenario library** — WHO health, Education MDGs, Infrastructure bundles as loadable templates
+3. **Export suite** — PNG screenshot, CSV results, shareable URL with encoded state
+
+### Launch Features
+
+4. **2D + Globe map integration** — choropleth world map + 3D globe showing country-level simulation results geographically
+5. **Regional views** — aggregate results by region (Sub-Saharan Africa, SE Asia, etc.)
+6. **3D global graph view** — radial viz rendered in 3D with depth, rotation, fly-through
+
+### Post-Launch Polish
+
+7. **Polish, tutorial, animations** — guided first-visit tutorial, smooth transition animations, loading states
+8. **Mobile support** — responsive layout, touch interactions, simplified views for small screens
+9. **Accessibility** — ARIA attributes, keyboard navigation, screen reader support, color contrast
+
+### Post-Launch Advanced
+
+10. **Security & safety** — CORS production gating, rate limiting, input sanitization, ENV-based config
+11. **Methodology page** — standalone `/methodology` route explaining PC algorithm, SHAP, temporal bootstrapping, limitations (policy audience)
+12. **Sensitivity analysis & multi-target optimization** — edge weight perturbation, ensemble runs, confidence intervals, Pareto frontier across competing outcomes
+13. **Public-facing API** — documented REST API with auth, rate limits, usage docs for external consumers
 
 ## Key Constants
 
@@ -119,9 +146,9 @@ API_MODE = 'local' | 'public'
 - Backend: staggered intervention support via `interventions_by_year` in `temporal_simulation_v31.py`
 - V3.1 API integration with year-specific temporal graphs
 
-## Roadmap (See ROADMAP.md)
+## Backlog (unscheduled, revisit later)
 
-- Phase 3 (Weeks 9-11): Scenario comparison, methodology panel, sensitivity analysis, export suite
-- Phase 4 (Weeks 12-14): Multi-target, country comparison, Pareto optimization
-- Phase 5 (Weeks 15-18): Map overlay, 3D visualization
-- Phase 6 (Weeks 19-24): Education mode, accessibility, PWA
+- Scenario comparison (overlay mode) — two scenarios side-by-side with diff view
+- Country comparison mode — side-by-side country graphs
+- Education/guided mode — simplified interface for non-technical users
+- PWA support — offline capability, installable app

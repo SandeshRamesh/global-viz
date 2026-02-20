@@ -247,6 +247,7 @@ export function CountrySelector() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const [isFocused, setIsFocused] = useState(false)
+  const listboxId = 'country-selector-listbox'
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -378,6 +379,22 @@ export function CountrySelector() {
     inputRef.current?.focus()
   }
 
+  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setIsFocused(true)
+      return
+    }
+    if (event.key === 'Escape') {
+      setIsFocused(false)
+      return
+    }
+    if (event.key === 'Enter' && filteredCountries.length === 1) {
+      event.preventDefault()
+      handleSelect(filteredCountries[0])
+    }
+  }
+
   // Coverage bar component
   const CoverageBar = ({ coverage }: { coverage: number }) => {
     const percent = Math.round(coverage * 100)
@@ -410,7 +427,17 @@ export function CountrySelector() {
   const renderCountryRow = (country: CountryWithMeta) => (
     <div
       key={country.name}
+      className="country-option"
       onClick={() => handleSelect(country)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          handleSelect(country)
+        }
+      }}
+      role="option"
+      aria-selected={selectedCountry === country.name}
+      tabIndex={0}
       style={{
         padding: '8px 12px',
         cursor: 'pointer',
@@ -486,6 +513,7 @@ export function CountrySelector() {
         {selectedCountry && !countryLoading && (
           <button
             onClick={handleClear}
+            aria-label="Clear selected country"
             style={{
               background: '#FFEBEE',
               border: '1px solid #FFCDD2',
@@ -520,8 +548,14 @@ export function CountrySelector() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           onFocus={() => setIsFocused(true)}
+          onKeyDown={handleInputKeyDown}
           placeholder={countriesLoading ? 'Loading...' : 'Search countries (e.g., USA, UK, China)...'}
           disabled={countriesLoading || countryLoading}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={showDropdown}
+          aria-controls={listboxId}
+          aria-label="Search and select country"
           style={{
             width: '100%',
             padding: '8px 32px 8px 12px',
@@ -541,6 +575,9 @@ export function CountrySelector() {
             setIsFocused(!isFocused)
             if (!isFocused) inputRef.current?.focus()
           }}
+          aria-label={isFocused ? 'Close country list' : 'Open country list'}
+          aria-expanded={showDropdown}
+          aria-controls={listboxId}
           disabled={countriesLoading || countryLoading}
           style={{
             position: 'absolute',
@@ -570,6 +607,9 @@ export function CountrySelector() {
       {/* Dropdown */}
       {showDropdown && (
         <div
+          id={listboxId}
+          role="listbox"
+          aria-label="Country options"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           style={{
@@ -603,7 +643,7 @@ export function CountrySelector() {
               Array.from(groupedCountries.entries())
                 .filter(([, countries]) => countries.length > 0)
                 .map(([region, countries]) => (
-                  <div key={region}>
+                  <div key={region} role="presentation">
                     <div style={{
                       padding: '6px 12px',
                       background: '#f5f5f5',
@@ -614,7 +654,7 @@ export function CountrySelector() {
                       position: 'sticky',
                       top: 0,
                       zIndex: 1
-                    }}>
+                    }} role="presentation">
                       {region} ({countries.length})
                     </div>
                     {countries.map(renderCountryRow)}
@@ -635,6 +675,20 @@ export function CountrySelector() {
           </div>
         </div>
       )}
+
+      <style>{`
+        input:focus-visible,
+        button:focus-visible {
+          outline: 2px solid #3B82F6;
+          outline-offset: 2px;
+        }
+
+        .country-option:focus-visible {
+          outline: 2px solid #3B82F6;
+          outline-offset: -2px;
+          background: #eef4ff;
+        }
+      `}</style>
     </div>
   )
 }

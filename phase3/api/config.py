@@ -83,13 +83,28 @@ Country-specific causal simulation for policy analysis.
 """
 
 # CORS settings
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", ",".join([
+DEFAULT_CORS_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
+    "http://localhost:5174",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
-    "*"  # Allow all for development
-])).split(",")
+    "http://127.0.0.1:5174",
+]
+CORS_ALLOW_WILDCARD = os.getenv("CORS_ALLOW_WILDCARD", "false").lower() == "true"
+_default_cors = DEFAULT_CORS_ORIGINS + (["*"] if ENV != "production" else [])
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", ",".join(_default_cors)).split(",")
+    if origin.strip()
+]
+
+if "*" in CORS_ORIGINS and ENV == "production" and not CORS_ALLOW_WILDCARD:
+    CORS_ORIGINS = [origin for origin in CORS_ORIGINS if origin != "*"]
+    if not CORS_ORIGINS:
+        CORS_ORIGINS = DEFAULT_CORS_ORIGINS
+
+CORS_ALLOW_CREDENTIALS = "*" not in CORS_ORIGINS
 
 # Rate limiting
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"

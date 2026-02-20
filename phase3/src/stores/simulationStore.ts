@@ -24,6 +24,14 @@ import {
   type AllClassifications,
   getShapImportance
 } from '../services/api';
+import { debug } from '../utils/debug';
+import {
+  DATA_YEAR_MAX,
+  DATA_YEAR_MIN,
+  INTERVENTION_YEAR_MAX,
+  SIMULATION_YEAR_MAX,
+  SIMULATION_YEAR_MIN,
+} from '../constants/time';
 
 // ============================================
 // Saved Scenarios (localStorage)
@@ -56,6 +64,19 @@ function saveScenariosToStorage(scenarios: SavedScenario[]): void {
   } catch {
     // Storage full or unavailable — silent fail
   }
+}
+
+// ============================================
+// Simulation result cache (avoids repeat API calls)
+// ============================================
+const simCache = new Map<string, TemporalResults>()
+
+function makeSimCacheKey(country: string, interventions: Intervention[], baseYear: number, horizon: number): string {
+  const intKey = interventions
+    .map(i => `${i.indicator}:${i.change_percent}:${i.year ?? 0}`)
+    .sort()
+    .join('|')
+  return `${country}::${intKey}::${baseYear}::${horizon}`
 }
 
 // ============================================
@@ -106,6 +127,8 @@ interface SimulationState {
   // Interventions (max 5)
   interventions: Intervention[];
 
+  // Simulation scope: which graph level to simulate on
+
   // Simulation state
   isSimulating: boolean;
   temporalResults: TemporalResults | null;
@@ -114,6 +137,7 @@ interface SimulationState {
   playbackMode: PlaybackMode;
   currentYearIndex: number;  // Index into years array
   isPlaying: boolean;
+  layoutReady: boolean;  // True once D3 render + transitions complete after sim results arrive
 
   // Legacy fields for simulation temporal playback
   currentYear: number;
@@ -163,6 +187,8 @@ interface SimulationState {
   removeIntervention: (index: number) => void;
   clearInterventions: () => void;
 
+  // Actions - Simulation Scope
+
   // Actions - Simulation
   runTemporalSimulation: (horizonYears?: number | undefined) => Promise<void>;
   clearResults: () => void;
@@ -174,6 +200,7 @@ interface SimulationState {
   pause: () => void;
   resetPlayback: () => void;
   setPlaybackMode: (mode: PlaybackMode) => void;
+  setLayoutReady: (ready: boolean) => void;
 
   // Actions - Simulation Timeline
   setSimulationStartYear: (year: number) => void;
@@ -197,6 +224,15 @@ interface SimulationState {
 // ============================================
 
 const MAX_INTERVENTIONS = 5;
+let countryLoadRequestId = 0;
+let countryLoadController: AbortController | null = null;
+
+const isAbortError = (error: unknown): boolean => {
+  return (
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
+};
 
 // ============================================
 // Store Implementation
@@ -230,10 +266,11 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   playbackMode: 'historical',
   currentYearIndex: 0,
   isPlaying: false,
+  layoutReady: true,
   currentYear: 0,
   horizonYears: 5,
-  baseYear: 2024,
-  simulationStartYear: 2024,
+  baseYear: 2020,
+  simulationStartYear: 2020,
   simulationEndYear: 2029,
   effectFilterPct: 0.5,
   savedScenarios: loadScenariosFromStorage(),
@@ -263,6 +300,13 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   setCountry: async (name: string) => {
     const { selectedTarget } = get();
+    const requestId = ++countryLoadRequestId;
+
+    if (countryLoadController) {
+      countryLoadController.abort();
+    }
+    const controller = new AbortController();
+    countryLoadController = controller;
 
     set({
       selectedCountry: name,
@@ -283,18 +327,36 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     try {
       // Fetch graph, raw timeline, and SHAP timeline in parallel
       const [countryGraph, timeline] = await Promise.all([
-        simulationAPI.getCountryGraph(name),
-        simulationAPI.getCountryTimeline(name)
+        simulationAPI.getCountryGraph(name, controller.signal),
+        simulationAPI.getCountryTimeline(name, undefined, undefined, controller.signal)
       ]);
+
+      if (controller.signal.aborted || requestId !== countryLoadRequestId) return;
 
       // Fetch SHAP timeline separately (may fallback to unified)
       let shapTimeline: TemporalShapTimeline;
       try {
-        shapTimeline = await simulationAPI.getCountryShapTimeline(name, selectedTarget);
-      } catch {
+        shapTimeline = await simulationAPI.getCountryShapTimeline(
+          name,
+          selectedTarget,
+          undefined,
+          undefined,
+          controller.signal
+        );
+      } catch (error) {
+        if (isAbortError(error) || controller.signal.aborted || requestId !== countryLoadRequestId) {
+          return;
+        }
         // Country not available for SHAP, use unified
-        shapTimeline = await simulationAPI.getUnifiedShapTimeline(selectedTarget);
+        shapTimeline = await simulationAPI.getUnifiedShapTimeline(
+          selectedTarget,
+          undefined,
+          undefined,
+          controller.signal
+        );
       }
+
+      if (controller.signal.aborted || requestId !== countryLoadRequestId) return;
 
       // Filter SHAP timeline to only include years with actual data (non-zero values)
       // This prevents showing years like 1999-2009 where country SHAP is all zeros
@@ -328,6 +390,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         currentYearIndex: effectiveTimeline.years.length - 1
       });
     } catch (err) {
+      if (isAbortError(err) || controller.signal.aborted || requestId !== countryLoadRequestId) {
+        return;
+      }
       set({
         error: err instanceof Error ? err.message : 'Failed to load country data',
         countryLoading: false,
@@ -337,10 +402,19 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         historicalTimeline: null,
         temporalShapTimeline: null
       });
+    } finally {
+      if (countryLoadController === controller) {
+        countryLoadController = null;
+      }
     }
   },
 
   clearCountry: () => {
+    countryLoadRequestId += 1;
+    if (countryLoadController) {
+      countryLoadController.abort();
+      countryLoadController = null;
+    }
     const { cachedUnifiedShap, cachedUnifiedTimeline } = get();
 
     // Clear country-specific data and restore unified timeline from cache
@@ -390,7 +464,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         shapTimelineLoading: false
       });
     } catch (err) {
-      console.error('Failed to load temporal SHAP timeline:', err);
+      if (!isAbortError(err)) {
+        debug.error('simulation-store', 'Failed to load temporal SHAP timeline:', err);
+      }
       set({
         shapTimelineLoading: false,
         temporalShapTimeline: null
@@ -427,8 +503,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       // Create a pseudo historicalTimeline from SHAP years for playback
       const unifiedHistoricalTimeline: CountryTimeline = {
         country: 'unified',
-        start_year: shapTimeline.years[0] || 1990,
-        end_year: shapTimeline.years[shapTimeline.years.length - 1] || 2024,
+        start_year: shapTimeline.years[0] || DATA_YEAR_MIN,
+        end_year: shapTimeline.years[shapTimeline.years.length - 1] || DATA_YEAR_MAX,
         years: shapTimeline.years,
         values: {},  // No indicator values for unified view
         n_indicators: 0
@@ -447,7 +523,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         playbackMode: 'historical'
       });
     } catch (err) {
-      console.error('Failed to load unified timeline:', err);
+      if (!isAbortError(err)) {
+        debug.error('simulation-store', 'Failed to load unified timeline:', err);
+      }
       set({
         timelineLoading: false,
         shapTimelineLoading: false,
@@ -470,7 +548,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   // Stratified SHAP actions
   setStratum: (stratum: IncomeStratum | 'unified') => {
-    console.log(`%c[Store] Switching stratum: ${stratum}`, 'color: cyan; font-weight: bold');
+    debug.log('simulation-store', `Switching stratum: ${stratum}`);
     const { selectedTarget, loadStratifiedShapTimeline, loadTemporalShapTimeline, historicalTimeline, currentYearIndex } = get();
     set({ selectedStratum: stratum });
 
@@ -497,20 +575,22 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     const state = get();
     const targetToUse = target || state.selectedTarget;
     const startTime = performance.now();
-    console.log(`%c[Store] Loading ${stratum} SHAP timeline...`, 'color: orange');
+    debug.log('simulation-store', `Loading ${stratum} SHAP timeline...`);
 
     set({ shapTimelineLoading: true });
 
     try {
       const timeline = await simulationAPI.getStratifiedShapTimeline(stratum, targetToUse);
       const duration = performance.now() - startTime;
-      console.log(`%c[Store] ${stratum} SHAP loaded in ${duration.toFixed(0)}ms`, duration > 1000 ? 'color: red' : 'color: green');
+      debug.log('simulation-store', `${stratum} SHAP loaded in ${duration.toFixed(0)}ms`);
       set({
         stratifiedShapTimeline: timeline,
         shapTimelineLoading: false
       });
     } catch (err) {
-      console.error('Failed to load stratified SHAP timeline:', err);
+      if (!isAbortError(err)) {
+        debug.error('simulation-store', 'Failed to load stratified SHAP timeline:', err);
+      }
       set({
         shapTimelineLoading: false,
         stratifiedShapTimeline: null
@@ -532,7 +612,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       // Precompute stratum counts for all years (1990-2024)
       const countsCache = new Map<number, StratumCounts>();
 
-      for (let year = 1990; year <= 2024; year++) {
+      for (let year = DATA_YEAR_MIN; year <= DATA_YEAR_MAX; year++) {
         const counts: Record<IncomeStratum, number> = {
           developing: 0,
           emerging: 0,
@@ -561,7 +641,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         stratumCountsCache: countsCache
       });
     } catch (err) {
-      console.error('Failed to load classifications:', err);
+      debug.error('simulation-store', 'Failed to load classifications:', err);
     }
   },
 
@@ -598,7 +678,14 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       set({ error: `Maximum ${MAX_INTERVENTIONS} interventions allowed` });
       return;
     }
-    set({ interventions: [...interventions, intervention] });
+    const updated = [...interventions, intervention];
+    const newState: Partial<SimulationState> = { interventions: updated };
+    // Sync start year to earliest intervention year
+    const years = updated.map(i => i.year).filter((y): y is number => y !== undefined);
+    if (years.length > 0) {
+      newState.simulationStartYear = Math.min(...years);
+    }
+    set(newState);
   },
 
   updateIntervention: (index: number, updates: Partial<Intervention>) => {
@@ -607,57 +694,138 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
     const updated = [...interventions];
     updated[index] = { ...updated[index], ...updates };
-    set({ interventions: updated });
+
+    const newState: Partial<SimulationState> = { interventions: updated };
+    // Sync start year to earliest intervention year
+    if (updates.year !== undefined) {
+      const years = updated.map(i => i.year).filter((y): y is number => y !== undefined);
+      if (years.length > 0) {
+        newState.simulationStartYear = Math.min(...years);
+      }
+    }
+    set(newState);
   },
 
   removeIntervention: (index: number) => {
     const { interventions } = get();
-    set({ interventions: interventions.filter((_, i) => i !== index) });
+    const updated = interventions.filter((_, i) => i !== index);
+    const newState: Partial<SimulationState> = { interventions: updated };
+    // Sync start year to earliest remaining intervention year
+    const years = updated.map(i => i.year).filter((y): y is number => y !== undefined);
+    if (years.length > 0) {
+      newState.simulationStartYear = Math.min(...years);
+    }
+    set(newState);
   },
 
   clearInterventions: () => set({ interventions: [] }),
 
   // Simulation actions
   runTemporalSimulation: async (horizonYears?: number) => {
-    const { selectedCountry, interventions, isSimulating, historicalTimeline, currentYearIndex, simulationStartYear, simulationEndYear } = get();
+    const { selectedCountry, selectedStratum, interventions, isSimulating, historicalTimeline, currentYearIndex, simulationStartYear, simulationEndYear } = get();
 
     if (isSimulating) return;
 
-    if (!selectedCountry || interventions.length === 0) {
-      set({ error: 'Please select a country and add interventions first' });
+    // Derive view type from current graph view + country selection
+    const viewType: 'country' | 'stratified' | 'unified' =
+      selectedCountry ? 'country'
+        : selectedStratum === 'unified' ? 'unified'
+        : 'stratified';
+
+    if (viewType === 'country' && !selectedCountry) {
+      set({ error: 'Please select a country first' });
+      return;
+    }
+    if (interventions.length === 0) {
+      set({ error: 'Please add interventions first' });
       return;
     }
 
-    set({ isSimulating: true, error: null });
-
     // Default intervention year = simulationStartYear (user-set), fallback to timeline position
-    const fallbackYear = historicalTimeline?.years[currentYearIndex] ?? 2024;
+    const fallbackYear = historicalTimeline?.years[currentYearIndex] ?? INTERVENTION_YEAR_MAX;
     const defaultYear = simulationStartYear ?? fallbackYear;
     const interventionsWithYear = interventions.map(intv => ({
       ...intv,
       year: intv.year ?? defaultYear
     }));
 
-    // Compute horizon from user-set start/end years
-    const effectiveHorizon = horizonYears ?? Math.max(1, simulationEndYear - simulationStartYear);
+    // Ensure base_year is at least 1 year before the earliest intervention
+    const earliestIntervention = Math.min(...interventionsWithYear.map(i => i.year));
+    const effectiveBaseYear = Math.min(simulationStartYear, earliestIntervention - 1);
 
-    try {
-      const results = await simulationAPI.runTemporalSimulation(
-        selectedCountry,
-        interventionsWithYear,
-        effectiveHorizon,
-        simulationStartYear
-      );
+    // Compute horizon: from effective base year to the simulation end year
+    const effectiveHorizon = horizonYears ?? Math.max(1, simulationEndYear - effectiveBaseYear);
+
+    // For strata/unified, use a representative country (backend needs one for routing)
+    const STRATA_REPRESENTATIVE: Record<string, string> = {
+      developing: 'India',
+      emerging: 'China',
+      advanced: 'United States',
+    };
+    let apiCountry: string = selectedCountry || 'United States';
+    if (viewType === 'unified') {
+      apiCountry = 'United States';
+    } else if (viewType === 'stratified') {
+      apiCountry = STRATA_REPRESENTATIVE[selectedStratum] || 'India';
+    }
+
+    // Helper to apply results (shared between cache hit and API response)
+    const applyResults = (results: TemporalResults) => {
+      const TARGET_VISIBLE = 20;
+      const yearKeys = Object.keys(results.effects).sort();
+      const finalYearEffects = yearKeys.length > 0
+        ? results.effects[yearKeys[yearKeys.length - 1]]
+        : {};
+      const nonZeroEffects = Object.values(finalYearEffects)
+        .filter(e => Math.abs(e.percent_change) > 0.01).length;
+      const autoFilterPct = nonZeroEffects > TARGET_VISIBLE
+        ? Math.min(1, Math.max(0.01, TARGET_VISIBLE / nonZeroEffects))
+        : 1;
+
+      debug.log('simulation-store', `Simulation complete: ${results.horizon_years} years, base=${results.base_year}, effects keys=${Object.keys(results.effects).length}`);
       set({
         temporalResults: results,
         isSimulating: false,
         horizonYears: results.horizon_years,
         baseYear: results.base_year,
-        currentYear: 0
+        currentYear: 1,
+        currentYearIndex: 1,  // Skip base year (index 0), start at first intervention year
+        playbackMode: 'simulation',
+        effectFilterPct: autoFilterPct,
+        layoutReady: false  // Will be set true by App.tsx after D3 render settles
       });
+    };
+
+    // Check cache before making API call
+    const cacheKey = makeSimCacheKey(apiCountry, interventionsWithYear, effectiveBaseYear, effectiveHorizon);
+    const cached = simCache.get(cacheKey);
+    if (cached) {
+      debug.log('simulation-store', `Cache hit for simulation`);
+      applyResults(cached);
+      return;
+    }
+
+    set({ isSimulating: true, error: null });
+
+    try {
+      const results = await simulationAPI.runTemporalSimulation(
+        apiCountry,
+        interventionsWithYear,
+        effectiveHorizon,
+        effectiveBaseYear,
+        viewType
+      );
+
+      // Store in cache
+      simCache.set(cacheKey, results);
+      applyResults(results);
     } catch (err) {
+      const rawMsg = err instanceof Error ? err.message : 'Temporal simulation failed';
+      const enriched = /no valid interventions/i.test(rawMsg)
+        ? `${rawMsg} — baseline loaded from year ${effectiveBaseYear}. Try adjusting the simulation start year or intervention year.`
+        : rawMsg;
       set({
-        error: err instanceof Error ? err.message : 'Temporal simulation failed',
+        error: enriched,
         isSimulating: false
       });
     }
@@ -682,8 +850,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       const maxIndex = historicalTimeline.years.length - 1;
       set({ currentYearIndex: Math.max(0, Math.min(index, maxIndex)) });
     } else {
-      // Simulation mode uses horizonYears
-      set({ currentYearIndex: Math.max(0, Math.min(index, horizonYears)) });
+      // Simulation mode: currentYearIndex is source of truth, derive currentYear
+      const clamped = Math.max(0, Math.min(index, horizonYears));
+      set({ currentYearIndex: clamped, currentYear: clamped });
     }
   },
 
@@ -700,6 +869,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       set({ currentYear: 0, currentYearIndex: 0, isPlaying: false });
     }
   },
+
+  setLayoutReady: (ready: boolean) => set({ layoutReady: ready }),
 
   setPlaybackMode: (mode: PlaybackMode) => {
     const { historicalTimeline } = get();
@@ -722,13 +893,13 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   // Simulation timeline actions
   setSimulationStartYear: (year: number) => {
     const { simulationEndYear } = get();
-    const clamped = Math.max(1990, Math.min(simulationEndYear - 1, year));
+    const clamped = Math.max(SIMULATION_YEAR_MIN, Math.min(simulationEndYear - 1, year));
     set({ simulationStartYear: clamped });
   },
 
   setSimulationEndYear: (year: number) => {
     const { simulationStartYear } = get();
-    const clamped = Math.max(simulationStartYear + 1, Math.min(2030, year));
+    const clamped = Math.max(simulationStartYear + 1, Math.min(SIMULATION_YEAR_MAX, year));
     set({ simulationEndYear: clamped });
   },
 
@@ -807,13 +978,14 @@ export const useSimulationError = () => useSimulationStore((state) => state.erro
 /** Get intervention count */
 export const useInterventionCount = () => useSimulationStore((state) => state.interventions.length);
 
-/** Check if can run simulation */
-export const useCanRunSimulation = () => useSimulationStore((state) => (
-  state.selectedCountry !== null &&
-  state.interventions.length > 0 &&
-  state.interventions.every(i => i.indicator) &&
-  !state.isSimulating
-));
+/** Check if can run simulation — always possible if interventions are set (scope derived from current view) */
+export const useCanRunSimulation = () => useSimulationStore((state) => {
+  return (
+    state.interventions.length > 0 &&
+    state.interventions.every(i => i.indicator) &&
+    !state.isSimulating
+  );
+});
 
 /** Get historical timeline */
 export const useHistoricalTimeline = () => useSimulationStore((state) => state.historicalTimeline);
@@ -878,6 +1050,8 @@ export const useStratumCounts = () => useSimulationStore((state) => state.stratu
 
 /** Get stratified SHAP timeline */
 export const useStratifiedShapTimeline = () => useSimulationStore((state) => state.stratifiedShapTimeline);
+
+/** Get simulation view type */
 
 /** Get effect filter percentage */
 export const useEffectFilterPct = () => useSimulationStore((state) => state.effectFilterPct);

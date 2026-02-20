@@ -7,10 +7,14 @@ Uses year-specific temporal graphs (4,768 pre-computed files).
 
 import asyncio
 import logging
-from fastapi import APIRouter, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Response
+from pydantic import BaseModel, Field
 
 from ..services import simulation_service
+from ..config import DEFAULT_GRAPH_YEAR
 from ..models import (
+    InterventionInput,
     SimulationRequestV31,
     SimulationResponseV31,
     TemporalSimulationRequestV31,
@@ -23,6 +27,42 @@ logger = logging.getLogger("api.simulation")
 # Timeouts (may need tuning based on ensemble runs)
 SIMULATION_TIMEOUT = 30
 TEMPORAL_TIMEOUT = 60
+
+
+class LegacySimulationRequest(BaseModel):
+    """Deprecated /api/simulate request model retained for compatibility."""
+    country: str = Field(..., description="Country name")
+    interventions: List[InterventionInput] = Field(..., min_length=1, max_length=20)
+    year: Optional[int] = Field(
+        None,
+        ge=1990,
+        le=2024,
+        description="Optional simulation year. Defaults to latest available year."
+    )
+
+
+class LegacyTemporalSimulationRequest(BaseModel):
+    """Deprecated /api/simulate/temporal request model retained for compatibility."""
+    country: str = Field(..., description="Country name")
+    interventions: List[InterventionInput] = Field(..., min_length=1, max_length=20)
+    base_year: Optional[int] = Field(
+        None,
+        ge=1990,
+        le=2024,
+        description="Optional base year. Defaults to latest available year."
+    )
+    horizon_years: int = Field(
+        10,
+        ge=1,
+        le=40,
+        description="Projection horizon in years."
+    )
+
+
+def _set_deprecation_headers(response: Response, replacement_path: str) -> None:
+    response.headers["Deprecation"] = "true"
+    response.headers["X-API-Deprecated"] = "true"
+    response.headers["Link"] = f"<{replacement_path}>; rel=\"successor-version\""
 
 @router.post("/v31", response_model=SimulationResponseV31, tags=["simulation-v31"])
 async def run_instant_simulation_v31(request: SimulationRequestV31):
@@ -188,3 +228,50 @@ async def run_temporal_simulation_v31(request: TemporalSimulationRequestV31):
             status_code=500,
             detail=f"V3.1 temporal simulation error: {str(e)}"
         )
+
+
+@router.post("", response_model=SimulationResponseV31, deprecated=True, tags=["simulation-compat"])
+async def run_instant_simulation_legacy(
+    request: LegacySimulationRequest,
+    response: Response
+):
+    """
+    Deprecated compatibility wrapper for /api/simulate.
+
+    Adapts legacy payloads to canonical V3.1 instant simulation defaults:
+    - mode=percentage
+    - view_type=country
+    - year defaults to latest available year
+    """
+    _set_deprecation_headers(response, "/api/simulate/v31")
+    normalized = SimulationRequestV31(
+        country=request.country,
+        interventions=request.interventions,
+        year=request.year or DEFAULT_GRAPH_YEAR,
+        mode="percentage",
+        view_type="country",
+    )
+    return await run_instant_simulation_v31(normalized)
+
+
+@router.post("/temporal", response_model=TemporalSimulationResponseV31, deprecated=True, tags=["simulation-compat"])
+async def run_temporal_simulation_legacy(
+    request: LegacyTemporalSimulationRequest,
+    response: Response
+):
+    """
+    Deprecated compatibility wrapper for /api/simulate/temporal.
+
+    Adapts legacy payloads to canonical V3.1 temporal simulation defaults:
+    - view_type=country
+    - base_year defaults to latest available year
+    """
+    _set_deprecation_headers(response, "/api/simulate/v31/temporal")
+    normalized = TemporalSimulationRequestV31(
+        country=request.country,
+        interventions=request.interventions,
+        base_year=request.base_year or DEFAULT_GRAPH_YEAR,
+        horizon_years=request.horizon_years,
+        view_type="country",
+    )
+    return await run_temporal_simulation_v31(normalized)

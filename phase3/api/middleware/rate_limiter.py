@@ -13,12 +13,17 @@ from fastapi.responses import JSONResponse
 from collections import defaultdict
 from typing import Dict, List
 import time
+from ..config import RATE_LIMIT_PER_HOUR, RATE_LIMIT_PER_MINUTE
 
 
 class RateLimiter:
     """In-memory rate limiter with sliding window."""
 
-    def __init__(self, requests_per_minute: int = 300, requests_per_hour: int = 3000):
+    def __init__(
+        self,
+        requests_per_minute: int = RATE_LIMIT_PER_MINUTE,
+        requests_per_hour: int = RATE_LIMIT_PER_HOUR
+    ):
         self.rpm_limit = requests_per_minute
         self.rph_limit = requests_per_hour
         self.minute_requests: Dict[str, List[float]] = defaultdict(list)
@@ -82,8 +87,11 @@ class RateLimiter:
             self.hour_requests.clear()
 
 
-# Global rate limiter instance
-rate_limiter = RateLimiter()
+# Global rate limiter instance (wired to environment config)
+rate_limiter = RateLimiter(
+    requests_per_minute=RATE_LIMIT_PER_MINUTE,
+    requests_per_hour=RATE_LIMIT_PER_HOUR
+)
 
 
 async def rate_limit_middleware(request: Request, call_next):

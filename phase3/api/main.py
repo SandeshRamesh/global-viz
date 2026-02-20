@@ -1,8 +1,8 @@
 """
-V3.0 Global Causal Discovery API
+V3.1 Global Causal Discovery API
 
 FastAPI backend for policy intervention simulation.
-Production-ready with rate limiting, logging, and timeout protection.
+Canonical simulation contract is V3.1; legacy aliases remain for compatibility.
 """
 
 from fastapi import FastAPI, Request
@@ -14,7 +14,7 @@ import logging
 
 from .config import (
     API_VERSION, API_TITLE, API_DESCRIPTION,
-    CORS_ORIGINS, RATE_LIMIT_ENABLED,
+    CORS_ORIGINS, CORS_ALLOW_CREDENTIALS, RATE_LIMIT_ENABLED, ENV,
     CONTACT_NAME, CONTACT_URL, CONTACT_EMAIL,
     LOG_LEVEL
 )
@@ -57,7 +57,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -116,20 +116,40 @@ async def root():
     return {
         "name": API_TITLE,
         "version": API_VERSION,
+        "environment": ENV,
         "docs": "/docs",
         "health": "/health",
+        "api_contract": {
+            "canonical": {
+                "instant": "/api/simulate/v31",
+                "temporal": "/api/simulate/v31/temporal",
+            },
+            "compatibility_aliases": {
+                "instant": {
+                    "path": "/api/simulate",
+                    "status": "deprecated",
+                    "forwards_to": "/api/simulate/v31",
+                },
+                "temporal": {
+                    "path": "/api/simulate/temporal",
+                    "status": "deprecated",
+                    "forwards_to": "/api/simulate/v31/temporal",
+                },
+            },
+        },
         "endpoints": {
-            # V3.0 endpoints (static country graphs)
+            # Core endpoints
             "countries": "/api/countries",
             "graph": "/api/graph/{country}",
-            "simulate": "/api/simulate",
-            "simulate_temporal": "/api/simulate/temporal",
             "indicators": "/api/indicators",
             "indicator_detail": "/api/indicators/{id}",
             "metadata": "/api/metadata",
-            # V3.1 simulation endpoints (year-specific temporal graphs)
+            # Canonical simulation endpoints (V3.1)
             "simulate_v31": "/api/simulate/v31",
             "simulate_v31_temporal": "/api/simulate/v31/temporal",
+            # Deprecated compatibility aliases
+            "simulate": "/api/simulate",
+            "simulate_temporal": "/api/simulate/temporal",
             # V3.1 temporal data endpoints
             "temporal_status": "/api/temporal/status",
             "temporal_shap": "/api/temporal/shap/{target}/{year}",
@@ -182,22 +202,26 @@ def custom_openapi():
         license_info=app.license_info
     )
 
-    # Add example for SimulationRequest
-    if "SimulationRequest" in openapi_schema.get("components", {}).get("schemas", {}):
-        openapi_schema["components"]["schemas"]["SimulationRequest"]["example"] = {
-            "country": "Australia",
-            "interventions": [
-                {"indicator": "v2elvotbuy", "change_percent": 20}
-            ]
-        }
-
-    # Add example for TemporalSimulationRequest
-    if "TemporalSimulationRequest" in openapi_schema.get("components", {}).get("schemas", {}):
-        openapi_schema["components"]["schemas"]["TemporalSimulationRequest"]["example"] = {
+    # Add example for SimulationRequestV31
+    if "SimulationRequestV31" in openapi_schema.get("components", {}).get("schemas", {}):
+        openapi_schema["components"]["schemas"]["SimulationRequestV31"]["example"] = {
             "country": "Australia",
             "interventions": [
                 {"indicator": "v2elvotbuy", "change_percent": 20}
             ],
+            "year": 2020,
+            "mode": "percentage",
+            "view_type": "country",
+        }
+
+    # Add example for TemporalSimulationRequestV31
+    if "TemporalSimulationRequestV31" in openapi_schema.get("components", {}).get("schemas", {}):
+        openapi_schema["components"]["schemas"]["TemporalSimulationRequestV31"]["example"] = {
+            "country": "Australia",
+            "interventions": [
+                {"indicator": "v2elvotbuy", "change_percent": 20}
+            ],
+            "base_year": 2020,
             "horizon_years": 10
         }
 

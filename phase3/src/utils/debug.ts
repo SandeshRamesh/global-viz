@@ -1,73 +1,89 @@
 /**
  * DEBUG SYSTEM
  *
- * Development: Shows detailed logs with category prefixes
- * Production: Zero overhead (functions are no-ops, tree-shaken by Vite)
- *
- * Usage:
- *   import { debug } from './utils/debug'
- *   debug.layout('Ring radii:', radii)
- *   debug.perf('Layout calculation')
- *   // ... code ...
- *   debug.perfEnd('Layout calculation')
+ * Runtime logs are opt-in and disabled by default.
+ * Enable with:
+ * - VITE_DEBUG=true
+ * - Optional VITE_DEBUG_CATEGORIES=cache,error,Layout
  */
 
 const IS_DEV = import.meta.env.DEV
+const DEBUG_ENABLED = IS_DEV && import.meta.env.VITE_DEBUG === 'true'
+const DEBUG_CATEGORIES = (import.meta.env.VITE_DEBUG_CATEGORIES || '')
+  .split(',')
+  .map((part: string) => part.trim())
+  .filter(Boolean)
+const PERF_ENABLED = DEBUG_ENABLED || import.meta.env.VITE_DEBUG_PERF === 'true'
+const ALL_CATEGORIES_ENABLED = DEBUG_CATEGORIES.includes('*')
 
-// Categories to enable (set to false to silence)
-const ENABLED_CATEGORIES: Record<string, boolean> = {
-  Layout: false,      // RadialLayout verbose logs
-  Viewport: false,    // ViewportScales logs
-  Render: false,      // Render cycle logs
-  Sector: false,      // Sector filling algorithm
-  Space: false,       // Space allocation
-  Overlap: false,     // Overlap detection
-  cache: true,        // Cache operations (keep for debugging)
+const CATEGORY_DEFAULTS: Record<string, boolean> = {
+  Layout: false,
+  Viewport: false,
+  Render: false,
+  Sector: false,
+  Space: false,
+  Overlap: false,
+  cache: false,
+  error: true,
 }
 
-// No-op function for production
 const noop = (): void => {}
 
-// Create bound console methods for development (with category check)
+const isCategoryEnabled = (category: string): boolean => {
+  if (!DEBUG_ENABLED) return false
+  if (ALL_CATEGORIES_ENABLED) return true
+  if (DEBUG_CATEGORIES.length > 0) return DEBUG_CATEGORIES.includes(category)
+  return CATEGORY_DEFAULTS[category] ?? false
+}
+
 const createLogger = (prefix: string) =>
-  IS_DEV && ENABLED_CATEGORIES[prefix] !== false
+  isCategoryEnabled(prefix)
     ? console.log.bind(console, `[${prefix}]`)
     : noop
 
 const createWarn = (prefix: string) =>
-  IS_DEV && ENABLED_CATEGORIES[prefix] !== false
+  isCategoryEnabled(prefix)
     ? console.warn.bind(console, `[${prefix}]`)
     : noop
 
+const createError = (prefix: string) =>
+  isCategoryEnabled(prefix)
+    ? console.error.bind(console, `[${prefix}]`)
+    : noop
+
+const categoryLogger = (method: 'log' | 'warn' | 'error') => {
+  return (category: string, ...args: unknown[]) => {
+    if (!isCategoryEnabled(category)) return
+    if (method === 'error') {
+      console.error(`[${category}]`, ...args)
+      return
+    }
+    if (method === 'warn') {
+      console.warn(`[${category}]`, ...args)
+      return
+    }
+    console.log(`[${category}]`, ...args)
+  }
+}
+
 export const debug = {
-  // Layout calculations (RadialLayout.ts)
   layout: createLogger('Layout'),
   layoutWarn: createWarn('Layout'),
-
-  // Viewport scaling (ViewportScales.ts)
   viewport: createLogger('Viewport'),
   viewportWarn: createWarn('Viewport'),
-
-  // Rendering (App.tsx)
   render: createLogger('Render'),
   renderWarn: createWarn('Render'),
-
-  // Sector filling algorithm
   sector: createLogger('Sector'),
-
-  // Space allocation
   space: createLogger('Space'),
-
-  // Overlap detection
   overlap: createLogger('Overlap'),
-
-  // Performance timing
-  perf: IS_DEV ? console.time.bind(console) : noop,
-  perfEnd: IS_DEV ? console.timeEnd.bind(console) : noop,
-
-  // Generic debug (for misc logs) - always enabled in dev
-  log: IS_DEV ? console.log.bind(console) : noop,
-  warn: IS_DEV ? console.warn.bind(console) : noop,
+  perf: PERF_ENABLED ? console.time.bind(console) : noop,
+  perfEnd: PERF_ENABLED ? console.timeEnd.bind(console) : noop,
+  log: categoryLogger('log'),
+  warn: categoryLogger('warn'),
+  error: categoryLogger('error'),
+  cache: createLogger('cache'),
+  cacheWarn: createWarn('cache'),
+  cacheError: createError('cache'),
 }
 
 export default debug

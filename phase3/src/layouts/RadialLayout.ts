@@ -290,11 +290,12 @@ function calculateVisualFootprint(
   const densityFactor = getDensityTextFactor(ringIndex)
 
   switch (textOrientation) {
-    case 'horizontal':
+    case 'horizontal': {
       // Text below node - needs max of node width or text width
       // Scale text contribution by density factor
       const scaledTextWidth = cappedTextWidth * densityFactor
       return Math.max(nodeDiameter, scaledTextWidth) + explorationPadding * densityFactor
+    }
 
     case 'radial':
       // Text extends outward - add font height + exploration padding

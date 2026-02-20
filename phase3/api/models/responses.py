@@ -214,6 +214,13 @@ class SimulationResponseV31(BaseModel):
     )
 
 
+class CausalPathEntry(BaseModel):
+    """Causal path entry for a single affected indicator."""
+    hop: int = Field(..., description="Distance from intervention node (0=intervention, 1=direct effect, etc.)")
+    source: str = Field(..., description="Immediate causal parent node ID (highest |beta * source_change| contributor)")
+    beta: float = Field(..., description="Beta coefficient on the edge from source to this node")
+
+
 class TemporalSimulationResponseV31(BaseModel):
     """
     Response for POST /api/simulate/v31/temporal.
@@ -234,6 +241,11 @@ class TemporalSimulationResponseV31(BaseModel):
     )
     effects: Dict[int, Dict[str, EffectDetailV31]] = Field(
         ..., description="Top effects at each year"
+    )
+    causal_paths: Optional[Dict[str, CausalPathEntry]] = Field(
+        None,
+        description="Causal path for each affected indicator: hop distance, immediate source, and edge beta. "
+                    "First-write-wins (shortest path). Source selected by max |beta * source_percent_change|."
     )
     affected_per_year: Dict[int, int] = Field(
         ..., description="Number of affected indicators per year"

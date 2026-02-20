@@ -14,6 +14,7 @@ import { useEffect, useMemo, useCallback, useState, useRef } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
 import { simulationAPI } from '../../services/api'
 import type { Intervention } from '../../services/api'
+import { INTERVENTION_YEAR_MAX, INTERVENTION_YEAR_MIN } from '../../constants/time'
 
 // ============================================
 // Constants
@@ -22,6 +23,8 @@ import type { Intervention } from '../../services/api'
 const MAX_INTERVENTIONS = 5
 const MIN_CHANGE = -100
 const MAX_CHANGE = 500
+const MIN_YEAR = INTERVENTION_YEAR_MIN
+const MAX_YEAR = INTERVENTION_YEAR_MAX
 
 // Domain colors matching the main visualization
 const DOMAIN_COLORS: Record<string, string> = {
@@ -154,6 +157,60 @@ const styles = {
 }
 
 // ============================================
+// Year Input — commits on blur or Enter, not on every keystroke
+// ============================================
+
+function YearInput({ value, onCommit }: { value: number; onCommit: (year: number) => void }) {
+  const [draft, setDraft] = useState(String(value))
+  const prevValue = useRef(value)
+
+  // Sync draft when external value changes (e.g., parent resets)
+  useEffect(() => {
+    if (value !== prevValue.current) {
+      setDraft(String(value))
+      prevValue.current = value
+    }
+  }, [value])
+
+  const commit = () => {
+    const parsed = parseInt(draft, 10)
+    if (isNaN(parsed)) {
+      setDraft(String(value)) // revert
+      return
+    }
+    const clamped = Math.max(MIN_YEAR, Math.min(MAX_YEAR, parsed))
+    setDraft(String(clamped))
+    if (clamped !== value) {
+      onCommit(clamped)
+      prevValue.current = clamped
+    }
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      aria-label="Intervention year"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur() } }}
+      style={{
+        width: 46,
+        padding: '2px 4px',
+        borderRadius: 3,
+        border: '1px solid #ddd',
+        background: 'white',
+        color: '#555',
+        fontSize: 11,
+        textAlign: 'center' as const
+      }}
+      title={`Intervention year (${MIN_YEAR}–${MAX_YEAR})`}
+    />
+  )
+}
+
+// ============================================
 // Main Component
 // ============================================
 
@@ -169,11 +226,13 @@ export function InterventionBuilder() {
     updateIntervention,
     removeIntervention,
     historicalTimeline,
-    currentYearIndex
+    currentYearIndex,
+    selectedStratum,
+    simulationStartYear
   } = useSimulationStore()
 
   // Current timeline year (used as default for new interventions)
-  const currentTimelineYear = historicalTimeline?.years[currentYearIndex] ?? 2024
+  const currentTimelineYear = historicalTimeline?.years[currentYearIndex] ?? INTERVENTION_YEAR_MAX
 
   // --------------------------------------------------
   // Temporal edge counts: per-intervention, updates on indicator/year change
@@ -186,26 +245,30 @@ export function InterventionBuilder() {
   const inFlightFetches = useRef<Set<string>>(new Set())
 
   /**
+   * Derive the current scope key for graph caching.
+   * Country → "country::USA", Stratified → "stratified::developing", Unified → "unified"
+   */
+  const scopeKey = selectedCountry
+    ? `country::${selectedCountry}`
+    : selectedStratum === 'unified'
+      ? 'unified'
+      : `stratified::${selectedStratum}`
+
+  /**
    * Fetch temporal edge counts for each intervention's indicator+year combo.
-   * Caches the full temporal graph per country+year so switching indicators
-   * within the same year doesn't re-fetch.
+   * Uses the appropriate graph API based on current scope (country, stratified, unified).
    */
   useEffect(() => {
-    if (!selectedCountry) return
-
-    const countryName = selectedCountry
     const needed: Array<{ indicator: string; year: number; cacheKey: string; countKey: string }> = []
 
     for (const inv of interventions) {
       if (!inv.indicator) continue
       const year = inv.year ?? currentTimelineYear
-      const cacheKey = `${countryName}::${year}`
+      const cacheKey = `${scopeKey}::${year}`
       const countKey = `${inv.indicator}::${year}`
 
-      // Already have this count? Skip
       if (temporalEdgeCounts.has(countKey)) continue
 
-      // Have the graph cached (completed, not in-flight)? Compute immediately
       const cached = temporalGraphCache.current.get(cacheKey)
       if (cached) {
         setTemporalEdgeCounts(prev => {
@@ -216,15 +279,12 @@ export function InterventionBuilder() {
         continue
       }
 
-      // Already fetching this year? Just wait (don't add to needed again)
       if (inFlightFetches.current.has(cacheKey)) continue
-
       needed.push({ indicator: inv.indicator, year, cacheKey, countKey })
     }
 
     if (needed.length === 0) return
 
-    // Dedupe by cacheKey (country+year) so we fetch each graph only once
     const uniqueYears = new Map<string, number>()
     for (const n of needed) {
       uniqueYears.set(n.cacheKey, n.year)
@@ -233,9 +293,15 @@ export function InterventionBuilder() {
     for (const [cacheKey, year] of uniqueYears) {
       inFlightFetches.current.add(cacheKey)
 
-      simulationAPI.getCountryTemporalGraph(countryName, year)
+      // Pick the right graph API based on scope
+      const graphPromise: Promise<{ edges: Array<{ source: string }> }> = selectedCountry
+        ? simulationAPI.getCountryTemporalGraph(selectedCountry, year)
+        : selectedStratum === 'unified'
+          ? simulationAPI.getUnifiedGraph(year)
+          : simulationAPI.getStratifiedGraph(selectedStratum as 'developing' | 'emerging' | 'advanced', year)
+
+      graphPromise
         .then(result => {
-          // Build source → outgoing count map
           const edgeMap = new Map<string, number>()
           for (const edge of result.edges) {
             edgeMap.set(edge.source, (edgeMap.get(edge.source) ?? 0) + 1)
@@ -243,7 +309,6 @@ export function InterventionBuilder() {
           temporalGraphCache.current.set(cacheKey, edgeMap)
           inFlightFetches.current.delete(cacheKey)
 
-          // Resolve counts for ALL current interventions at this year (not just initial `needed`)
           setTemporalEdgeCounts(prev => {
             const next = new Map(prev)
             for (const n of needed) {
@@ -267,13 +332,13 @@ export function InterventionBuilder() {
           })
         })
     }
-  }, [interventions, selectedCountry, currentTimelineYear, temporalEdgeCounts])
+  }, [interventions, scopeKey, currentTimelineYear, temporalEdgeCounts, selectedCountry, selectedStratum])
 
-  // Clear temporal cache when country changes
+  // Clear temporal cache when scope changes
   useEffect(() => {
     temporalGraphCache.current.clear()
     setTemporalEdgeCounts(new Map())
-  }, [selectedCountry])
+  }, [scopeKey])
 
   /** Get temporal edge count for an intervention, or null if not yet loaded */
   const getTemporalEdges = useCallback((indicator: string, year: number): number | null => {
@@ -290,18 +355,48 @@ export function InterventionBuilder() {
   }, [indicators.length, indicatorsLoading, loadIndicators])
 
   /**
-   * Count outgoing causal edges per indicator from the country graph.
-   * Indicators with more outgoing edges propagate effects to more targets.
+   * Outgoing edge counts for the dropdown — loaded from the scope-appropriate graph.
+   * For country: uses the already-loaded countryGraph.
+   * For unified/stratified: fetches the temporal graph for the current year.
    */
+  const [scopeEdgeCounts, setScopeEdgeCounts] = useState<Map<string, number>>(new Map())
+
+  // Fetch scope-level graph edge counts when scope or year changes (non-country only)
+  useEffect(() => {
+    if (selectedCountry) {
+      setScopeEdgeCounts(new Map()) // country mode uses countryGraph below
+      return
+    }
+
+    const year = currentTimelineYear
+    const graphPromise: Promise<{ edges: Array<{ source: string }> }> =
+      selectedStratum === 'unified'
+        ? simulationAPI.getUnifiedGraph(year)
+        : simulationAPI.getStratifiedGraph(selectedStratum as 'developing' | 'emerging' | 'advanced', year)
+
+    graphPromise
+      .then(result => {
+        const counts = new Map<string, number>()
+        for (const edge of result.edges) {
+          counts.set(edge.source, (counts.get(edge.source) ?? 0) + 1)
+        }
+        setScopeEdgeCounts(counts)
+      })
+      .catch(() => setScopeEdgeCounts(new Map()))
+  }, [selectedCountry, selectedStratum, currentTimelineYear])
+
   const outEdgeCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    if (countryGraph?.edges) {
+    // Country mode: use pre-loaded countryGraph
+    if (selectedCountry && countryGraph?.edges) {
+      const counts = new Map<string, number>()
       for (const edge of countryGraph.edges) {
         counts.set(edge.source, (counts.get(edge.source) || 0) + 1)
       }
+      return counts
     }
-    return counts
-  }, [countryGraph])
+    // Non-country mode: use fetched scope graph
+    return scopeEdgeCounts
+  }, [selectedCountry, countryGraph, scopeEdgeCounts])
 
   // Build indicator options grouped by domain, sorted by causal connections
   const indicatorOptions = useMemo(() => {
@@ -402,18 +497,19 @@ export function InterventionBuilder() {
     updateIntervention(index, { change_percent })
   }, [updateIntervention])
 
-  // Update intervention year (clears stale temporal edge count)
-  const handleYearChange = useCallback((index: number, year: number) => {
+  // Commit intervention year change (clears stale temporal edge count, clamps value)
+  const commitYearChange = useCallback((index: number, rawYear: number) => {
+    const clamped = Math.max(MIN_YEAR, Math.min(MAX_YEAR, Math.round(rawYear)))
     const ind = interventions[index]?.indicator
     const oldYear = interventions[index]?.year ?? currentTimelineYear
-    if (ind && oldYear !== year) {
+    if (ind && oldYear !== clamped) {
       setTemporalEdgeCounts(prev => {
         const next = new Map(prev)
         next.delete(`${ind}::${oldYear}`)
         return next
       })
     }
-    updateIntervention(index, { year })
+    updateIntervention(index, { year: clamped })
   }, [updateIntervention, interventions, currentTimelineYear])
 
   // Format change percent for display
@@ -427,17 +523,6 @@ export function InterventionBuilder() {
     if (pct > 0) return '#4CAF50'
     if (pct < 0) return '#ef5350'
     return '#666'
-  }
-
-  // Check if no country selected
-  if (!selectedCountry) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.emptyState}>
-          Select a country to build interventions
-        </div>
-      </div>
-    )
   }
 
   // Loading state
@@ -468,28 +553,15 @@ export function InterventionBuilder() {
           <div style={styles.cardHeader}>
             <span style={styles.cardNumber}>Intervention {index + 1}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="number"
-                min={1990}
-                max={2024}
+              <YearInput
                 value={intervention.year ?? currentTimelineYear}
-                onChange={(e) => handleYearChange(index, Number(e.target.value))}
-                style={{
-                  width: 56,
-                  padding: '2px 4px',
-                  borderRadius: 3,
-                  border: '1px solid #ddd',
-                  background: 'white',
-                  color: '#555',
-                  fontSize: 11,
-                  textAlign: 'center' as const
-                }}
-                title="Intervention year"
+                onCommit={(year) => commitYearChange(index, year)}
               />
               <button
                 style={styles.removeBtn}
                 onClick={() => removeIntervention(index)}
                 title="Remove intervention"
+                aria-label={`Remove intervention ${index + 1}`}
               >
                 ×
               </button>
@@ -502,6 +574,7 @@ export function InterventionBuilder() {
               className="indicator-select"
               value={intervention.indicator}
               onChange={(e) => handleIndicatorChange(index, e.target.value)}
+              aria-label={`Indicator for intervention ${index + 1}`}
             >
               <option value="">Select indicator...</option>
               {/* Top indicators by causal connections */}
@@ -541,7 +614,7 @@ export function InterventionBuilder() {
             )}
           </div>
 
-          {/* Temporal edge count badge — always visible, updates with year */}
+          {/* Temporal edge count badge */}
           {intervention.indicator && (() => {
             const year = intervention.year ?? currentTimelineYear
             const temporalCount = getTemporalEdges(intervention.indicator, year)
@@ -586,6 +659,16 @@ export function InterventionBuilder() {
                     no propagation — try a later year
                   </span>
                 )}
+                {hasEdges && year > simulationStartYear && (
+                  <span style={{
+                    color: '#F57F17',
+                    marginLeft: 'auto',
+                    fontSize: 10,
+                    fontWeight: 500,
+                  }}>
+                    baseline from {simulationStartYear}
+                  </span>
+                )}
               </div>
             )
           })()}
@@ -608,6 +691,11 @@ export function InterventionBuilder() {
               value={intervention.change_percent}
               onChange={(e) => handleChangePercent(index, Number(e.target.value))}
               style={styles.slider}
+              aria-label={`Change percent for intervention ${index + 1}`}
+              aria-valuemin={MIN_CHANGE}
+              aria-valuemax={MAX_CHANGE}
+              aria-valuenow={intervention.change_percent}
+              aria-valuetext={formatChange(intervention.change_percent)}
             />
           </div>
         </div>
@@ -662,6 +750,14 @@ export function InterventionBuilder() {
 
         .indicator-select:focus {
           border-color: #3B82F6;
+        }
+
+        .indicator-select:focus-visible,
+        button:focus-visible,
+        input[type="text"]:focus-visible,
+        input[type="range"]:focus-visible {
+          outline: 2px solid #3B82F6;
+          outline-offset: 2px;
         }
 
         .domain-dot {

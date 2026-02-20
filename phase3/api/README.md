@@ -1,11 +1,11 @@
-# V3.0 API Server
+# V3.1 API Server
 
 FastAPI backend for the Global Causal Discovery visualization. Provides country-specific causal graphs and simulation endpoints.
 
 ## Quick Start
 
 ```bash
-cd viz/phase2/api
+cd viz/phase3/api
 
 # Create virtual environment
 python -m venv venv
@@ -69,22 +69,30 @@ Data files are available from: [Contact maintainer for data access]
 | `/api/countries/{code}` | GET | Country baseline values |
 | `/api/graph/{code}` | GET | Country-specific causal graph |
 | `/api/indicators` | GET | List all 2,583 indicators |
-| `/api/simulate` | POST | Instant intervention simulation |
-| `/api/simulate/temporal` | POST | Multi-year temporal projection |
+| `/api/simulate/v31` | POST | Canonical instant simulation (v3.1) |
+| `/api/simulate/v31/temporal` | POST | Canonical temporal simulation (v3.1) |
+| `/api/simulate` | POST | Deprecated alias to `/api/simulate/v31` |
+| `/api/simulate/temporal` | POST | Deprecated alias to `/api/simulate/v31/temporal` |
+
+Deprecated alias responses include:
+- `Deprecation: true`
+- `X-API-Deprecated: true`
+- `Link: </api/simulate/v31...>; rel="successor-version"`
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `API_ENV` | development | Environment mode |
-| `CORS_ORIGINS` | localhost:3000,5173 | Allowed CORS origins |
+| `CORS_ORIGINS` | localhost:3000,5173,5174 | Allowed CORS origins |
+| `CORS_ALLOW_WILDCARD` | false | Allow `*` origins (non-production recommended only) |
 | `RATE_LIMIT_ENABLED` | true | Enable rate limiting |
 | `RATE_LIMIT_PER_MINUTE` | 100 | Requests per minute |
 | `LOG_LEVEL` | INFO | Logging verbosity |
 | `GLOBAL_PROJECT_ROOT` | auto | Repo root if not in default location |
 | `V31_DATA_ROOT` | `${GLOBAL_PROJECT_ROOT}/v3.1/data` | V3.1 temporal outputs |
 | `V30_RAW_DATA_ROOT` | `${GLOBAL_PROJECT_ROOT}/v3.0/data/raw` | Baseline simulation inputs |
-| `V21_GRAPH_PATH` | `${GLOBAL_PROJECT_ROOT}/viz/phase2/public/data/v2_1_visualization_final.json` | V2.1 graph metadata |
+| `V21_GRAPH_PATH` | `${GLOBAL_PROJECT_ROOT}/viz/phase3/public/data/v2_1_visualization_final.json` | V2.1 graph metadata |
 
 ## Development
 
