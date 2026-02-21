@@ -853,11 +853,8 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
   const [isExpanded, setIsExpanded] = useState(true)
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [showCSVMenu, setShowCSVMenu] = useState(false)
-  const [exportNudge, setExportNudge] = useState(false)
   const csvMenuRef = useRef<HTMLDivElement>(null)
   const { indicators, effectFilterPct, setEffectFilterPct, highlightedIndicator, setHighlightedIndicator, selectedCountry, interventions, activeTemplate } = useSimulationStore()
-  const playbackFinishedToken = useSimulationStore(s => s.playbackFinishedToken)
-  const prevFinishedRef = useRef(playbackFinishedToken)
   const resultsRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll results into view when they first appear
@@ -866,16 +863,6 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
       resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
   }, [])
-
-  // Glow export buttons when simulation playback finishes
-  useEffect(() => {
-    if (playbackFinishedToken > 0 && playbackFinishedToken !== prevFinishedRef.current) {
-      prevFinishedRef.current = playbackFinishedToken
-      setExportNudge(true)
-      const timer = setTimeout(() => setExportNudge(false), 4000)
-      return () => clearTimeout(timer)
-    }
-  }, [playbackFinishedToken])
 
   // Close CSV dropdown on outside click
   useEffect(() => {
@@ -1012,10 +999,10 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
       </button>
 
       {/* Export actions */}
-      <div className={`export-actions-row ${exportNudge ? 'export-nudge' : ''}`}>
+      <div className="export-actions-row">
         <button
-          className={`export-btn copy-btn ${exportNudge ? 'nudge' : ''}`}
-          onClick={() => { setExportNudge(false); handleCopyCSV() }}
+          className="export-btn copy-btn"
+          onClick={handleCopyCSV}
           title="Copy summary CSV to clipboard"
           aria-label="Copy results to clipboard"
         >
@@ -1023,8 +1010,8 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
         </button>
         <div className="csv-dropdown-wrap" ref={csvMenuRef}>
           <button
-            className={`export-btn csv-btn ${exportNudge ? 'nudge' : ''}`}
-            onClick={() => { setExportNudge(false); setShowCSVMenu(!showCSVMenu) }}
+            className="export-btn csv-btn"
+            onClick={() => setShowCSVMenu(!showCSVMenu)}
             title="Download CSV"
             aria-expanded={showCSVMenu}
             aria-label="Download CSV export"
