@@ -1,44 +1,62 @@
 # Semantic Hierarchy Visualization (Phase 3)
 
-Interactive D3 + React visualization with policy simulation controls backed by the v3.1 API.
+Interactive D3 + React visualization with simulation controls backed by the v3.1 FastAPI backend.
 
-## Features
+## Repo Layout
 
-- 6-ring hierarchical structure (Root → Outcomes → Coarse Domains → Fine Domains → Indicator Groups → Indicators)
-- Interactive zoom and pan
-- Color-coded domains
-- Click nodes to view details
-- Real-time statistics and ring breakdowns
+- `src/` — frontend application code.
+- `api/` — backend API and tests.
+- `docs/` — architecture, plans, reports, runbooks.
+- `scripts/` — dev and CI helper scripts.
+- `deploy/` — deployment scaffolding (docker/nginx/env templates).
 
 ## Quick Start
+
+### Frontend
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5174 in your browser.
+Open [http://localhost:5174](http://localhost:5174).
 
-Backend API default: http://localhost:8000
+### Backend
 
-Canonical simulation endpoints:
+```bash
+cd api
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+## Quality Checks
+
+```bash
+npm run lint
+npm run build
+api/venv/bin/python -m pytest api/tests -q
+```
+
+## Simulation Endpoints
+
+Canonical:
 - `POST /api/simulate/v31`
 - `POST /api/simulate/v31/temporal`
 
-Compatibility aliases (deprecated, still supported):
-- `POST /api/simulate` -> `/api/simulate/v31`
-- `POST /api/simulate/temporal` -> `/api/simulate/v31/temporal`
+Compatibility aliases (deprecated):
+- `POST /api/simulate` → `/api/simulate/v31`
+- `POST /api/simulate/temporal` → `/api/simulate/v31/temporal`
 
-## Build
+## Core References
 
-```bash
-npm run build
-npm run preview
-```
-
-## Data Format
-
-This version only supports v2.1 data format. The data file should be placed at
-`/public/data/v2_1_visualization_final.json`.
-
-See `/home/sandesh/Documents/Global_Project/viz/phase3/CLAUDE.md` for architecture notes.
+- Repo organization reference for Claude Code:
+  - `docs/architecture/CLAUDE_CODE_REPO_REFERENCE.md`
+- Roadmap:
+  - `docs/plans/roadmap.md`
+- Current phase plan/progress:
+  - `docs/plans/phase4-cinematic-plan.md`
+  - `docs/reports/phase4-progress.md`

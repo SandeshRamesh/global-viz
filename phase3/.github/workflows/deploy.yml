@@ -1,0 +1,25 @@
+name: Deploy (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment scaffold
+        run: |
+          test -d deploy/docker
+          test -d deploy/nginx
+          test -d deploy/env
+      - name: Placeholder
+        run: echo "Add deployment steps for ${{ github.event.inputs.environment }}"
