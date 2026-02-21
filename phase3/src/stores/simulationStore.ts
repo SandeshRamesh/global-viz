@@ -1199,14 +1199,23 @@ export const useSelectedTarget = () => useSimulationStore((state) => state.selec
 
 /** Get SHAP importance for current year from temporal timeline (returns mean values) */
 export const useCurrentYearShapImportance = () => useSimulationStore((state) => {
-  const { historicalTimeline, currentYearIndex, selectedStratum, temporalShapTimeline, stratifiedShapTimeline } = state;
+  const {
+    historicalTimeline,
+    currentYearIndex,
+    selectedCountry,
+    selectedStratum,
+    temporalShapTimeline,
+    stratifiedShapTimeline
+  } = state;
 
   if (!historicalTimeline) return null;
   const currentYear = historicalTimeline.years[currentYearIndex];
   if (!currentYear) return null;
 
-  // Choose the right timeline based on stratum selection
-  const timeline = selectedStratum !== 'unified' && stratifiedShapTimeline
+  // Country playback always uses country SHAP timeline.
+  const timeline = selectedCountry
+    ? temporalShapTimeline
+    : selectedStratum !== 'unified' && stratifiedShapTimeline
     ? stratifiedShapTimeline
     : temporalShapTimeline;
 

@@ -253,7 +253,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [playerState, historicalTimeline, clearTimers])
+  }, [playerState, historicalTimeline, clearTimers, currentYearIndex, maxIndex, isPlaying, pause, setCurrentYearIndex])
 
   // Calculate index from mouse/touch position
   const getIndexFromPosition = useCallback((clientX: number): number => {

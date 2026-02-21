@@ -1008,15 +1008,19 @@ function App() {
 
     // Include simulation state in shared URL
     if (simState.selectedCountry) state.country = simState.selectedCountry
-    if (simState.selectedStratum !== 'unified') state.stratum = simState.selectedStratum
-    if (simState.interventions.length > 0 && !simState.activeTemplate) {
+    if (!simState.selectedCountry && simState.selectedStratum !== 'unified') {
+      state.stratum = simState.selectedStratum
+    }
+    if (simState.interventions.length > 0 && (!simState.activeTemplate || simState.templateModified)) {
       state.interventions = simState.interventions.map(iv => ({
         ind: iv.indicator,
         pct: iv.change_percent,
         yr: iv.year
       }))
     }
-    if (simState.activeTemplate) state.template = simState.activeTemplate.id
+    if (simState.activeTemplate && !simState.templateModified) {
+      state.template = simState.activeTemplate.id
+    }
     if (simState.simulationStartYear !== 2020) state.simStart = simState.simulationStartYear
     if (simState.simulationEndYear !== 2029) state.simEnd = simState.simulationEndYear
 
@@ -4494,25 +4498,21 @@ function App() {
       const simStore = useSimulationStore.getState()
       simStore.openPanel()
 
-      // Set stratum first (before country)
-      if (urlState.stratum && urlState.stratum !== 'unified') {
-        simStore.setStratum(urlState.stratum)
-      }
-
-      // Set country (async — triggers data fetch)
+      // Country and stratum are mutually exclusive in shared state
       if (urlState.country) {
         simStore.setCountry(urlState.country)
+      } else if (urlState.stratum && urlState.stratum !== 'unified') {
+        simStore.setStratum(urlState.stratum)
       }
-
-      // Set year range
-      if (urlState.simStart) simStore.setSimulationStartYear(urlState.simStart)
-      if (urlState.simEnd) simStore.setSimulationEndYear(urlState.simEnd)
 
       // Apply template OR set custom interventions
       if (urlState.template) {
         // Load templates then apply
         simStore.loadTemplates().then(() => {
           useSimulationStore.getState().applyTemplate(urlState.template!)
+          // Apply explicit URL range after template defaults.
+          if (urlState.simStart) useSimulationStore.getState().setSimulationStartYear(urlState.simStart)
+          if (urlState.simEnd) useSimulationStore.getState().setSimulationEndYear(urlState.simEnd)
         })
       } else if (urlState.interventions) {
         const interventions = urlState.interventions.map((iv, idx) => ({
@@ -4524,6 +4524,11 @@ function App() {
           domain: ''
         }))
         simStore.setInterventions(interventions)
+        if (urlState.simStart) simStore.setSimulationStartYear(urlState.simStart)
+        if (urlState.simEnd) simStore.setSimulationEndYear(urlState.simEnd)
+      } else {
+        if (urlState.simStart) simStore.setSimulationStartYear(urlState.simStart)
+        if (urlState.simEnd) simStore.setSimulationEndYear(urlState.simEnd)
       }
     }
 
@@ -4562,6 +4567,7 @@ function App() {
   const simStratum = useSimulationStore(s => s.selectedStratum)
   const simInterventions = useSimulationStore(s => s.interventions)
   const simActiveTemplate = useSimulationStore(s => s.activeTemplate)
+  const simTemplateModified = useSimulationStore(s => s.templateModified)
   const simStartYear = useSimulationStore(s => s.simulationStartYear)
   const simEndYear = useSimulationStore(s => s.simulationEndYear)
 
@@ -4586,21 +4592,21 @@ function App() {
 
     // Add simulation state
     if (simCountry) state.country = simCountry
-    if (simStratum !== 'unified') state.stratum = simStratum
-    if (simInterventions.length > 0 && !simActiveTemplate) {
+    if (!simCountry && simStratum !== 'unified') state.stratum = simStratum
+    if (simInterventions.length > 0 && (!simActiveTemplate || simTemplateModified)) {
       state.interventions = simInterventions.map(iv => ({
         ind: iv.indicator,
         pct: iv.change_percent,
         yr: iv.year
       }))
     }
-    if (simActiveTemplate) state.template = simActiveTemplate.id
+    if (simActiveTemplate && !simTemplateModified) state.template = simActiveTemplate.id
     if (simStartYear !== 2020) state.simStart = simStartYear
     if (simEndYear !== 2029) state.simEnd = simEndYear
 
     updateBrowserURL(state)
   }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget,
-      simCountry, simStratum, simInterventions, simActiveTemplate, simStartYear, simEndYear])
+      simCountry, simStratum, simInterventions, simActiveTemplate, simTemplateModified, simStartYear, simEndYear])
 
   // Recompute layout when rawData or ringRadii changes
   useEffect(() => {
