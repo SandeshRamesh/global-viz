@@ -9,10 +9,12 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Optional
 from functools import lru_cache
+from collections import OrderedDict
 
 from ..config import (
     GRAPHS_DIR, PANEL_PATH, COUNTRY_SHAP_DIR,
-    DEFAULT_GRAPH_YEAR, V31_TEMPORAL_SHAP_DIR, V31_BASELINES_DIR
+    DEFAULT_GRAPH_YEAR, V31_TEMPORAL_SHAP_DIR, V31_BASELINES_DIR,
+    GRAPH_SERVICE_GRAPH_CACHE_MAX, GRAPH_SERVICE_SHAP_CACHE_MAX
 )
 
 
@@ -20,10 +22,26 @@ class GraphService:
     """Service for loading country graphs and baseline data from V3.1."""
 
     def __init__(self):
-        self._graph_cache: Dict[str, dict] = {}
-        self._shap_cache: Dict[str, Dict[str, float]] = {}
+        self._graph_cache: "OrderedDict[str, dict]" = OrderedDict()
+        self._shap_cache: "OrderedDict[str, Dict[str, float]]" = OrderedDict()
         self._panel_df: Optional[pd.DataFrame] = None
         self._countries: Optional[List[str]] = None
+        self._graph_cache_max = GRAPH_SERVICE_GRAPH_CACHE_MAX
+        self._shap_cache_max = GRAPH_SERVICE_SHAP_CACHE_MAX
+
+    @staticmethod
+    def _cache_get(cache: "OrderedDict[str, dict]", key: str):
+        value = cache.get(key)
+        if value is not None:
+            cache.move_to_end(key)
+        return value
+
+    @staticmethod
+    def _cache_set(cache: "OrderedDict[str, dict]", key: str, value: dict, max_entries: int):
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > max_entries:
+            cache.popitem(last=False)
 
     def _get_latest_year_for_country(self, country: str) -> Optional[int]:
         """Find the latest available year for a country's graph."""
@@ -109,6 +127,10 @@ class GraphService:
         """Load country graph (cached). Uses latest year if not specified."""
         cache_key = f"{country}_{year}" if year else country
 
+        cached = self._cache_get(self._graph_cache, cache_key)
+        if cached is not None:
+            return cached
+
         if cache_key not in self._graph_cache:
             # Determine which year to use
             if year is None:
@@ -124,13 +146,13 @@ class GraphService:
             # Convert to API format
             edges = [self._convert_v31_edge(e) for e in raw_graph.get("edges", [])]
 
-            self._graph_cache[cache_key] = {
+            self._cache_set(self._graph_cache, cache_key, {
                 "country": country,
                 "year": year,
                 "n_edges": len(edges),
                 "n_edges_with_data": len(edges),
                 "edges": edges
-            }
+            }, self._graph_cache_max)
 
         return self._graph_cache[cache_key]
 
@@ -200,6 +222,10 @@ class GraphService:
         """
         cache_key = f"{country}_{year}" if year else country
 
+        cached = self._cache_get(self._shap_cache, cache_key)
+        if cached is not None:
+            return cached
+
         if cache_key not in self._shap_cache:
             # V3.1 path: countries/{country}/quality_of_life/{year}_shap.json
             qol_dir = COUNTRY_SHAP_DIR / country / "quality_of_life"
@@ -226,7 +252,7 @@ class GraphService:
                 shap_path = qol_dir / f"{year}_shap.json"
 
                 if not shap_path.exists():
-                    self._shap_cache[cache_key] = {}
+                    self._cache_set(self._shap_cache, cache_key, {}, self._shap_cache_max)
                 else:
                     try:
                         with open(shap_path) as f:
@@ -240,9 +266,9 @@ class GraphService:
                                 shap_values[ind_id] = val['mean']
                             elif isinstance(val, (int, float)):
                                 shap_values[ind_id] = val
-                        self._shap_cache[cache_key] = shap_values
+                        self._cache_set(self._shap_cache, cache_key, shap_values, self._shap_cache_max)
                     except Exception:
-                        self._shap_cache[cache_key] = {}
+                        self._cache_set(self._shap_cache, cache_key, {}, self._shap_cache_max)
 
         return self._shap_cache[cache_key]
 

@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from functools import lru_cache
+from collections import OrderedDict
 
 from ..config import (
     V31_TEMPORAL_SHAP_DIR,
@@ -23,7 +24,10 @@ from ..config import (
     TEMPORAL_YEAR_MIN,
     TEMPORAL_YEAR_MAX,
     TEMPORAL_TARGETS,
-    INCOME_STRATA
+    INCOME_STRATA,
+    TEMPORAL_SERVICE_SHAP_CACHE_MAX,
+    TEMPORAL_SERVICE_GRAPH_CACHE_MAX,
+    TEMPORAL_SERVICE_CLUSTER_CACHE_MAX,
 )
 
 
@@ -31,14 +35,31 @@ class TemporalService:
     """Service for loading V3.1 temporal data."""
 
     def __init__(self):
-        self._shap_cache: Dict[str, dict] = {}
-        self._graph_cache: Dict[str, dict] = {}
-        self._cluster_cache: Dict[str, dict] = {}
+        self._shap_cache: "OrderedDict[str, dict]" = OrderedDict()
+        self._graph_cache: "OrderedDict[str, dict]" = OrderedDict()
+        self._cluster_cache: "OrderedDict[str, dict]" = OrderedDict()
         self._income_classifications: Optional[dict] = None
         self._country_transitions: Optional[dict] = None
         self._country_data_quality: Optional[dict] = None
         self._available_countries: Optional[List[str]] = None
         self._available_shap_countries: Optional[List[str]] = None
+        self._shap_cache_max = TEMPORAL_SERVICE_SHAP_CACHE_MAX
+        self._graph_cache_max = TEMPORAL_SERVICE_GRAPH_CACHE_MAX
+        self._cluster_cache_max = TEMPORAL_SERVICE_CLUSTER_CACHE_MAX
+
+    @staticmethod
+    def _cache_get(cache: "OrderedDict[str, dict]", key: str):
+        value = cache.get(key)
+        if value is not None:
+            cache.move_to_end(key)
+        return value
+
+    @staticmethod
+    def _cache_set(cache: "OrderedDict[str, dict]", key: str, value: dict, max_entries: int):
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > max_entries:
+            cache.popitem(last=False)
 
     def get_available_years(self) -> List[int]:
         """Get list of available years."""
@@ -93,6 +114,10 @@ class TemporalService:
         """
         cache_key = f"{country or 'unified'}_{target}_{year}"
 
+        cached = self._cache_get(self._shap_cache, cache_key)
+        if cached is not None:
+            return cached
+
         if cache_key not in self._shap_cache:
             if country is None:
                 path = V31_TEMPORAL_SHAP_DIR / "unified" / target / f"{year}_shap.json"
@@ -103,7 +128,7 @@ class TemporalService:
                 return None
 
             with open(path) as f:
-                self._shap_cache[cache_key] = json.load(f)
+                self._cache_set(self._shap_cache, cache_key, json.load(f), self._shap_cache_max)
 
         return self._shap_cache[cache_key]
 
@@ -179,6 +204,10 @@ class TemporalService:
 
         cache_key = f"stratified_{stratum}_{target}_{year}"
 
+        cached = self._cache_get(self._shap_cache, cache_key)
+        if cached is not None:
+            return cached
+
         if cache_key not in self._shap_cache:
             path = V31_TEMPORAL_SHAP_DIR / "stratified" / stratum / target / f"{year}_shap.json"
 
@@ -186,7 +215,7 @@ class TemporalService:
                 return None
 
             with open(path) as f:
-                self._shap_cache[cache_key] = json.load(f)
+                self._cache_set(self._shap_cache, cache_key, json.load(f), self._shap_cache_max)
 
         return self._shap_cache[cache_key]
 
@@ -713,6 +742,10 @@ class TemporalService:
 
         cache_key = f"stratified_graph_{stratum}_{year}"
 
+        cached = self._cache_get(self._graph_cache, cache_key)
+        if cached is not None:
+            return cached
+
         if cache_key not in self._graph_cache:
             path = V31_TEMPORAL_GRAPHS_DIR / "stratified" / stratum / f"{year}_graph.json"
 
@@ -720,7 +753,7 @@ class TemporalService:
                 return None
 
             with open(path) as f:
-                self._graph_cache[cache_key] = json.load(f)
+                self._cache_set(self._graph_cache, cache_key, json.load(f), self._graph_cache_max)
 
         return self._graph_cache[cache_key]
 
@@ -738,6 +771,10 @@ class TemporalService:
         """
         cache_key = f"feedback_{country}"
 
+        cached = self._cache_get(self._cluster_cache, cache_key)
+        if cached is not None:
+            return cached
+
         if cache_key not in self._cluster_cache:  # Reusing cluster cache
             path = V31_FEEDBACK_LOOPS_DIR / f"{country}_feedback_loops.json"
 
@@ -745,7 +782,7 @@ class TemporalService:
                 return None
 
             with open(path) as f:
-                self._cluster_cache[cache_key] = json.load(f)
+                self._cache_set(self._cluster_cache, cache_key, json.load(f), self._cluster_cache_max)
 
         return self._cluster_cache[cache_key]
 
@@ -768,6 +805,10 @@ class TemporalService:
         """
         cache_key = f"{country or 'unified'}_{year}"
 
+        cached = self._cache_get(self._graph_cache, cache_key)
+        if cached is not None:
+            return cached
+
         if cache_key not in self._graph_cache:
             if country is None:
                 path = V31_TEMPORAL_GRAPHS_DIR / "unified" / f"{year}_graph.json"
@@ -778,7 +819,7 @@ class TemporalService:
                 return None
 
             with open(path) as f:
-                self._graph_cache[cache_key] = json.load(f)
+                self._cache_set(self._graph_cache, cache_key, json.load(f), self._graph_cache_max)
 
         return self._graph_cache[cache_key]
 
@@ -831,12 +872,16 @@ class TemporalService:
             cache_key = f"{country}"
             path = V31_CLUSTERS_DIR / "countries" / f"{country}_clusters.json"
 
+        cached = self._cache_get(self._cluster_cache, cache_key)
+        if cached is not None:
+            return cached
+
         if cache_key not in self._cluster_cache:
             if not path.exists():
                 return None
 
             with open(path) as f:
-                self._cluster_cache[cache_key] = json.load(f)
+                self._cache_set(self._cluster_cache, cache_key, json.load(f), self._cluster_cache_max)
 
         return self._cluster_cache[cache_key]
 

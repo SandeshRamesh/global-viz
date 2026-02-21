@@ -93,6 +93,11 @@ Deprecated alias responses include:
 | `RATE_LIMIT_PER_HOUR` | 1000 | Requests per hour |
 | `RATE_LIMIT_MAX_TRACKED_IPS` | 10000 | Max in-memory client IP records |
 | `RATE_LIMIT_EVICT_FRACTION` | 0.10 | Fraction evicted when IP table exceeds cap |
+| `GRAPH_SERVICE_GRAPH_CACHE_MAX` | 64 | Max cached country graphs in API graph service |
+| `GRAPH_SERVICE_SHAP_CACHE_MAX` | 128 | Max cached SHAP payloads in API graph service |
+| `TEMPORAL_SERVICE_SHAP_CACHE_MAX` | 256 | Max cached temporal SHAP files |
+| `TEMPORAL_SERVICE_GRAPH_CACHE_MAX` | 192 | Max cached temporal graph files |
+| `TEMPORAL_SERVICE_CLUSTER_CACHE_MAX` | 128 | Max cached cluster/feedback payloads |
 | `API_ENABLE_DOCS` | true (dev), false (prod) | Enable `/docs` and `/redoc` |
 | `HEALTH_DETAILED_ENABLED` | true (dev), false (prod) | Enable `/health/detailed` |
 | `ENFORCE_PRODUCTION_ENV` | false | Fail startup if prod hardening checks fail |
