@@ -72,12 +72,19 @@ function saveScenariosToStorage(scenarios: SavedScenario[]): void {
 // ============================================
 const simCache = new Map<string, TemporalResults>()
 
-function makeSimCacheKey(country: string, interventions: Intervention[], baseYear: number, horizon: number): string {
+function makeSimCacheKey(
+  country: string,
+  interventions: Intervention[],
+  baseYear: number,
+  horizon: number,
+  viewType: 'country' | 'stratified' | 'unified',
+  stratum: IncomeStratum | 'unified'
+): string {
   const intKey = interventions
     .map(i => `${i.indicator}:${i.change_percent}:${i.year ?? 0}`)
     .sort()
     .join('|')
-  return `${country}::${intKey}::${baseYear}::${horizon}`
+  return `${viewType}:${stratum}::${country}::${intKey}::${baseYear}::${horizon}`
 }
 
 // ============================================
@@ -829,7 +836,10 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
     // Ensure base_year is at least 1 year before the earliest intervention
     const earliestIntervention = Math.min(...interventionsWithYear.map(i => i.year));
-    const effectiveBaseYear = Math.min(simulationStartYear, earliestIntervention - 1);
+    const effectiveBaseYear = Math.max(
+      SIMULATION_YEAR_MIN,
+      Math.min(simulationStartYear, earliestIntervention - 1)
+    );
 
     // Compute horizon: from effective base year to the simulation end year
     const effectiveHorizon = horizonYears ?? Math.max(1, simulationEndYear - effectiveBaseYear);
@@ -879,7 +889,14 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     };
 
     // Check cache before making API call
-    const cacheKey = makeSimCacheKey(apiCountry, interventionsWithYear, effectiveBaseYear, effectiveHorizon);
+    const cacheKey = makeSimCacheKey(
+      apiCountry,
+      interventionsWithYear,
+      effectiveBaseYear,
+      effectiveHorizon,
+      viewType,
+      selectedStratum
+    );
     const cached = simCache.get(cacheKey);
     if (cached) {
       debug.log('simulation-store', `Cache hit for simulation`);

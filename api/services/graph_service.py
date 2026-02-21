@@ -163,9 +163,29 @@ class GraphService:
         """
         # Try V3.1 baselines first
         if V31_BASELINES_DIR.exists():
-            baseline_path = V31_BASELINES_DIR / f"{country}_baseline.json"
-            if baseline_path.exists():
-                with open(baseline_path) as f:
+            # Preferred format: baselines/{country}/{year}.json
+            country_dir = V31_BASELINES_DIR / country
+            if country_dir.exists() and country_dir.is_dir():
+                available_years = sorted(
+                    int(file.stem)
+                    for file in country_dir.glob("*.json")
+                    if file.stem.isdigit()
+                )
+
+                if available_years:
+                    target_year = year if year in available_years else available_years[-1]
+                    baseline_path = country_dir / f"{target_year}.json"
+                    if baseline_path.exists():
+                        with open(baseline_path) as f:
+                            data = json.load(f)
+                        values = data.get("values") if isinstance(data, dict) else None
+                        if isinstance(values, dict):
+                            return values
+
+            # Backward compatibility format: baselines/{country}_baseline.json
+            legacy_baseline_path = V31_BASELINES_DIR / f"{country}_baseline.json"
+            if legacy_baseline_path.exists():
+                with open(legacy_baseline_path) as f:
                     data = json.load(f)
                     if year and str(year) in data:
                         return data[str(year)]

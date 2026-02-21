@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from api.main import app
+from api.config import RATE_LIMIT_ENABLED
 
 client = TestClient(app)
 
@@ -316,12 +317,15 @@ class TestRateLimitHeaders:
     """Tests for rate limit headers."""
 
     def test_rate_limit_headers_present(self):
-        """Test that rate limit headers are present."""
+        """Rate limit headers should match middleware enablement."""
         response = client.get("/api/countries")
         assert response.status_code == 200
-        # Headers should be present
-        assert "X-RateLimit-Limit-Minute" in response.headers
-        assert "X-RateLimit-Remaining-Minute" in response.headers
+
+        has_headers = (
+            "X-RateLimit-Limit-Minute" in response.headers
+            and "X-RateLimit-Remaining-Minute" in response.headers
+        )
+        assert has_headers is RATE_LIMIT_ENABLED
 
 
 if __name__ == "__main__":
