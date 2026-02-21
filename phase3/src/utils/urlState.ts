@@ -6,6 +6,15 @@
  */
 
 import type { ViewMode } from '../types'
+import type { IncomeStratum } from '../services/api'
+import { SIMULATION_YEAR_MIN, SIMULATION_YEAR_MAX } from '../constants/time'
+
+/** Compact intervention for URL encoding */
+export interface URLIntervention {
+  ind: string   // indicator ID
+  pct: number   // change_percent
+  yr?: number   // optional year
+}
 
 /**
  * State to persist in URL
@@ -21,6 +30,13 @@ export interface URLState {
     x: number              // Pan X
     y: number              // Pan Y
   }
+  // Simulation state
+  country?: string                    // Country name (e.g. "India")
+  stratum?: IncomeStratum | 'unified' // Income stratum
+  interventions?: URLIntervention[]   // Compact intervention list
+  template?: string                   // Template ID (e.g. "bolsa_familia")
+  simStart?: number                   // simulationStartYear
+  simEnd?: number                     // simulationEndYear
 }
 
 /**
@@ -55,6 +71,39 @@ export function encodeStateToURL(state: URLState): string {
   // Zoom state (compact format: k,x,y)
   if (state.zoom) {
     params.set('z', `${state.zoom.k.toFixed(2)},${state.zoom.x.toFixed(0)},${state.zoom.y.toFixed(0)}`)
+  }
+
+  // Simulation: country
+  if (state.country) {
+    params.set('c', state.country)
+  }
+
+  // Simulation: stratum (omit if 'unified' which is default)
+  if (state.stratum && state.stratum !== 'unified') {
+    params.set('st', state.stratum)
+  }
+
+  // Simulation: interventions (compact: indicator~pct~yr,indicator~pct,...)
+  if (state.interventions && state.interventions.length > 0) {
+    const encoded = state.interventions.map(iv => {
+      const parts = [iv.ind, String(iv.pct)]
+      if (iv.yr !== undefined) parts.push(String(iv.yr))
+      return parts.join('~')
+    }).join(',')
+    params.set('i', encoded)
+  }
+
+  // Simulation: template ID
+  if (state.template) {
+    params.set('tp', state.template)
+  }
+
+  // Simulation: year range (omit defaults)
+  if (state.simStart !== undefined && state.simStart !== 2020) {
+    params.set('sy', String(state.simStart))
+  }
+  if (state.simEnd !== undefined && state.simEnd !== 2029) {
+    params.set('ey', String(state.simEnd))
   }
 
   return params.toString()
@@ -114,6 +163,65 @@ export function decodeStateFromURL(search: string): Partial<URLState> | null {
         if (!isNaN(k) && !isNaN(x) && !isNaN(y)) {
           state.zoom = { k, x, y }
         }
+      }
+    }
+
+    // Simulation: country
+    const country = params.get('c')
+    if (country) {
+      state.country = country
+    }
+
+    // Simulation: stratum
+    const stratum = params.get('st')
+    const validStrata: Array<IncomeStratum | 'unified'> = ['unified', 'developing', 'emerging', 'advanced']
+    if (stratum && validStrata.includes(stratum as IncomeStratum | 'unified')) {
+      state.stratum = stratum as IncomeStratum | 'unified'
+    }
+
+    // Simulation: interventions (compact: indicator~pct~yr,indicator~pct,...)
+    const interventionsStr = params.get('i')
+    if (interventionsStr) {
+      const parsed: URLIntervention[] = []
+      const entries = interventionsStr.split(',').filter(Boolean)
+      for (const entry of entries.slice(0, 5)) { // Cap at 5
+        const parts = entry.split('~')
+        if (parts.length >= 2) {
+          const pct = parseFloat(parts[1])
+          if (!isNaN(pct)) {
+            const iv: URLIntervention = { ind: parts[0], pct }
+            if (parts.length >= 3) {
+              const yr = parseInt(parts[2], 10)
+              if (!isNaN(yr)) iv.yr = yr
+            }
+            parsed.push(iv)
+          }
+        }
+      }
+      if (parsed.length > 0) {
+        state.interventions = parsed
+      }
+    }
+
+    // Simulation: template ID
+    const template = params.get('tp')
+    if (template) {
+      state.template = template
+    }
+
+    // Simulation: year range
+    const sy = params.get('sy')
+    if (sy) {
+      const parsed = parseInt(sy, 10)
+      if (!isNaN(parsed) && parsed >= SIMULATION_YEAR_MIN && parsed <= SIMULATION_YEAR_MAX) {
+        state.simStart = parsed
+      }
+    }
+    const ey = params.get('ey')
+    if (ey) {
+      const parsed = parseInt(ey, 10)
+      if (!isNaN(parsed) && parsed >= SIMULATION_YEAR_MIN && parsed <= SIMULATION_YEAR_MAX) {
+        state.simEnd = parsed
       }
     }
 

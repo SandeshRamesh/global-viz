@@ -138,6 +138,9 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
 
       if (state.currentYearIndex >= maxIdx) {
         state.pause()
+        if (playbackMode === 'simulation') {
+          state.markPlaybackFinished()
+        }
       } else {
         state.setCurrentYearIndex(state.currentYearIndex + 1)
       }

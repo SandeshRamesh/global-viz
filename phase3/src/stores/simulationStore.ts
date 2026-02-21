@@ -24,6 +24,7 @@ import {
   type AllClassifications,
   getShapImportance
 } from '../services/api';
+import type { ScenarioTemplate } from '../types/scenarioTemplate';
 import { debug } from '../utils/debug';
 import {
   DATA_YEAR_MAX,
@@ -139,6 +140,7 @@ interface SimulationState {
   isPlaying: boolean;
   layoutReady: boolean;  // True once D3 render + transitions complete after sim results arrive
   simulationRunToken: number;  // Monotonic token used to detect true new simulation runs
+  playbackFinishedToken: number;  // Increments when simulation playback reaches the final year
 
   // Legacy fields for simulation temporal playback
   currentYear: number;
@@ -160,6 +162,14 @@ interface SimulationState {
 
   // Saved scenarios
   savedScenarios: SavedScenario[];
+
+  // Policy templates
+  templates: ScenarioTemplate[];
+  templatesLoaded: boolean;
+  templatesLoading: boolean;
+  templatesError: string | null;
+  activeTemplate: ScenarioTemplate | null;
+  templateModified: boolean;
 
   // Error handling
   error: string | null;
@@ -193,6 +203,7 @@ interface SimulationState {
   updateIntervention: (index: number, intervention: Partial<Intervention>) => void;
   removeIntervention: (index: number) => void;
   clearInterventions: () => void;
+  setInterventions: (interventions: Intervention[]) => void;
 
   // Actions - Simulation Scope
 
@@ -208,6 +219,7 @@ interface SimulationState {
   resetPlayback: () => void;
   setPlaybackMode: (mode: PlaybackMode) => void;
   setLayoutReady: (ready: boolean) => void;
+  markPlaybackFinished: () => void;
 
   // Actions - Simulation Timeline
   setSimulationStartYear: (year: number) => void;
@@ -219,6 +231,12 @@ interface SimulationState {
 
   // Actions - Highlight
   setHighlightedIndicator: (id: string | null) => void;
+
+  // Actions - Templates
+  loadTemplates: () => Promise<void>;
+  applyTemplate: (id: string) => void;
+  resetTemplate: () => void;
+  clearTemplate: () => void;
 
   // Actions - Scenarios
   saveScenario: (name: string) => void;
@@ -279,6 +297,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   isPlaying: false,
   layoutReady: true,
   simulationRunToken: 0,
+  playbackFinishedToken: 0,
   currentYear: 0,
   horizonYears: 5,
   baseYear: 2020,
@@ -288,6 +307,12 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   targetVisibleEffects: 10,
   highlightedIndicator: null,
   savedScenarios: loadScenariosFromStorage(),
+  templates: [],
+  templatesLoaded: false,
+  templatesLoading: false,
+  templatesError: null,
+  activeTemplate: null,
+  templateModified: false,
   error: null,
 
   // Panel actions
@@ -437,6 +462,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       countryGraph: null,
       temporalResults: null,
       interventions: [],
+      activeTemplate: null,
+      templateModified: false,
       playbackMode: 'historical',
       isPlaying: false,
       // Restore unified from cache (instant, no loading)
@@ -687,7 +714,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   // Intervention actions
   addIntervention: (intervention: Intervention) => {
-    const { interventions } = get();
+    const { interventions, activeTemplate } = get();
     if (interventions.length >= MAX_INTERVENTIONS) {
       set({ error: `Maximum ${MAX_INTERVENTIONS} interventions allowed` });
       return;
@@ -699,11 +726,14 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     if (years.length > 0) {
       newState.simulationStartYear = Math.min(...years);
     }
+    if (activeTemplate) {
+      newState.templateModified = true;
+    }
     set(newState);
   },
 
   updateIntervention: (index: number, updates: Partial<Intervention>) => {
-    const { interventions } = get();
+    const { interventions, activeTemplate } = get();
     if (index < 0 || index >= interventions.length) return;
 
     const updated = [...interventions];
@@ -717,11 +747,14 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         newState.simulationStartYear = Math.min(...years);
       }
     }
+    if (activeTemplate) {
+      newState.templateModified = true;
+    }
     set(newState);
   },
 
   removeIntervention: (index: number) => {
-    const { interventions } = get();
+    const { interventions, activeTemplate } = get();
     const updated = interventions.filter((_, i) => i !== index);
     const newState: Partial<SimulationState> = { interventions: updated };
     // Sync start year to earliest remaining intervention year
@@ -729,10 +762,23 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     if (years.length > 0) {
       newState.simulationStartYear = Math.min(...years);
     }
+    if (activeTemplate) {
+      newState.templateModified = true;
+    }
     set(newState);
   },
 
-  clearInterventions: () => set({ interventions: [] }),
+  clearInterventions: () => set({
+    interventions: [],
+    activeTemplate: null,
+    templateModified: false
+  }),
+
+  setInterventions: (interventions: Intervention[]) => set({
+    interventions: interventions.slice(0, MAX_INTERVENTIONS),
+    activeTemplate: null,
+    templateModified: false
+  }),
 
   // Simulation actions
   runTemporalSimulation: async (horizonYears?: number) => {
@@ -851,10 +897,13 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   clearResults: () => set({
     temporalResults: null,
+    interventions: [],
     currentYear: 0,
     isPlaying: false,
     playbackMode: 'historical',
-    highlightedIndicator: null
+    highlightedIndicator: null,
+    activeTemplate: null,
+    templateModified: false
   }),
 
   // Temporal playback actions
@@ -890,6 +939,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   },
 
   setLayoutReady: (ready: boolean) => set({ layoutReady: ready }),
+  markPlaybackFinished: () => set(s => ({ playbackFinishedToken: s.playbackFinishedToken + 1 })),
 
   setPlaybackMode: (mode: PlaybackMode) => {
     const { historicalTimeline } = get();
@@ -933,6 +983,112 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   // Highlight actions
   setHighlightedIndicator: (id: string | null) => set({ highlightedIndicator: id }),
+
+  // Template actions
+  loadTemplates: async () => {
+    const { templatesLoaded, templatesLoading } = get();
+    if (templatesLoaded || templatesLoading) return;
+    set({ templatesLoading: true, templatesError: null });
+
+    try {
+      const resp = await fetch(`${import.meta.env.BASE_URL}data/scenario-templates.json`);
+      if (!resp.ok) {
+        throw new Error(`Template fetch failed (${resp.status})`);
+      }
+      const data = await resp.json();
+      set({
+        templates: data.templates || [],
+        templatesLoaded: true,
+        templatesLoading: false,
+        templatesError: null
+      });
+    } catch (err) {
+      debug.error('simulation-store', 'Failed to load templates:', err);
+      set({
+        templatesLoading: false,
+        templatesLoaded: false,
+        templatesError: err instanceof Error ? err.message : 'Failed to load templates'
+      });
+    }
+  },
+
+  applyTemplate: (id: string) => {
+    const { templates, historicalTimeline, simulationEndYear } = get();
+    const template = templates.find(t => t.id === id);
+    if (!template) return;
+
+    const clampedStart = Math.max(SIMULATION_YEAR_MIN, Math.min(SIMULATION_YEAR_MAX - 1, template.year));
+    const clampedEnd = Math.max(clampedStart + 1, Math.min(SIMULATION_YEAR_MAX, simulationEndYear));
+    const historicalIndex = historicalTimeline ? historicalTimeline.years.length - 1 : 0;
+
+    const interventions: Intervention[] = template.interventions
+      .slice(0, MAX_INTERVENTIONS)
+      .map((ti, idx) => ({
+        id: `template-${template.id}-${idx}`,
+        indicator: ti.indicator_id,
+        indicatorLabel: ti.indicator_name,
+        change_percent: ti.change_percent,
+        domain: '',
+        year: clampedStart
+      }));
+
+    set({
+      interventions,
+      activeTemplate: template,
+      templateModified: false,
+      temporalResults: null,
+      currentYear: 0,
+      currentYearIndex: historicalIndex,
+      playbackMode: 'historical',
+      isPlaying: false,
+      layoutReady: true,
+      highlightedIndicator: null,
+      simulationStartYear: clampedStart,
+      simulationEndYear: clampedEnd
+    });
+  },
+
+  resetTemplate: () => {
+    const { activeTemplate, historicalTimeline, simulationEndYear } = get();
+    if (!activeTemplate) return;
+
+    const clampedStart = Math.max(SIMULATION_YEAR_MIN, Math.min(SIMULATION_YEAR_MAX - 1, activeTemplate.year));
+    const clampedEnd = Math.max(clampedStart + 1, Math.min(SIMULATION_YEAR_MAX, simulationEndYear));
+    const historicalIndex = historicalTimeline ? historicalTimeline.years.length - 1 : 0;
+
+    const interventions: Intervention[] = activeTemplate.interventions
+      .slice(0, MAX_INTERVENTIONS)
+      .map((ti, idx) => ({
+        id: `template-${activeTemplate.id}-${idx}`,
+        indicator: ti.indicator_id,
+        indicatorLabel: ti.indicator_name,
+        change_percent: ti.change_percent,
+        domain: '',
+        year: clampedStart
+      }));
+
+    set({
+      interventions,
+      templateModified: false,
+      temporalResults: null,
+      currentYear: 0,
+      currentYearIndex: historicalIndex,
+      playbackMode: 'historical',
+      isPlaying: false,
+      layoutReady: true,
+      highlightedIndicator: null,
+      simulationStartYear: clampedStart,
+      simulationEndYear: clampedEnd
+    });
+  },
+
+  clearTemplate: () => {
+    set({
+      activeTemplate: null,
+      templateModified: false,
+      interventions: []
+    });
+  },
 
   // Scenario save/load actions
   saveScenario: (name: string) => {

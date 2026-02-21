@@ -1,18 +1,30 @@
 /**
  * SimulationPanel Component
  *
- * Light-themed toolbox panel on the right side containing:
+ * Draggable light-themed toolbox panel containing:
  * - Country Selector
  * - Intervention Builder
+ * - Policy Templates
  * - Simulation Runner
- * - Results Panel (when results exist)
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSimulationStore, useIsPanelOpen } from '../../stores/simulationStore'
 import CountrySelector from './CountrySelector'
+import TemplateSelector from './TemplateSelector'
 import InterventionBuilder from './InterventionBuilder'
 import SimulationRunner from './SimulationRunner'
+
+const PANEL_WIDTH = 380
+const PANEL_HEIGHT = 560
+
+const getDefaultPosition = () => {
+  if (typeof window === 'undefined') return { x: 24, y: 24 }
+  return {
+    x: window.innerWidth - PANEL_WIDTH - 100,
+    y: window.innerHeight - 70 - PANEL_HEIGHT
+  }
+}
 
 // ============================================
 // Main Component
@@ -21,6 +33,74 @@ import SimulationRunner from './SimulationRunner'
 export function SimulationPanel() {
   const isPanelOpen = useIsPanelOpen()
   const { closePanel } = useSimulationStore()
+
+  // Drag state
+  const [position, setPosition] = useState(() => getDefaultPosition())
+  const [isDragging, setIsDragging] = useState(false)
+  const dragOffset = useRef({ x: 0, y: 0 })
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  const clampPosition = useCallback((next: { x: number; y: number }) => {
+    const panelWidth = panelRef.current?.offsetWidth || PANEL_WIDTH
+    const panelHeight = panelRef.current?.offsetHeight || PANEL_HEIGHT
+    return {
+      x: Math.max(0, Math.min(next.x, window.innerWidth - panelWidth)),
+      y: Math.max(0, Math.min(next.y, window.innerHeight - panelHeight))
+    }
+  }, [])
+
+  // Reset position when panel opens
+  useEffect(() => {
+    if (isPanelOpen) {
+      setPosition(clampPosition(getDefaultPosition()))
+    }
+  }, [isPanelOpen, clampPosition])
+
+  // Keep panel on-screen when viewport changes
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition(prev => clampPosition(prev))
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [clampPosition])
+
+  // Drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
+
+    setIsDragging(true)
+    dragOffset.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y
+    }
+    e.preventDefault()
+  }, [position])
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging) return
+
+    const newX = e.clientX - dragOffset.current.x
+    const newY = e.clientY - dragOffset.current.y
+
+    setPosition(clampPosition({ x: newX, y: newY }))
+  }, [isDragging, clampPosition])
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  // Global mouse listeners for drag
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove)
+      window.addEventListener('mouseup', handleMouseUp)
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove)
+        window.removeEventListener('mouseup', handleMouseUp)
+      }
+    }
+  }, [isDragging, handleMouseMove, handleMouseUp])
 
   // Close panel with Escape key
   useEffect(() => {
@@ -37,34 +117,41 @@ export function SimulationPanel() {
 
   return (
     <div
+      ref={panelRef}
       role="dialog"
       aria-modal="false"
       aria-label="Simulation controls"
       style={{
-        position: 'absolute',
-        bottom: 70,
-        right: 100,
+        position: 'fixed',
+        top: position.y,
+        left: position.x,
         width: 380,
         maxHeight: 560,
         background: 'rgba(255,255,255,0.98)',
         borderRadius: 8,
-        boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+        boxShadow: isDragging
+          ? '0 8px 24px rgba(0,0,0,0.2)'
+          : '0 2px 12px rgba(0,0,0,0.15)',
         border: '1px solid #ddd',
         zIndex: 200,
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        userSelect: isDragging ? 'none' : 'auto'
       }}
     >
-      {/* Header */}
+      {/* Header - draggable */}
       <div
+        onMouseDown={handleMouseDown}
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '10px 14px',
           borderBottom: '1px solid #eee',
-          background: '#fafafa'
+          background: '#fafafa',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          flexShrink: 0
         }}
       >
         <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
@@ -106,6 +193,11 @@ export function SimulationPanel() {
         {/* Intervention Builder */}
         <div style={{ padding: '12px 14px', borderBottom: '1px solid #eee' }}>
           <InterventionBuilder />
+        </div>
+
+        {/* Policy Templates */}
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid #eee' }}>
+          <TemplateSelector />
         </div>
 
         {/* Simulation Runner */}

@@ -11,6 +11,13 @@
 import { useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
 import { SIMULATION_YEAR_MAX, SIMULATION_YEAR_MIN } from '../../constants/time'
+import {
+  generateSummaryCSV,
+  generateTimelineCSV,
+  downloadCSV,
+  copyCSVToClipboard,
+  makeCSVFilename
+} from '../../utils/csvExport'
 
 // ============================================
 // Main Component
@@ -844,7 +851,13 @@ interface TemporalResultsDropdownProps {
 
 function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDropdownProps) {
   const [isExpanded, setIsExpanded] = useState(true)
-  const { indicators, effectFilterPct, setEffectFilterPct, highlightedIndicator, setHighlightedIndicator } = useSimulationStore()
+  const [copyFeedback, setCopyFeedback] = useState(false)
+  const [showCSVMenu, setShowCSVMenu] = useState(false)
+  const [exportNudge, setExportNudge] = useState(false)
+  const csvMenuRef = useRef<HTMLDivElement>(null)
+  const { indicators, effectFilterPct, setEffectFilterPct, highlightedIndicator, setHighlightedIndicator, selectedCountry, interventions, activeTemplate } = useSimulationStore()
+  const playbackFinishedToken = useSimulationStore(s => s.playbackFinishedToken)
+  const prevFinishedRef = useRef(playbackFinishedToken)
   const resultsRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll results into view when they first appear
@@ -853,6 +866,50 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
       resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
   }, [])
+
+  // Glow export buttons when simulation playback finishes
+  useEffect(() => {
+    if (playbackFinishedToken > 0 && playbackFinishedToken !== prevFinishedRef.current) {
+      prevFinishedRef.current = playbackFinishedToken
+      setExportNudge(true)
+      const timer = setTimeout(() => setExportNudge(false), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [playbackFinishedToken])
+
+  // Close CSV dropdown on outside click
+  useEffect(() => {
+    if (!showCSVMenu) return
+    const handler = (e: MouseEvent) => {
+      if (csvMenuRef.current && !csvMenuRef.current.contains(e.target as Node)) {
+        setShowCSVMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showCSVMenu])
+
+  const handleCopyCSV = useCallback(async () => {
+    const csv = generateSummaryCSV(temporalResults, interventions, selectedCountry, indicators, activeTemplate)
+    const ok = await copyCSVToClipboard(csv)
+    if (ok) {
+      setCopyFeedback(true)
+      setTimeout(() => setCopyFeedback(false), 2000)
+    }
+  }, [temporalResults, interventions, selectedCountry, indicators, activeTemplate])
+
+  const handleDownloadSummary = useCallback(() => {
+    const csv = generateSummaryCSV(temporalResults, interventions, selectedCountry, indicators, activeTemplate)
+    downloadCSV(csv, makeCSVFilename(selectedCountry, 'summary'))
+    setShowCSVMenu(false)
+  }, [temporalResults, interventions, selectedCountry, indicators, activeTemplate])
+
+  const handleDownloadTimeline = useCallback(() => {
+    const csv = generateTimelineCSV(temporalResults, interventions, selectedCountry, indicators, activeTemplate)
+    downloadCSV(csv, makeCSVFilename(selectedCountry, 'timeline'))
+    setShowCSVMenu(false)
+  }, [temporalResults, interventions, selectedCountry, indicators, activeTemplate])
+
   const tableId = 'temporal-results-table'
 
   // Build indicator name lookup
@@ -953,6 +1010,39 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
           {temporalResults.base_year} → {temporalResults.base_year + temporalResults.horizon_years}
         </span>
       </button>
+
+      {/* Export actions */}
+      <div className={`export-actions-row ${exportNudge ? 'export-nudge' : ''}`}>
+        <button
+          className={`export-btn copy-btn ${exportNudge ? 'nudge' : ''}`}
+          onClick={() => { setExportNudge(false); handleCopyCSV() }}
+          title="Copy summary CSV to clipboard"
+          aria-label="Copy results to clipboard"
+        >
+          {copyFeedback ? '✓ Copied' : '📋 Copy'}
+        </button>
+        <div className="csv-dropdown-wrap" ref={csvMenuRef}>
+          <button
+            className={`export-btn csv-btn ${exportNudge ? 'nudge' : ''}`}
+            onClick={() => { setExportNudge(false); setShowCSVMenu(!showCSVMenu) }}
+            title="Download CSV"
+            aria-expanded={showCSVMenu}
+            aria-label="Download CSV export"
+          >
+            ⬇ CSV
+          </button>
+          {showCSVMenu && (
+            <div className="csv-dropdown-menu" role="menu">
+              <button className="csv-menu-item" onClick={handleDownloadSummary} role="menuitem">
+                Summary (final year)
+              </button>
+              <button className="csv-menu-item" onClick={handleDownloadTimeline} role="menuitem">
+                Full Timeline (all years)
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Filter slider — always visible when results exist */}
       <div className="effect-filter-row">
@@ -1156,9 +1246,130 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
 
         .results-dropdown-header:focus-visible,
         .effect-filter-slider:focus-visible,
-        .clear-btn:focus-visible {
+        .clear-btn:focus-visible,
+        .export-btn:focus-visible,
+        .csv-menu-item:focus-visible {
           outline: 2px solid #3B82F6;
           outline-offset: 2px;
+        }
+
+        .export-actions-row {
+          display: flex;
+          gap: 4px;
+          margin-top: 6px;
+        }
+
+        .export-btn {
+          padding: 3px 8px;
+          border: 1px solid #C8E6C9;
+          border-radius: 4px;
+          background: white;
+          font-size: 10px;
+          cursor: pointer;
+          color: #555;
+          transition: all 0.3s ease;
+          white-space: nowrap;
+        }
+
+        .export-btn.nudge {
+          border-color: rgba(0, 229, 255, 0.6);
+          color: #00ACC1;
+          background-image: linear-gradient(
+            110deg,
+            transparent 25%,
+            rgba(255, 255, 255, 0.4) 37%,
+            rgba(255, 255, 255, 0.7) 50%,
+            rgba(255, 255, 255, 0.4) 63%,
+            transparent 75%
+          );
+          background-color: rgba(0, 229, 255, 0.1);
+          background-size: 300% 100%;
+          background-position: -200% center;
+          box-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+          animation: export-nudge-shimmer 1.2s cubic-bezier(0.4, 0, 0.2, 1) 3;
+        }
+
+        @keyframes export-nudge-shimmer {
+          0% {
+            transform: scale(1);
+            background-position: -200% center;
+            box-shadow: 0 0 6px rgba(0, 229, 255, 0.4);
+          }
+          15% {
+            transform: scale(1.1);
+            box-shadow: 0 0 14px rgba(0, 229, 255, 0.7);
+          }
+          30% {
+            transform: scale(1);
+            background-position: 200% center;
+            box-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+          }
+          100% {
+            transform: scale(1);
+            background-position: 200% center;
+            box-shadow: 0 0 6px rgba(0, 229, 255, 0.3);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .export-btn.nudge {
+            animation: none;
+            outline: 2px solid rgba(0, 229, 255, 0.7);
+            outline-offset: 2px;
+          }
+        }
+
+        .export-btn:hover {
+          background: #f0f7ff;
+          border-color: #90CAF9;
+          color: #1565C0;
+        }
+
+        .export-btn.nudge:hover {
+          background: rgba(0, 229, 255, 0.15);
+        }
+
+        .export-btn.copy-btn {
+          min-width: 64px;
+        }
+
+        .csv-dropdown-wrap {
+          position: relative;
+        }
+
+        .csv-dropdown-menu {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          margin-top: 2px;
+          min-width: 160px;
+          background: white;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+          z-index: 300;
+          overflow: hidden;
+        }
+
+        .csv-menu-item {
+          display: block;
+          width: 100%;
+          padding: 7px 10px;
+          border: none;
+          background: none;
+          font-size: 11px;
+          color: #444;
+          cursor: pointer;
+          text-align: left;
+        }
+
+        .csv-menu-item:hover {
+          background: #f0f7ff;
+          color: #1565C0;
+        }
+
+        .csv-menu-item + .csv-menu-item {
+          border-top: 1px solid #f0f0f0;
         }
       `}</style>
     </div>

@@ -3,8 +3,9 @@
  * With action buttons for Reset, Clear, and Share
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ViewMode } from '../types'
+import { useSimulationStore } from '../stores/simulationStore'
 
 interface ViewTabsProps {
   activeView: ViewMode
@@ -30,6 +31,19 @@ export function ViewTabs({
 }: ViewTabsProps) {
   const hasTargets = localTargetCount > 0 || simMode
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle')
+  const [shareNudge, setShareNudge] = useState(false)
+  const playbackFinishedToken = useSimulationStore(s => s.playbackFinishedToken)
+  const prevFinishedTokenRef = useRef(playbackFinishedToken)
+
+  // Glow the share button when simulation playback reaches the final year
+  useEffect(() => {
+    if (playbackFinishedToken > 0 && playbackFinishedToken !== prevFinishedTokenRef.current) {
+      prevFinishedTokenRef.current = playbackFinishedToken
+      setShareNudge(true)
+      const timer = setTimeout(() => setShareNudge(false), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [playbackFinishedToken])
 
   const handleShare = async () => {
     if (onShare) {
@@ -210,29 +224,35 @@ export function ViewTabs({
 
       {/* Row 3: Share button */}
       <div
+        className={shareNudge ? 'share-btn-wrap share-nudge-active' : 'share-btn-wrap'}
         style={{
           display: 'flex',
           background: 'white',
           borderRadius: 6,
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           border: '1px solid #ddd',
-          overflow: 'hidden'
+          overflow: 'visible',
+          position: 'relative'
         }}
       >
         <button
-          onClick={handleShare}
+          onClick={() => { setShareNudge(false); handleShare() }}
+          className={shareNudge ? 'share-btn-inner share-nudge-btn' : 'share-btn-inner'}
           style={{
             padding: '6px 12px',
             fontSize: 12,
             fontWeight: 500,
             cursor: 'pointer',
             border: 'none',
+            borderRadius: 5,
             background: shareStatus === 'copied' ? '#E8F5E9' : 'white',
-            color: shareStatus === 'copied' ? '#2E7D32' : '#555',
-            transition: 'all 0.15s ease',
+            color: shareStatus === 'copied' ? '#2E7D32' : '#00ACC1',
+            transition: 'all 0.3s ease',
             display: 'flex',
             alignItems: 'center',
-            gap: 6
+            gap: 6,
+            position: 'relative',
+            zIndex: 1
           }}
           title="Copy shareable link to clipboard"
           onMouseEnter={(e) => {

@@ -313,7 +313,8 @@ function App() {
     layoutReady,
     setLayoutReady,
     highlightedIndicator,
-    setHighlightedIndicator
+    setHighlightedIndicator,
+    clearResults
   } = useSimulationStore()
   const isPanelOpen = useIsPanelOpen()
 
@@ -991,6 +992,7 @@ function App() {
 
   // Share current state via URL
   const shareCurrentState = useCallback(async (): Promise<boolean> => {
+    const simState = useSimulationStore.getState()
     const state: URLState = {
       view: viewMode,
       expanded: Array.from(expandedNodes),
@@ -1003,6 +1005,21 @@ function App() {
         y: currentTransformRef.current.y
       } : undefined
     }
+
+    // Include simulation state in shared URL
+    if (simState.selectedCountry) state.country = simState.selectedCountry
+    if (simState.selectedStratum !== 'unified') state.stratum = simState.selectedStratum
+    if (simState.interventions.length > 0 && !simState.activeTemplate) {
+      state.interventions = simState.interventions.map(iv => ({
+        ind: iv.indicator,
+        pct: iv.change_percent,
+        yr: iv.year
+      }))
+    }
+    if (simState.activeTemplate) state.template = simState.activeTemplate.id
+    if (simState.simulationStartYear !== 2020) state.simStart = simState.simulationStartYear
+    if (simState.simulationEndYear !== 2029) state.simEnd = simState.simulationEndYear
+
     return copyURLToClipboard(state)
   }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
 
@@ -2170,17 +2187,21 @@ function App() {
         searchInputRef.current?.blur()
       }
 
-      // C to clear Local View targets
+      // C to clear Local View targets + simulation results
       if (e.key === 'c' || e.key === 'C') {
         if (localViewTargets.length > 0) {
           e.preventDefault()
           clearLocalViewTargets()
         }
+        if (temporalResults) {
+          e.preventDefault()
+          clearResults()
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [localViewTargets.length, clearLocalViewTargets])
+  }, [localViewTargets.length, clearLocalViewTargets, temporalResults, clearResults])
 
   // Fetch data once on mount
   const fetchData = useCallback(async () => {
@@ -4468,6 +4489,44 @@ function App() {
       }, 600)
     }
 
+    // Restore simulation state from URL
+    if (urlState.country || urlState.interventions || urlState.template) {
+      const simStore = useSimulationStore.getState()
+      simStore.openPanel()
+
+      // Set stratum first (before country)
+      if (urlState.stratum && urlState.stratum !== 'unified') {
+        simStore.setStratum(urlState.stratum)
+      }
+
+      // Set country (async — triggers data fetch)
+      if (urlState.country) {
+        simStore.setCountry(urlState.country)
+      }
+
+      // Set year range
+      if (urlState.simStart) simStore.setSimulationStartYear(urlState.simStart)
+      if (urlState.simEnd) simStore.setSimulationEndYear(urlState.simEnd)
+
+      // Apply template OR set custom interventions
+      if (urlState.template) {
+        // Load templates then apply
+        simStore.loadTemplates().then(() => {
+          useSimulationStore.getState().applyTemplate(urlState.template!)
+        })
+      } else if (urlState.interventions) {
+        const interventions = urlState.interventions.map((iv, idx) => ({
+          id: `url-${idx}`,
+          indicator: iv.ind,
+          indicatorLabel: '',  // Resolved by InterventionBuilder on render
+          change_percent: iv.pct,
+          year: iv.yr,
+          domain: ''
+        }))
+        simStore.setInterventions(interventions)
+      }
+    }
+
     urlStateRestoredRef.current = true
   }, [rawData])
 
@@ -4498,6 +4557,14 @@ function App() {
     initialExpansionDoneRef.current = true
   }, [precomputedShapCache.size, rawData, selectedCountry, countryGraph, expandedNodes.size])
 
+  // Subscribe to simulation store fields for URL sync
+  const simCountry = useSimulationStore(s => s.selectedCountry)
+  const simStratum = useSimulationStore(s => s.selectedStratum)
+  const simInterventions = useSimulationStore(s => s.interventions)
+  const simActiveTemplate = useSimulationStore(s => s.activeTemplate)
+  const simStartYear = useSimulationStore(s => s.simulationStartYear)
+  const simEndYear = useSimulationStore(s => s.simulationEndYear)
+
   // Sync state to URL when key state changes
   useEffect(() => {
     // Don't sync until URL state has been restored (avoid overwriting on load)
@@ -4517,8 +4584,23 @@ function App() {
       state.zoom = { k: t.k, x: t.x, y: t.y }
     }
 
+    // Add simulation state
+    if (simCountry) state.country = simCountry
+    if (simStratum !== 'unified') state.stratum = simStratum
+    if (simInterventions.length > 0 && !simActiveTemplate) {
+      state.interventions = simInterventions.map(iv => ({
+        ind: iv.indicator,
+        pct: iv.change_percent,
+        yr: iv.year
+      }))
+    }
+    if (simActiveTemplate) state.template = simActiveTemplate.id
+    if (simStartYear !== 2020) state.simStart = simStartYear
+    if (simEndYear !== 2029) state.simEnd = simEndYear
+
     updateBrowserURL(state)
-  }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
+  }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget,
+      simCountry, simStratum, simInterventions, simActiveTemplate, simStartYear, simEndYear])
 
   // Recompute layout when rawData or ringRadii changes
   useEffect(() => {
