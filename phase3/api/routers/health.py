@@ -12,7 +12,7 @@ from typing import Dict, Any
 
 from ..config import (
     PROJECT_ROOT, GRAPHS_DIR, PANEL_PATH, V21_GRAPH_PATH,
-    API_VERSION, ENV
+    API_VERSION, ENV, HEALTH_DETAILED_ENABLED
 )
 
 router = APIRouter(tags=["health"])
@@ -120,6 +120,9 @@ def detailed_health_check():
 
     Returns 503 if any critical dependency fails.
     """
+    if not HEALTH_DETAILED_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+
     health = {
         "status": "healthy",
         "version": API_VERSION,

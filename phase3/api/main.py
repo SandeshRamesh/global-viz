@@ -16,7 +16,9 @@ from .config import (
     API_VERSION, API_TITLE, API_DESCRIPTION,
     CORS_ORIGINS, CORS_ALLOW_CREDENTIALS, RATE_LIMIT_ENABLED, ENV,
     CONTACT_NAME, CONTACT_URL, CONTACT_EMAIL,
-    LOG_LEVEL
+    LOG_LEVEL, API_ENABLE_DOCS, ENFORCE_PRODUCTION_ENV,
+    SIMULATION_AUTH_ENABLED, SIMULATION_AUTH_TOKEN,
+    CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
 )
 from .routers import (
     countries_router,
@@ -40,8 +42,8 @@ app = FastAPI(
     title=API_TITLE,
     description=API_DESCRIPTION,
     version=API_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if API_ENABLE_DOCS else None,
+    redoc_url="/redoc" if API_ENABLE_DOCS else None,
     contact={
         "name": CONTACT_NAME,
         "url": CONTACT_URL,
@@ -52,6 +54,34 @@ app = FastAPI(
         "url": "https://opensource.org/licenses/MIT"
     }
 )
+
+
+def _is_local_origin(origin: str) -> bool:
+    local_prefixes = ("http://localhost", "http://127.0.0.1")
+    return origin.startswith(local_prefixes)
+
+
+def _validate_security_config() -> None:
+    if ENFORCE_PRODUCTION_ENV and ENV != "production":
+        raise RuntimeError("ENFORCE_PRODUCTION_ENV is enabled but API_ENV is not 'production'.")
+
+    if SIMULATION_AUTH_ENABLED:
+        has_service_token = bool(CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET)
+        has_api_token = bool(SIMULATION_AUTH_TOKEN)
+        if not (has_service_token or has_api_token):
+            raise RuntimeError(
+                "Simulation auth enabled but no credentials configured. "
+                "Set SIMULATION_AUTH_TOKEN or CF_ACCESS_CLIENT_ID/CF_ACCESS_CLIENT_SECRET."
+            )
+
+    if ENFORCE_PRODUCTION_ENV and ENV == "production":
+        if any(origin == "*" for origin in CORS_ORIGINS):
+            raise RuntimeError("Wildcard CORS origin is not allowed in enforced production mode.")
+        if any(_is_local_origin(origin) for origin in CORS_ORIGINS):
+            raise RuntimeError("Localhost CORS origins are not allowed in enforced production mode.")
+
+
+_validate_security_config()
 
 # CORS middleware (must be first)
 app.add_middleware(
@@ -75,6 +105,37 @@ async def logging_middleware(request: Request, call_next):
     return await log_requests_middleware(request, call_next)
 
 
+@app.middleware("http")
+async def simulation_auth_middleware(request: Request, call_next):
+    """Optional auth gate for simulation endpoints."""
+    if (
+        not SIMULATION_AUTH_ENABLED
+        or request.method == "OPTIONS"
+        or not request.url.path.startswith("/api/simulate")
+    ):
+        return await call_next(request)
+
+    has_service_token = bool(CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET)
+    if has_service_token:
+        req_id = request.headers.get("CF-Access-Client-Id", "")
+        req_secret = request.headers.get("CF-Access-Client-Secret", "")
+        if req_id == CF_ACCESS_CLIENT_ID and req_secret == CF_ACCESS_CLIENT_SECRET:
+            return await call_next(request)
+
+    if SIMULATION_AUTH_TOKEN:
+        api_key = request.headers.get("X-API-Key", "")
+        auth_header = request.headers.get("Authorization", "")
+        bearer = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+        if api_key == SIMULATION_AUTH_TOKEN or bearer == SIMULATION_AUTH_TOKEN:
+            return await call_next(request)
+
+    return JSONResponse(
+        status_code=401,
+        content={"error": "unauthorized", "message": "Authentication required"},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 # Rate limiting middleware
 if RATE_LIMIT_ENABLED:
     @app.middleware("http")
@@ -93,7 +154,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "error": "internal_error",
             "message": "An unexpected error occurred",
-            "details": str(exc) if app.debug else None
         }
     )
 
@@ -237,7 +297,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "api.main:app",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=8000,
         reload=True
     )

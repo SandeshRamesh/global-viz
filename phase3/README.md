@@ -60,3 +60,5 @@ Compatibility aliases (deprecated):
 - Current phase plan/progress:
   - `docs/plans/phase4-cinematic-plan.md`
   - `docs/reports/phase4-progress.md`
+- Deployment security runbook:
+  - `docs/DEPLOYMENT_SECURITY.md`

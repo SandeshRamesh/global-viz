@@ -147,7 +147,7 @@ async def run_instant_simulation_v31(request: SimulationRequestV31):
         logger.error(f"V3.1 simulation error: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"V3.1 simulation error: {str(e)}"
+            detail="Simulation failed due to an internal error"
         )
 
 
@@ -230,7 +230,7 @@ async def run_temporal_simulation_v31(request: TemporalSimulationRequestV31):
         logger.error(f"V3.1 temporal simulation error: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"V3.1 temporal simulation error: {str(e)}"
+            detail="Temporal simulation failed due to an internal error"
         )
 
 

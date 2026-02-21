@@ -568,6 +568,11 @@ function App() {
   // Cache last valid SHAP importance values (used during loading to maintain node sizes)
   const lastValidShapRef = useRef<Map<string, number>>(new Map())
 
+  // Dots mode: when true, deep-ring nodes (ring >= 4) render as lightweight dots
+  // (no labels, no glows, no transitions). Activated by Rings menu bulk expansion,
+  // deactivated by individual node clicks.
+  const dotsModeRef = useRef(false)
+
   // Track last expansion action for auto-zoom
   const pendingZoomRef = useRef<{ nodeId: string; action: 'expand' | 'collapse' } | null>(null)
   const isAnimatingZoomRef = useRef(false)
@@ -1030,6 +1035,8 @@ function App() {
   // Toggle expansion of a node
   const toggleExpansion = useCallback((nodeId: string) => {
     if (!rawData) return
+    // Individual node click — disable dots mode (full rendering)
+    dotsModeRef.current = false
     const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
 
     setPinnedPaths(new Set())  // Clear pinned paths on manual interaction
@@ -1066,6 +1073,7 @@ function App() {
   // Expand all nodes
   const expandAll = useCallback(() => {
     if (!rawData) return
+    dotsModeRef.current = true
     setPinnedPaths(new Set())
     // Use rawData to get ALL nodes (not just visible ones)
     const allExpandable = rawData.nodes
@@ -1076,6 +1084,7 @@ function App() {
 
   // Collapse all nodes
   const collapseAll = useCallback(() => {
+    dotsModeRef.current = false
     setPinnedPaths(new Set())
     setExpandedNodes(new Set())
   }, [])
@@ -1148,6 +1157,8 @@ function App() {
 
   // Expand all nodes in a specific ring (that are currently visible)
   const expandRing = useCallback((ring: number) => {
+    // Bulk expansion — enable dots mode for deep rings
+    if (ring >= 3) dotsModeRef.current = true
     setPinnedPaths(new Set())
     setExpandedNodes(prev => {
       const next = new Set(prev)
@@ -1167,6 +1178,7 @@ function App() {
   // Collapse all nodes in a specific ring
   const collapseRing = useCallback((ring: number) => {
     if (!rawData) return
+    dotsModeRef.current = false
     setPinnedPaths(new Set())
     const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
 
@@ -2890,6 +2902,11 @@ function App() {
     // Threshold for considering a position "changed" (in pixels)
     const POSITION_CHANGE_THRESHOLD = 1
 
+    // Dots mode: deep-ring nodes rendered as lightweight dots (no labels/glows/transitions)
+    // Only active when triggered by Rings menu bulk expansion
+    const DEEP_RING_THRESHOLD = 4
+    const dotsMode = dotsModeRef.current
+
     currentVisibleIds.forEach(id => {
       if (!prevVisibleIds.has(id)) {
         newNodeIds.add(id)
@@ -3484,7 +3501,9 @@ function App() {
         .attr('opacity', 0.8)
 
       // Subtle glow for ineligible parent nodes (weak effect, didn't pass gating)
+      // Dots mode: skip glows for deep-ring nodes
       const ineligibleGlowNodes = visibleNodes.filter(n => {
+        if (dotsMode && n.ring >= DEEP_RING_THRESHOLD) return false
         const g = getSimGlowForIneligible(n)
         return g !== null
       })
@@ -3547,6 +3566,8 @@ function App() {
 
       const flashNodes = simPlaybackActive
         ? visibleNodes.filter(n => {
+            // Dots mode: skip flash effects for deep-ring nodes
+            if (dotsMode && n.ring >= DEEP_RING_THRESHOLD) return false
             if (interventionNodeIds.has(n.id)) return false
             const eff = simEffectLookup.get(n.id)
             if (!eff || Math.abs(eff.pct) < 0.01) return false
@@ -3623,14 +3644,23 @@ function App() {
       .data(visibleEdges, edgeKey)
 
     // Exit edges (COLLAPSE: after text disappears, before rotation)
+    // Dots mode: deep-ring edges exit instantly
     edgeSelection.exit()
-      .transition()
-      .delay(collapseExitDelay)
-      .duration(exitDuration)
-      .attr('x2', function() { return d3.select(this).attr('x1') })
-      .attr('y2', function() { return d3.select(this).attr('y1') })
-      .style('opacity', 0)
-      .remove()
+      .each(function() {
+        const el = d3.select(this)
+        const targetRing = parseInt(el.attr('data-target-ring') || '0', 10)
+        if (dotsMode && targetRing >= DEEP_RING_THRESHOLD) {
+          el.remove()
+        } else {
+          el.transition()
+            .delay(collapseExitDelay)
+            .duration(exitDuration)
+            .attr('x2', el.attr('x1'))
+            .attr('y2', el.attr('y1'))
+            .style('opacity', 0)
+            .remove()
+        }
+      })
 
     // Check if we're in the middle of a collapse animation (from a previous render)
     // IMPORTANT: Check BEFORE setting new animation state
@@ -3654,15 +3684,23 @@ function App() {
 
     edgeSelection.each(function(d) {
       const edgeEl = d3.select(this)
-      const currentX1 = parseFloat(edgeEl.attr('x1') || '0')
-      const currentY1 = parseFloat(edgeEl.attr('y1') || '0')
-      const currentX2 = parseFloat(edgeEl.attr('x2') || '0')
-      const currentY2 = parseFloat(edgeEl.attr('y2') || '0')
-
       const targetX1 = nodeMap.get(d.sourceId)?.x || 0
       const targetY1 = nodeMap.get(d.sourceId)?.y || 0
       const targetX2 = nodeMap.get(d.targetId)?.x || 0
       const targetY2 = nodeMap.get(d.targetId)?.y || 0
+
+      // Dots mode: deep-ring edges set position directly, no transition
+      if (dotsMode && d.targetRing >= DEEP_RING_THRESHOLD) {
+        edgeEl
+          .attr('x1', targetX1).attr('y1', targetY1)
+          .attr('x2', targetX2).attr('y2', targetY2)
+        return
+      }
+
+      const currentX1 = parseFloat(edgeEl.attr('x1') || '0')
+      const currentY1 = parseFloat(edgeEl.attr('y1') || '0')
+      const currentX2 = parseFloat(edgeEl.attr('x2') || '0')
+      const currentY2 = parseFloat(edgeEl.attr('y2') || '0')
 
       // Check if edge actually needs to move
       const dx1 = Math.abs(targetX1 - currentX1)
@@ -3686,17 +3724,28 @@ function App() {
     })
 
     // Enter edges (EXPAND: after rotation completes)
-    edgeSelection.enter()
+    // Dots mode: deep-ring edges appear instantly; shallow edges animate
+    const enterEdges = edgeSelection.enter()
       .append('line')
       .attr('class', 'edge')
+      .attr('data-target-ring', d => d.targetRing)
       .attr('x1', d => nodeMap.get(d.sourceId)?.x || 0)
       .attr('y1', d => nodeMap.get(d.sourceId)?.y || 0)
-      .attr('x2', d => nodeMap.get(d.sourceId)?.x || 0)
-      .attr('y2', d => nodeMap.get(d.sourceId)?.y || 0)
       .attr('stroke', '#ccc')
       .attr('stroke-width', d => vLayout.getEdgeThickness(d.sourceRing))
-      .attr('stroke-opacity', 0)
       .style('pointer-events', 'none')
+
+    // Deep-ring edges in dots mode: instant placement
+    enterEdges.filter(d => dotsMode && d.targetRing >= DEEP_RING_THRESHOLD)
+      .attr('x2', d => nodeMap.get(d.targetId)?.x || 0)
+      .attr('y2', d => nodeMap.get(d.targetId)?.y || 0)
+      .attr('stroke-opacity', d => vLayout.getEdgeOpacity(d.sourceRing))
+
+    // Shallow edges (or non-dots-mode): animated enter
+    enterEdges.filter(d => !(dotsMode && d.targetRing >= DEEP_RING_THRESHOLD))
+      .attr('x2', d => nodeMap.get(d.sourceId)?.x || 0)
+      .attr('y2', d => nodeMap.get(d.sourceId)?.y || 0)
+      .attr('stroke-opacity', 0)
       .transition()
       .delay(expandEnterDelay)
       .duration(enterExitDuration)
@@ -3717,6 +3766,8 @@ function App() {
             if (!pinnedPaths.has(e.sourceId) || !pinnedPaths.has(e.targetId)) return false
             // Skip ring-1 target nodes without visible children
             if (e.targetRing === 1 && !hasVisibleChild.has(e.targetId)) return false
+            // Dots mode: skip pulse animation for deep-ring edges
+            if (dotsMode && e.targetRing >= DEEP_RING_THRESHOLD) return false
             return true
           })
         : []
@@ -3771,9 +3822,15 @@ function App() {
       .data(visibleNodes, d => d.id)
 
     // Exit nodes (COLLAPSE: after text disappears, before rotation)
+    // Dots mode: deep-ring nodes exit instantly
     nodeSelection.exit()
       .each(function() {
         const el = d3.select(this)
+        const ring = parseInt(el.attr('data-ring') || '0', 10)
+        if (dotsMode && ring >= DEEP_RING_THRESHOLD) {
+          el.remove()
+          return
+        }
         const id = el.attr('data-id')
         if (id) {
           const nodeData = nodePositionsRef.current.get(id)
@@ -3794,15 +3851,8 @@ function App() {
     // Check each node's actual DOM position vs target - animate if different
     nodeSelection.each(function(d) {
       const nodeEl = d3.select(this)
-      const currentCx = parseFloat(nodeEl.attr('cx') || '0')
-      const currentCy = parseFloat(nodeEl.attr('cy') || '0')
       const targetX = d.x
       const targetY = d.y
-
-      // Check if node actually needs to move
-      const dx = Math.abs(targetX - currentCx)
-      const dy = Math.abs(targetY - currentCy)
-      const needsMove = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
 
       // Compute simulation border for this node
       // During active playback: affected LEAF nodes get no stroke (solid fill only)
@@ -3821,6 +3871,27 @@ function App() {
           : isNodeFloored(d.importance) ? Math.min(1, getSize(d) * 0.5) : getBorderWidth(d)
       const strokeOpacity = isAffectedDuringPlayback ? 0 : (simBorder ? simBorder.opacity : 1.0)
       const dashArray = (!simBorder && !isAffectedDuringPlayback && isNodeFloored(d.importance)) ? '2,2' : 'none'
+
+      // Dots mode: deep-ring nodes set attrs directly, no transition
+      if (dotsMode && d.ring >= DEEP_RING_THRESHOLD) {
+        nodeEl
+          .attr('cx', targetX).attr('cy', targetY)
+          .attr('r', getSize(d))
+          .attr('fill', getColor(d))
+          .attr('stroke', strokeColor)
+          .attr('stroke-width', strokeWidth)
+          .attr('stroke-opacity', strokeOpacity)
+          .attr('stroke-dasharray', dashArray)
+        return
+      }
+
+      const currentCx = parseFloat(nodeEl.attr('cx') || '0')
+      const currentCy = parseFloat(nodeEl.attr('cy') || '0')
+
+      // Check if node actually needs to move
+      const dx = Math.abs(targetX - currentCx)
+      const dy = Math.abs(targetY - currentCy)
+      const needsMove = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
 
       if (needsMove) {
         // Node position differs from target - animate to new position
@@ -3855,13 +3926,12 @@ function App() {
     })
 
     // Enter nodes (EXPAND: after rotation completes)
-    nodeSelection.enter()
+    // Dots mode: deep-ring nodes appear instantly; shallow nodes animate from parent
+    const enterNodes = nodeSelection.enter()
       .append('circle')
       .attr('class', 'node')
       .attr('data-id', d => d.id)
-      .attr('cx', d => getParentPosition(d).x)
-      .attr('cy', d => getParentPosition(d).y)
-      .attr('r', 0)
+      .attr('data-ring', d => d.ring)
       .attr('fill', d => getColor(d))
       .attr('stroke', d => {
         const eLookup = simEffectLookup.get(d.id)
@@ -3895,6 +3965,19 @@ function App() {
         return (!sb && isNodeFloored(d.importance)) ? '2,2' : 'none'
       })
       .style('cursor', d => d.hasChildren ? 'pointer' : 'default')
+
+    // Deep-ring nodes in dots mode: instant placement, full opacity
+    enterNodes.filter(d => dotsMode && d.ring >= DEEP_RING_THRESHOLD)
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y)
+      .attr('r', d => getSize(d))
+      .style('opacity', 1)
+
+    // Shallow nodes (or non-dots-mode): animated enter from parent position
+    enterNodes.filter(d => !(dotsMode && d.ring >= DEEP_RING_THRESHOLD))
+      .attr('cx', d => getParentPosition(d).x)
+      .attr('cy', d => getParentPosition(d).y)
+      .attr('r', 0)
       .style('opacity', 0)
       .transition()
       .delay(expandEnterDelay)
@@ -4044,6 +4127,8 @@ function App() {
 
     // === LABELS with enter/update/exit ===
     const labelNodes = visibleNodes.filter(n => {
+      // Dots mode: skip labels for deep-ring nodes
+      if (dotsMode && n.ring >= DEEP_RING_THRESHOLD) return false
       if (n.ring === 0) return true
       if (n.parentId && expandedNodes.has(n.parentId)) return true
       if (pinnedPaths.has(n.id)) return true

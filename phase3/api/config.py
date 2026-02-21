@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 # Environment
-ENV = os.getenv("API_ENV", "development")  # development, staging, production
+ENV = os.getenv("API_ENV", "development").strip().lower()  # development, staging, production
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parent  # viz/phase2/api
@@ -106,10 +106,39 @@ if "*" in CORS_ORIGINS and ENV == "production" and not CORS_ALLOW_WILDCARD:
 
 CORS_ALLOW_CREDENTIALS = "*" not in CORS_ORIGINS
 
+# Trusted proxy IPs (used to safely read client IP headers)
+TRUST_PROXY_IPS = [
+    ip.strip()
+    for ip in os.getenv("TRUST_PROXY_IPS", "127.0.0.1,::1").split(",")
+    if ip.strip()
+]
+
 # Rate limiting
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "100"))
 RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "1000"))
+RATE_LIMIT_MAX_TRACKED_IPS = int(os.getenv("RATE_LIMIT_MAX_TRACKED_IPS", "10000"))
+RATE_LIMIT_EVICT_FRACTION = float(os.getenv("RATE_LIMIT_EVICT_FRACTION", "0.10"))
+
+# Security toggles
+API_ENABLE_DOCS = os.getenv(
+    "API_ENABLE_DOCS",
+    "false" if ENV == "production" else "true"
+).lower() == "true"
+HEALTH_DETAILED_ENABLED = os.getenv(
+    "HEALTH_DETAILED_ENABLED",
+    "false" if ENV == "production" else "true"
+).lower() == "true"
+ENFORCE_PRODUCTION_ENV = os.getenv("ENFORCE_PRODUCTION_ENV", "false").lower() == "true"
+
+# Simulation endpoint authentication (recommended for public exposure)
+SIMULATION_AUTH_ENABLED = os.getenv(
+    "SIMULATION_AUTH_ENABLED",
+    "true" if ENV == "production" else "false"
+).lower() == "true"
+SIMULATION_AUTH_TOKEN = os.getenv("SIMULATION_AUTH_TOKEN", "").strip()
+CF_ACCESS_CLIENT_ID = os.getenv("CF_ACCESS_CLIENT_ID", "").strip()
+CF_ACCESS_CLIENT_SECRET = os.getenv("CF_ACCESS_CLIENT_SECRET", "").strip()
 
 # Timeouts (seconds)
 SIMULATION_TIMEOUT = int(os.getenv("SIMULATION_TIMEOUT", "10"))

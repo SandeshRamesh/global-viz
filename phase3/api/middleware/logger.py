@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import Request
 from typing import Callable
 import json
+from .client_ip import get_client_ip
 
 # Ensure logs directory exists
 LOG_DIR = Path(__file__).parent.parent.parent / "logs"
@@ -47,11 +48,7 @@ async def log_requests_middleware(request: Request, call_next: Callable):
 
     start_time = time.time()
 
-    # Get client IP
-    forwarded = request.headers.get("X-Forwarded-For")
-    client_ip = forwarded.split(",")[0].strip() if forwarded else (
-        request.client.host if request.client else "unknown"
-    )
+    client_ip = get_client_ip(request)
 
     # Log request
     log_entry = {

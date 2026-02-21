@@ -64,7 +64,8 @@ Data files are available from: [Contact maintainer for data access]
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/health` | GET | Health check |
+| `/health` | GET | Health check |
+| `/health/detailed` | GET | Detailed health (can be disabled in prod) |
 | `/api/countries` | GET | List all 205 countries |
 | `/api/countries/{code}` | GET | Country baseline values |
 | `/api/graph/{code}` | GET | Country-specific causal graph |
@@ -86,8 +87,19 @@ Deprecated alias responses include:
 | `API_ENV` | development | Environment mode |
 | `CORS_ORIGINS` | localhost:3000,5173,5174 | Allowed CORS origins |
 | `CORS_ALLOW_WILDCARD` | false | Allow `*` origins (non-production recommended only) |
+| `TRUST_PROXY_IPS` | 127.0.0.1,::1 | Upstream proxies allowed to supply forwarding IP headers |
 | `RATE_LIMIT_ENABLED` | true | Enable rate limiting |
 | `RATE_LIMIT_PER_MINUTE` | 100 | Requests per minute |
+| `RATE_LIMIT_PER_HOUR` | 1000 | Requests per hour |
+| `RATE_LIMIT_MAX_TRACKED_IPS` | 10000 | Max in-memory client IP records |
+| `RATE_LIMIT_EVICT_FRACTION` | 0.10 | Fraction evicted when IP table exceeds cap |
+| `API_ENABLE_DOCS` | true (dev), false (prod) | Enable `/docs` and `/redoc` |
+| `HEALTH_DETAILED_ENABLED` | true (dev), false (prod) | Enable `/health/detailed` |
+| `ENFORCE_PRODUCTION_ENV` | false | Fail startup if prod hardening checks fail |
+| `SIMULATION_AUTH_ENABLED` | false (dev), true (prod) | Require auth for `/api/simulate*` |
+| `SIMULATION_AUTH_TOKEN` | empty | Token accepted via `X-API-Key` or `Authorization: Bearer` |
+| `CF_ACCESS_CLIENT_ID` | empty | Cloudflare Access service token ID |
+| `CF_ACCESS_CLIENT_SECRET` | empty | Cloudflare Access service token secret |
 | `LOG_LEVEL` | INFO | Logging verbosity |
 | `GLOBAL_PROJECT_ROOT` | auto | Repo root if not in default location |
 | `V31_DATA_ROOT` | `${GLOBAL_PROJECT_ROOT}/v3.1/data` | V3.1 temporal outputs |
@@ -110,8 +122,10 @@ mypy .
 ## Production
 
 ```bash
-# Run with multiple workers
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+# Quick secure default behind Cloudflare Tunnel:
+# - loopback only
+# - single worker (required for in-memory limiter consistency)
+uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 ## Public API
