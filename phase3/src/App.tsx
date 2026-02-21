@@ -341,6 +341,17 @@ function App() {
     }
   }, [isPanelOpen, temporalResults, setHighlightedIndicator])
 
+  // Reset expansion to ring 1 when sim results are cleared
+  const prevTemporalResultsRef = useRef(temporalResults)
+  useEffect(() => {
+    const wasPresent = prevTemporalResultsRef.current !== null
+    prevTemporalResultsRef.current = temporalResults
+    if (wasPresent && !temporalResults) {
+      setExpandedNodes(new Set())
+      setPinnedPaths(new Set())
+    }
+  }, [temporalResults])
+
   // Load all classifications once at startup (cached for other features)
   useEffect(() => {
     loadAllClassifications()
@@ -2898,6 +2909,7 @@ function App() {
     const collapseExitDelay = textFadeDuration  // Exit after text fades (150ms)
     const collapseExitEndTime = collapseExitDelay + exitDuration  // When collapse finishes (350ms)
     const collapseRotationDelay = collapseExitEndTime + 50  // Start rotation after collapse + buffer (400ms)
+    const rotationDelay = isCollapsing ? collapseRotationDelay : 0
 
     // Build node map
     const nodeMap = new Map<string, ExpandableNode>()
@@ -3403,19 +3415,33 @@ function App() {
       simGlowSelection.exit()
         .transition().duration(300).attr('opacity', 0).remove()
 
-      // Update existing
-      simGlowSelection
-        .attr('cx', d => d.x)
-        .attr('cy', d => d.y)
-        .attr('r', d => getSize(d) + 3)
+      // Update existing — match node transition timing so ring tracks node
+      simGlowSelection.each(function(d) {
+        const el = d3.select(this)
+        const curCx = parseFloat(el.attr('cx') || '0')
+        const curCy = parseFloat(el.attr('cy') || '0')
+        const dx = Math.abs(d.x - curCx)
+        const dy = Math.abs(d.y - curCy)
+        if (dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD) {
+          el.transition('glow-rotation')
+            .delay(rotationDelay)
+            .duration(rotationDuration)
+            .ease(d3.easeCubicOut)
+            .attr('cx', d.x)
+            .attr('cy', d.y)
+            .attr('r', getSize(d) + 3)
+        } else {
+          el.attr('cx', d.x).attr('cy', d.y).attr('r', getSize(d) + 3)
+        }
+      })
 
       // Enter new — cyan glow pulse (persists entire sim state)
       simGlowSelection.enter()
         .append('circle')
         .attr('class', 'glow-sim')
-        .attr('cx', d => d.x)
-        .attr('cy', d => d.y)
-        .attr('r', d => getSize(d) + 3)
+        .attr('cx', d => getParentPosition(d).x)
+        .attr('cy', d => getParentPosition(d).y)
+        .attr('r', 0)
         .attr('fill', 'none')
         .attr('stroke', '#00E5FF')
         .attr('stroke-width', 2.5)
@@ -3424,8 +3450,12 @@ function App() {
         .style('pointer-events', 'none')
         .style('animation', `intervention-pulse ${SIM_MS_PER_YEAR}ms ease-in-out infinite`)
         .transition()
-        .duration(600)
+        .delay(expandEnterDelay)
+        .duration(enterExitDuration)
         .ease(d3.easeCubicOut)
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 3)
         .attr('opacity', 0.8)
 
       // Subtle glow for ineligible parent nodes (weak effect, didn't pass gating)
@@ -3441,17 +3471,31 @@ function App() {
       ineligibleSelection.exit()
         .transition().duration(300).attr('opacity', 0).remove()
 
-      ineligibleSelection
-        .attr('cx', d => d.x)
-        .attr('cy', d => d.y)
-        .attr('r', d => getSize(d) + 3)
+      ineligibleSelection.each(function(d) {
+        const el = d3.select(this)
+        const curCx = parseFloat(el.attr('cx') || '0')
+        const curCy = parseFloat(el.attr('cy') || '0')
+        const dx = Math.abs(d.x - curCx)
+        const dy = Math.abs(d.y - curCy)
+        if (dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD) {
+          el.transition('glow-rotation')
+            .delay(rotationDelay)
+            .duration(rotationDuration)
+            .ease(d3.easeCubicOut)
+            .attr('cx', d.x)
+            .attr('cy', d.y)
+            .attr('r', getSize(d) + 3)
+        } else {
+          el.attr('cx', d.x).attr('cy', d.y).attr('r', getSize(d) + 3)
+        }
+      })
 
       ineligibleSelection.enter()
         .append('circle')
         .attr('class', 'glow-sim-weak')
-        .attr('cx', d => d.x)
-        .attr('cy', d => d.y)
-        .attr('r', d => getSize(d) + 3)
+        .attr('cx', d => getParentPosition(d).x)
+        .attr('cy', d => getParentPosition(d).y)
+        .attr('r', 0)
         .attr('fill', 'none')
         .attr('stroke', d => {
           const g = getSimGlowForIneligible(d)
@@ -3462,8 +3506,12 @@ function App() {
         .style('filter', 'blur(3px)')
         .style('pointer-events', 'none')
         .transition()
-        .duration(600)
+        .delay(expandEnterDelay)
+        .duration(enterExitDuration)
         .ease(d3.easeCubicOut)
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 3)
         .attr('opacity', d => {
           const g = getSimGlowForIneligible(d)
           return g ? g.opacity : 0
@@ -3492,19 +3540,33 @@ function App() {
       flashSelection.exit()
         .transition().duration(200).attr('opacity', 0).remove()
 
-      // Update positions
-      flashSelection
-        .attr('cx', d => d.x)
-        .attr('cy', d => d.y)
-        .attr('r', d => getSize(d) + 1.5)
+      // Update positions — match node transition timing
+      flashSelection.each(function(d) {
+        const el = d3.select(this)
+        const curCx = parseFloat(el.attr('cx') || '0')
+        const curCy = parseFloat(el.attr('cy') || '0')
+        const dx = Math.abs(d.x - curCx)
+        const dy = Math.abs(d.y - curCy)
+        if (dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD) {
+          el.transition('glow-rotation')
+            .delay(rotationDelay)
+            .duration(rotationDuration)
+            .ease(d3.easeCubicOut)
+            .attr('cx', d.x)
+            .attr('cy', d.y)
+            .attr('r', getSize(d) + 1.5)
+        } else {
+          el.attr('cx', d.x).attr('cy', d.y).attr('r', getSize(d) + 1.5)
+        }
+      })
 
       // Enter — flash animation timed to edge ripple arrival at this ring
       flashSelection.enter()
         .append('circle')
         .attr('class', 'glow-sim-flash')
-        .attr('cx', d => d.x)
-        .attr('cy', d => d.y)
-        .attr('r', d => getSize(d) + 1.5)
+        .attr('cx', d => getParentPosition(d).x)
+        .attr('cy', d => getParentPosition(d).y)
+        .attr('r', 0)
         .attr('fill', 'none')
         .attr('stroke', d => {
           const eff = simEffectLookup.get(d.id)
@@ -3521,7 +3583,12 @@ function App() {
           return `${anim} ${SIM_MS_PER_YEAR}ms ease-out ${delay}ms infinite`
         })
         .transition()
-        .duration(300)
+        .delay(expandEnterDelay)
+        .duration(enterExitDuration)
+        .ease(d3.easeCubicOut)
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 1.5)
         .attr('opacity', 1)
     }
 
@@ -3558,7 +3625,6 @@ function App() {
 
     // Update edges (animate to new positions)
     // Check each edge's actual DOM position vs target - animate if different
-    const rotationDelay = isCollapsing ? collapseRotationDelay : 0
     const shouldSkipRotation = inCollapseAnimation && !isCollapsing
 
     edgeSelection.each(function(d) {

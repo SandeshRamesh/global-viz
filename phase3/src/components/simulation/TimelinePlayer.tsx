@@ -222,6 +222,36 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     return clearTimers
   }, [isPlaying, playerState, isDragging, clearTimers, currentYearIndex, maxIndex])
 
+  // T key toggles timeline expanded/docked
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key !== 't' && e.key !== 'T') return
+      if (!historicalTimeline) return
+      e.preventDefault()
+
+      if (playerState === 'docked' || playerState === 'docking') {
+        // Open and auto-play
+        if (currentYearIndex >= maxIndex) {
+          setCurrentYearIndex(0)
+        }
+        setPlayerState('expanded')
+        setPendingPlay(true)
+        clearTimers()
+      } else if (isPlaying) {
+        // Pause and dock
+        pause()
+        setPlayerState('docked')
+        clearTimers()
+      } else {
+        setPlayerState('docked')
+        clearTimers()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [playerState, historicalTimeline, clearTimers])
+
   // Calculate index from mouse/touch position
   const getIndexFromPosition = useCallback((clientX: number): number => {
     if (!trackRef.current || maxIndex <= 0) return 0

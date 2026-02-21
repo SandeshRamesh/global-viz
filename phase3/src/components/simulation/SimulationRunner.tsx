@@ -34,7 +34,9 @@ export function SimulationRunner() {
     saveScenario,
     loadScenario,
     deleteScenario,
-    selectedStratum
+    selectedStratum,
+    targetVisibleEffects,
+    setTargetVisibleEffects
   } = useSimulationStore()
 
   const [showSaveInput, setShowSaveInput] = useState(false)
@@ -183,6 +185,28 @@ export function SimulationRunner() {
           </div>
         </div>
       )}
+
+      {/* Effects to Show */}
+      <div className="effects-count-row">
+        <div className="effects-count-label">
+          <span>Effects to show</span>
+          <span className="effects-count-value">{targetVisibleEffects}</span>
+        </div>
+        <input
+          type="range"
+          min={3}
+          max={50}
+          step={1}
+          value={targetVisibleEffects}
+          onChange={(e) => setTargetVisibleEffects(Number(e.target.value))}
+          className="effects-count-slider"
+          aria-label="Number of effects to display"
+          aria-valuemin={3}
+          aria-valuemax={50}
+          aria-valuenow={targetVisibleEffects}
+          aria-valuetext={`Show ${targetVisibleEffects} effects`}
+        />
+      </div>
 
       {/* Run Button */}
       <button
@@ -596,6 +620,72 @@ export function SimulationRunner() {
 
         .sim-thumb:focus-visible::-moz-range-thumb {
           box-shadow: 0 0 0 6px rgba(59,130,246,0.3);
+        }
+
+        .effects-count-row {
+          margin-bottom: 10px;
+          padding: 8px;
+          background: #f8f9ff;
+          border: 1px solid #e0e4f0;
+          border-radius: 5px;
+        }
+
+        .effects-count-label {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 11px;
+          color: #555;
+          margin-bottom: 6px;
+        }
+
+        .effects-count-value {
+          font-weight: 600;
+          color: #3B82F6;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .effects-count-slider {
+          width: 100%;
+          height: 4px;
+          -webkit-appearance: none;
+          appearance: none;
+          background: #dde1f0;
+          border-radius: 2px;
+          outline: none;
+        }
+
+        .effects-count-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 14px;
+          height: 14px;
+          background: #3B82F6;
+          border-radius: 50%;
+          cursor: pointer;
+          box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+
+        .effects-count-slider::-moz-range-thumb {
+          width: 14px;
+          height: 14px;
+          background: #3B82F6;
+          border-radius: 50%;
+          border: none;
+          cursor: pointer;
+          box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+        }
+
+        .effects-count-slider::-webkit-slider-thumb:hover {
+          box-shadow: 0 0 0 5px rgba(59,130,246,0.25);
+        }
+
+        .effects-count-slider::-moz-range-thumb:hover {
+          box-shadow: 0 0 0 5px rgba(59,130,246,0.25);
+        }
+
+        .effects-count-slider:focus-visible {
+          outline: 2px solid #3B82F6;
+          outline-offset: 2px;
         }
 
         .scenario-actions {

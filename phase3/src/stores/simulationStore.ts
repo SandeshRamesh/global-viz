@@ -152,6 +152,9 @@ interface SimulationState {
   // Effect display filter (percentile threshold 0–1, e.g. 0.5 = top 50%)
   effectFilterPct: number;
 
+  // Target number of visible effects (user-configurable before running sim)
+  targetVisibleEffects: number;
+
   // Highlighted indicator from results table click
   highlightedIndicator: string | null;
 
@@ -212,6 +215,7 @@ interface SimulationState {
 
   // Actions - Effect Filter
   setEffectFilterPct: (pct: number) => void;
+  setTargetVisibleEffects: (count: number) => void;
 
   // Actions - Highlight
   setHighlightedIndicator: (id: string | null) => void;
@@ -281,6 +285,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   simulationStartYear: 2020,
   simulationEndYear: 2029,
   effectFilterPct: 0.5,
+  targetVisibleEffects: 10,
   highlightedIndicator: null,
   savedScenarios: loadScenariosFromStorage(),
   error: null,
@@ -781,7 +786,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     // Helper to apply results (shared between cache hit and API response)
     const applyResults = (results: TemporalResults) => {
       const nextRunToken = get().simulationRunToken + 1;
-      const TARGET_VISIBLE = 10;
+      const TARGET_VISIBLE = get().targetVisibleEffects;
       const yearKeys = Object.keys(results.effects).sort();
       const finalYearEffects = yearKeys.length > 0
         ? results.effects[yearKeys[yearKeys.length - 1]]
@@ -920,6 +925,10 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   // Effect filter actions
   setEffectFilterPct: (pct: number) => {
     set({ effectFilterPct: Math.max(0, Math.min(1, pct)) });
+  },
+
+  setTargetVisibleEffects: (count: number) => {
+    set({ targetVisibleEffects: Math.max(1, Math.min(50, count)) });
   },
 
   // Highlight actions
