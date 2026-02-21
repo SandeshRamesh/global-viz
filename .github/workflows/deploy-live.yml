@@ -1,0 +1,33 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - live
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest code
+        run: |
+          cd /home/sandesh/argon_primary/atlas
+          git fetch origin live
+          git checkout live
+          git pull origin live
+
+      - name: Build frontend
+        run: |
+          cd /home/sandesh/argon_primary/atlas
+          npm ci
+          VITE_API_BASE=https://api.argonanalytics.org npm run build
+
+      - name: Restart services
+        run: |
+          sudo systemctl restart atlas-frontend atlas-api
+
+      - name: Verify deployment
+        run: |
+          sleep 5
+          curl -sf http://localhost:3005/ > /dev/null && echo "Frontend OK"
+          curl -sf http://localhost:8000/health && echo "API OK"
