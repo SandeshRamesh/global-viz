@@ -1910,6 +1910,32 @@ function App() {
     prevSimVisibleCountRef.current = count
   }, [visibleNodes.length, temporalResults, isPanelOpen, fitToVisibleNodes])
 
+  // Zoom to node when clicking in results panel (pan to center on highlighted indicator)
+  const prevHighlightedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!highlightedIndicator || highlightedIndicator === prevHighlightedRef.current) {
+      prevHighlightedRef.current = highlightedIndicator
+      return
+    }
+    prevHighlightedRef.current = highlightedIndicator
+
+    const node = visibleNodes.find(n => n.id === highlightedIndicator)
+    if (!node || !zoomRef.current || !svgRef.current) return
+
+    const svg = d3.select(svgRef.current)
+    const width = viewMode === 'split' ? window.innerWidth * splitRatio : window.innerWidth
+    const height = window.innerHeight
+    const currentScale = currentTransformRef.current?.k ?? 1
+
+    const newX = width / 2 - node.x * currentScale
+    const newY = height / 2 - node.y * currentScale
+    const newTransform = d3.zoomIdentity.translate(newX, newY).scale(currentScale)
+
+    svg.transition().duration(400).ease(d3.easeCubicOut)
+      .call(zoomRef.current!.transform, newTransform)
+    currentTransformRef.current = newTransform
+  }, [highlightedIndicator, visibleNodes, viewMode, splitRatio])
+
   // Keyboard shortcuts for reset view (R or Home) and view switching (G, L, S)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
