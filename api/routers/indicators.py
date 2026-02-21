@@ -21,7 +21,7 @@ router = APIRouter(prefix="/indicators", tags=["indicators"])
 async def list_indicators(
     domain: Optional[str] = Query(None, description="Filter by domain"),
     search: Optional[str] = Query(None, description="Search by ID or label"),
-    limit: int = Query(100, ge=1, le=1000, description="Max results")
+    limit: int = Query(100, ge=1, le=5000, description="Max results")
 ):
     """
     Get list of all indicators.

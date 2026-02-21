@@ -1,7 +1,7 @@
 """
 Graph Service
 
-Handles loading and caching of country graphs.
+Handles loading and caching of country graphs from V3.1 temporal data.
 """
 
 import json
@@ -9,61 +9,177 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Optional
 from functools import lru_cache
+from collections import OrderedDict
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'scripts' / 'phaseB' / 'B3_simulation'))
-
-from ..config import GRAPHS_DIR, PANEL_PATH, COUNTRY_SHAP_DIR
+from ..config import (
+    GRAPHS_DIR, PANEL_PATH, COUNTRY_SHAP_DIR,
+    DEFAULT_GRAPH_YEAR, V31_TEMPORAL_SHAP_DIR, V31_BASELINES_DIR,
+    GRAPH_SERVICE_GRAPH_CACHE_MAX, GRAPH_SERVICE_SHAP_CACHE_MAX
+)
 
 
 class GraphService:
-    """Service for loading country graphs and baseline data."""
+    """Service for loading country graphs and baseline data from V3.1."""
 
     def __init__(self):
-        self._graph_cache: Dict[str, dict] = {}
-        self._shap_cache: Dict[str, Dict[str, float]] = {}
+        self._graph_cache: "OrderedDict[str, dict]" = OrderedDict()
+        self._shap_cache: "OrderedDict[str, Dict[str, float]]" = OrderedDict()
         self._panel_df: Optional[pd.DataFrame] = None
         self._countries: Optional[List[str]] = None
+        self._graph_cache_max = GRAPH_SERVICE_GRAPH_CACHE_MAX
+        self._shap_cache_max = GRAPH_SERVICE_SHAP_CACHE_MAX
+
+    @staticmethod
+    def _cache_get(cache: "OrderedDict[str, dict]", key: str):
+        value = cache.get(key)
+        if value is not None:
+            cache.move_to_end(key)
+        return value
+
+    @staticmethod
+    def _cache_set(cache: "OrderedDict[str, dict]", key: str, value: dict, max_entries: int):
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > max_entries:
+            cache.popitem(last=False)
+
+    def _get_latest_year_for_country(self, country: str) -> Optional[int]:
+        """Find the latest available year for a country's graph."""
+        country_dir = GRAPHS_DIR / country
+        if not country_dir.exists():
+            return None
+
+        years = []
+        for graph_file in country_dir.glob("*_graph.json"):
+            try:
+                year = int(graph_file.stem.split("_")[0])
+                years.append(year)
+            except ValueError:
+                continue
+
+        return max(years) if years else None
+
+    def _convert_v31_edge(self, edge: dict) -> dict:
+        """Convert V3.1 edge format to API format expected by frontend."""
+        return {
+            "source": edge.get("source"),
+            "target": edge.get("target"),
+            "beta": edge.get("beta", 0),
+            "ci_lower": edge.get("ci_lower", 0),
+            "ci_upper": edge.get("ci_upper", 0),
+            "global_beta": edge.get("beta", 0),  # V3.1 doesn't have separate global_beta
+            "data_available": True,  # All V3.1 edges have data
+            "lag": edge.get("lag", 0),
+            "lag_pvalue": edge.get("p_value", 1.0),
+            "lag_significant": edge.get("p_value", 1.0) < 0.05,
+            # Additional V3.1 fields
+            "p_value": edge.get("p_value"),
+            "r_squared": edge.get("r_squared"),
+            "n_samples": edge.get("n_samples"),
+            "relationship_type": edge.get("relationship_type"),
+            "nonlinearity": edge.get("nonlinearity")
+        }
 
     def get_available_countries(self) -> List[dict]:
         """Get list of all countries with graph metadata."""
         if self._countries is None:
             self._countries = []
-            for graph_file in GRAPHS_DIR.glob("*.json"):
-                if graph_file.name.startswith("_"):
+
+            if not GRAPHS_DIR.exists():
+                return self._countries
+
+            for country_dir in GRAPHS_DIR.iterdir():
+                if not country_dir.is_dir() or country_dir.name.startswith("_"):
                     continue
-                try:
-                    with open(graph_file) as f:
-                        graph = json.load(f)
+
+                country_name = country_dir.name
+                latest_year = self._get_latest_year_for_country(country_name)
+
+                if latest_year is None:
+                    continue
+
+                # Load latest graph to get edge count
+                graph = self._load_graph_for_year(country_name, latest_year)
+                if graph:
+                    n_edges = len(graph.get("edges", []))
                     self._countries.append({
-                        "name": graph_file.stem,
-                        "n_edges": graph.get("n_edges", 0),
-                        "n_edges_with_data": graph.get("n_edges_with_data", 0),
-                        "coverage": graph.get("n_edges_with_data", 0) / max(graph.get("n_edges", 1), 1)
+                        "name": country_name,
+                        "n_edges": n_edges,
+                        "n_edges_with_data": n_edges,  # All V3.1 edges have data
+                        "coverage": 1.0,
+                        "latest_year": latest_year
                     })
-                except Exception:
-                    continue
 
             self._countries.sort(key=lambda x: x["name"])
 
         return self._countries
 
-    def get_country_graph(self, country: str) -> Optional[dict]:
-        """Load country graph (cached)."""
-        if country not in self._graph_cache:
-            graph_path = GRAPHS_DIR / f"{country}.json"
-            if not graph_path.exists():
+    def _load_graph_for_year(self, country: str, year: int) -> Optional[dict]:
+        """Load a country graph for a specific year."""
+        graph_path = GRAPHS_DIR / country / f"{year}_graph.json"
+        if not graph_path.exists():
+            return None
+
+        with open(graph_path) as f:
+            return json.load(f)
+
+    def get_country_graph(self, country: str, year: Optional[int] = None) -> Optional[dict]:
+        """Load country graph (cached). Uses latest year if not specified."""
+        cache_key = f"{country}_{year}" if year else country
+
+        cached = self._cache_get(self._graph_cache, cache_key)
+        if cached is not None:
+            return cached
+
+        if cache_key not in self._graph_cache:
+            # Determine which year to use
+            if year is None:
+                year = self._get_latest_year_for_country(country)
+                if year is None:
+                    # Try default year
+                    year = DEFAULT_GRAPH_YEAR
+
+            raw_graph = self._load_graph_for_year(country, year)
+            if raw_graph is None:
                 return None
 
-            with open(graph_path) as f:
-                self._graph_cache[country] = json.load(f)
+            # Convert to API format
+            edges = [self._convert_v31_edge(e) for e in raw_graph.get("edges", [])]
 
-        return self._graph_cache[country]
+            self._cache_set(self._graph_cache, cache_key, {
+                "country": country,
+                "year": year,
+                "n_edges": len(edges),
+                "n_edges_with_data": len(edges),
+                "edges": edges
+            }, self._graph_cache_max)
+
+        return self._graph_cache[cache_key]
 
     def get_baseline_values(self, country: str, year: Optional[int] = None) -> Dict[str, float]:
-        """Get baseline indicator values for a country."""
+        """Get baseline indicator values for a country.
+
+        First tries V3.1 baselines, falls back to panel data.
+        """
+        # Try V3.1 baselines first
+        if V31_BASELINES_DIR.exists():
+            baseline_path = V31_BASELINES_DIR / f"{country}_baseline.json"
+            if baseline_path.exists():
+                with open(baseline_path) as f:
+                    data = json.load(f)
+                    if year and str(year) in data:
+                        return data[str(year)]
+                    # Return latest year
+                    years = sorted([int(y) for y in data.keys() if y.isdigit()])
+                    if years:
+                        return data[str(years[-1])]
+
+        # Fall back to panel data
         if self._panel_df is None:
-            self._panel_df = pd.read_parquet(PANEL_PATH)
+            try:
+                self._panel_df = pd.read_parquet(PANEL_PATH)
+            except Exception:
+                return {}
 
         # Handle long format panel data
         if 'indicator_id' in self._panel_df.columns:
@@ -93,28 +209,68 @@ class GraphService:
 
     def country_exists(self, country: str) -> bool:
         """Check if country graph exists."""
-        return (GRAPHS_DIR / f"{country}.json").exists()
+        country_dir = GRAPHS_DIR / country
+        return country_dir.exists() and any(country_dir.glob("*_graph.json"))
 
-    def get_country_shap(self, country: str) -> Dict[str, float]:
+    def get_country_shap(self, country: str, year: Optional[int] = None) -> Dict[str, float]:
         """Get country-specific SHAP importance values (cached).
 
         Returns indicator_id -> importance (0-1 normalized).
         Falls back to empty dict if country SHAP file doesn't exist.
-        """
-        if country not in self._shap_cache:
-            shap_path = COUNTRY_SHAP_DIR / f"{country}_shap.json"
-            if not shap_path.exists():
-                # No country SHAP available, return empty
-                self._shap_cache[country] = {}
-            else:
-                try:
-                    with open(shap_path) as f:
-                        data = json.load(f)
-                    self._shap_cache[country] = data.get('shap_importance', {})
-                except Exception:
-                    self._shap_cache[country] = {}
 
-        return self._shap_cache[country]
+        V3.1 file structure: countries/{country}/quality_of_life/{year}_shap.json
+        """
+        cache_key = f"{country}_{year}" if year else country
+
+        cached = self._cache_get(self._shap_cache, cache_key)
+        if cached is not None:
+            return cached
+
+        if cache_key not in self._shap_cache:
+            # V3.1 path: countries/{country}/quality_of_life/{year}_shap.json
+            qol_dir = COUNTRY_SHAP_DIR / country / "quality_of_life"
+
+            if not qol_dir.exists():
+                self._shap_cache[cache_key] = {}
+            else:
+                # Find appropriate year
+                if year is None:
+                    # Use latest available year
+                    shap_files = list(qol_dir.glob("*_shap.json"))
+                    if shap_files:
+                        years = []
+                        for f in shap_files:
+                            try:
+                                y = int(f.stem.split("_")[0])
+                                years.append(y)
+                            except ValueError:
+                                continue
+                        year = max(years) if years else DEFAULT_GRAPH_YEAR
+                    else:
+                        year = DEFAULT_GRAPH_YEAR
+
+                shap_path = qol_dir / f"{year}_shap.json"
+
+                if not shap_path.exists():
+                    self._cache_set(self._shap_cache, cache_key, {}, self._shap_cache_max)
+                else:
+                    try:
+                        with open(shap_path) as f:
+                            data = json.load(f)
+                        # V3.1 format has shap_importance dict with mean/ci values
+                        raw_shap = data.get('shap_importance', {})
+                        # Extract mean values
+                        shap_values = {}
+                        for ind_id, val in raw_shap.items():
+                            if isinstance(val, dict) and 'mean' in val:
+                                shap_values[ind_id] = val['mean']
+                            elif isinstance(val, (int, float)):
+                                shap_values[ind_id] = val
+                        self._cache_set(self._shap_cache, cache_key, shap_values, self._shap_cache_max)
+                    except Exception:
+                        self._cache_set(self._shap_cache, cache_key, {}, self._shap_cache_max)
+
+        return self._shap_cache[cache_key]
 
     def get_historical_timeline(
         self,
@@ -124,21 +280,12 @@ class GraphService:
     ) -> Dict:
         """
         Get historical indicator values across multiple years.
-
-        Args:
-            country: Country name
-            start_year: Start year (default: 10 years before end)
-            end_year: End year (default: most recent)
-
-        Returns:
-            {
-                'years': [2015, 2016, ...],
-                'values': { '2015': { indicator: value, ... }, ... },
-                'indicators': [list of indicator IDs with data]
-            }
         """
         if self._panel_df is None:
-            self._panel_df = pd.read_parquet(PANEL_PATH)
+            try:
+                self._panel_df = pd.read_parquet(PANEL_PATH)
+            except Exception:
+                return {'years': [], 'values': {}, 'indicators': []}
 
         country_data = self._panel_df[self._panel_df['country'] == country]
         if country_data.empty:
@@ -157,19 +304,44 @@ class GraphService:
         # Filter to year range
         years = [int(y) for y in available_years if start_year <= y <= end_year]
 
-        # Build values dict
-        values = {}
+        # Build raw values dict and collect per-indicator stats
+        raw_values = {}
+        indicator_stats: Dict[str, Dict[str, float]] = {}
         all_indicators = set()
 
         for year in years:
             year_data = country_data[country_data['year'] == year]
             year_values = dict(zip(year_data['indicator_id'], year_data['value']))
-            values[str(year)] = year_values
+            raw_values[str(year)] = year_values
             all_indicators.update(year_values.keys())
+
+            for ind, val in year_values.items():
+                if val is None or pd.isna(val):
+                    continue
+                if ind not in indicator_stats:
+                    indicator_stats[ind] = {'min': val, 'max': val}
+                else:
+                    indicator_stats[ind]['min'] = min(indicator_stats[ind]['min'], val)
+                    indicator_stats[ind]['max'] = max(indicator_stats[ind]['max'], val)
+
+        # Normalize values
+        normalized_values = {}
+        for year_str, year_vals in raw_values.items():
+            normalized_year = {}
+            for ind, val in year_vals.items():
+                if val is None or pd.isna(val) or ind not in indicator_stats:
+                    continue
+                stats = indicator_stats[ind]
+                val_range = stats['max'] - stats['min']
+                if val_range > 0:
+                    normalized_year[ind] = (val - stats['min']) / val_range
+                else:
+                    normalized_year[ind] = 0.5
+            normalized_values[year_str] = normalized_year
 
         return {
             'years': years,
-            'values': values,
+            'values': normalized_values,
             'indicators': sorted(list(all_indicators))
         }
 
@@ -185,8 +357,6 @@ class GraphService:
             graph = self.get_country_graph(country_info["name"])
             if graph:
                 total_edges += graph.get("n_edges", 0)
-
-                # Check for lag data
                 has_lags = any("lag" in e for e in graph.get("edges", []))
                 if has_lags:
                     graphs_with_lags += 1

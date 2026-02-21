@@ -86,59 +86,6 @@ class IndicatorListResponse(BaseModel):
     indicators: List[IndicatorInfo]
 
 
-# --- Simulation Models ---
-
-class EffectDetail(BaseModel):
-    """Details of effect on a single indicator."""
-    baseline: float
-    simulated: float
-    absolute_change: float
-    percent_change: float
-
-
-class SimulationResponse(BaseModel):
-    """Response for POST /api/simulate."""
-    status: str
-    country: str
-    interventions: List[Dict[str, Any]]
-    effects: Dict[str, Any] = Field(
-        ...,
-        description="Simulation effects"
-    )
-    propagation: Dict[str, Any] = Field(
-        ...,
-        description="Propagation metadata"
-    )
-
-
-class TemporalEffects(BaseModel):
-    """Effects at a single time point."""
-    year: int
-    effects: Dict[str, EffectDetail]
-
-
-class TemporalSimulationResponse(BaseModel):
-    """Response for POST /api/simulate/temporal."""
-    status: str
-    country: str
-    horizon_years: int
-    base_year: Optional[int] = Field(None, description="Base year for simulation data")
-    interventions: List[Dict[str, Any]]
-    timeline: Dict[str, Dict[str, float]] = Field(
-        ...,
-        description="Values at each year (keys: year_0, year_1, ...)"
-    )
-    effects: Dict[str, Dict[str, Any]] = Field(
-        ...,
-        description="Effects at each year (keys: year_0, year_1, ...)"
-    )
-    affected_per_year: Dict[str, int] = Field(
-        ...,
-        description="Number of affected indicators per year (keys: year_0, year_1, ...)"
-    )
-    metadata: Dict[str, Any]
-
-
 # --- Metadata Models ---
 
 class MetadataResponse(BaseModel):
@@ -158,3 +105,171 @@ class ErrorResponse(BaseModel):
     error: str
     message: str
     details: Optional[Dict[str, Any]] = None
+
+
+# =============================================================================
+# V3.1 Response Models - Year-specific temporal graphs
+# =============================================================================
+
+class IncomeClassification(BaseModel):
+    """Income classification for a country at a specific year."""
+    group_4tier: Optional[str] = Field(None, description="World Bank 4-tier: Low/Lower-middle/Upper-middle/High")
+    group_3tier: Optional[str] = Field(None, description="V3.1 3-tier: Developing/Emerging/Advanced")
+    gni_per_capita: Optional[float] = Field(None, description="GNI per capita (Atlas method)")
+
+
+class RegionInfo(BaseModel):
+    """Regional spillover information."""
+    region_key: Optional[str] = Field(None, description="Region identifier")
+    name: Optional[str] = Field(None, description="Human-readable region name")
+    spillover_strength: Optional[float] = Field(None, description="Regional spillover coefficient (0-1)")
+    dominant_economy: Optional[str] = Field(None, description="Dominant economy in region")
+    regional_leaders: Optional[List[str]] = Field(None, description="Regional economic leaders")
+
+
+class SpilloverEffect(BaseModel):
+    """Spillover effect for an indicator."""
+    effect: float = Field(..., description="Spillover effect magnitude")
+    spillover_strength: float = Field(..., description="Spillover coefficient used")
+    direct_effect: float = Field(..., description="Original direct effect")
+    region: Optional[str] = Field(None, description="Region (for regional spillovers)")
+
+
+class SpilloverResults(BaseModel):
+    """Regional and global spillover effects."""
+    regional: Dict[str, SpilloverEffect] = Field(default_factory=dict)
+    global_effects: Dict[str, SpilloverEffect] = Field(default_factory=dict, alias="global")
+    region_info: Optional[RegionInfo] = None
+    is_global_power: bool = Field(False, description="Whether country is a global power (USA, CHN, DEU)")
+
+
+class EnsembleStats(BaseModel):
+    """Ensemble simulation statistics."""
+    n_runs: int = Field(..., description="Number of ensemble runs")
+    converged_runs: int = Field(..., description="Number of runs that converged")
+    convergence_rate: float = Field(..., description="Fraction of runs that converged")
+
+
+class EffectDetailV31(BaseModel):
+    """
+    Details of effect on a single indicator (V3.1 with optional CIs).
+
+    In percentage mode: only percent_change is populated.
+    In absolute mode: all fields are populated.
+
+    Near-zero baseline handling:
+    - When |baseline| < eps, percent_change uses epsilon denominator
+    - display_percent is always a stable number for UI display
+    - near_zero_baseline flags when raw percent is unreliable
+    """
+    # Always present — raw or epsilon-based when near-zero
+    percent_change: float
+
+    # Display-safe percent (uses epsilon denominator when baseline ≈ 0)
+    display_percent: Optional[float] = Field(None, description="Display-safe percent change (stable for near-zero baselines)")
+    near_zero_baseline: Optional[bool] = Field(None, description="True when |baseline| < eps (percent is approximate)")
+
+    # Only in absolute mode
+    baseline: Optional[float] = Field(None, description="Baseline value (absolute mode only)")
+    simulated: Optional[float] = Field(None, description="Simulated value (absolute mode only)")
+    absolute_change: Optional[float] = Field(None, description="Absolute change (absolute mode only)")
+
+    # Ensemble mode (optional)
+    ci_lower: Optional[float] = Field(None, description="95% CI lower bound (if ensemble)")
+    ci_upper: Optional[float] = Field(None, description="95% CI upper bound (if ensemble)")
+    std: Optional[float] = Field(None, description="Standard deviation (if ensemble)")
+
+
+class SimulationResponseV31(BaseModel):
+    """
+    Response for POST /api/simulate/v31.
+
+    V3.1 instant simulation with year-specific graph, non-linear effects,
+    regional spillovers, and optional ensemble uncertainty.
+    """
+    status: str
+    mode: str = Field('percentage', description="Simulation mode: 'percentage' or 'absolute'")
+    country: Optional[str] = Field(None, description="Country name or null for unified")
+    base_year: int = Field(..., description="Year used for graph and baseline")
+    view_type: str = Field(..., description="Requested view type")
+    view_used: str = Field(..., description="Actual view used (may differ due to fallback)")
+    income_classification: Optional[IncomeClassification] = Field(
+        None, description="Country's income classification for this year"
+    )
+    interventions: List[Dict[str, Any]]
+    effects: Dict[str, Any] = Field(
+        ..., description="Effects with total_affected and top_effects"
+    )
+    propagation: Dict[str, Any] = Field(
+        ..., description="Propagation metadata (iterations, converged)"
+    )
+    spillovers: Optional[SpilloverResults] = Field(
+        None, description="Regional and global spillover effects"
+    )
+    ensemble: Optional[EnsembleStats] = Field(
+        None, description="Ensemble statistics (if n_ensemble_runs > 0)"
+    )
+    metadata: Dict[str, Any] = Field(
+        ..., description="Additional metadata (n_edges, p_value_threshold, etc.)"
+    )
+
+
+class CausalPathEntry(BaseModel):
+    """Causal path entry for a single affected indicator."""
+    hop: int = Field(..., description="Distance from intervention node (0=intervention, 1=direct effect, etc.)")
+    source: str = Field(..., description="Immediate causal parent node ID (highest |beta * source_change| contributor)")
+    beta: float = Field(..., description="Beta coefficient on the edge from source to this node")
+
+
+class TemporalSimulationResponseV31(BaseModel):
+    """
+    Response for POST /api/simulate/v31/temporal.
+
+    V3.1 temporal simulation using year-by-year graphs.
+    """
+    status: str
+    country: Optional[str] = Field(None, description="Country name or null for unified")
+    base_year: int = Field(..., description="Starting year")
+    horizon_years: int = Field(..., description="Years projected forward")
+    view_type: str = Field(..., description="Requested view type")
+    income_classification_evolution: Optional[Dict[int, IncomeClassification]] = Field(
+        None, description="Income classification at each year"
+    )
+    interventions: List[Dict[str, Any]]
+    timeline: Dict[int, Dict[str, float]] = Field(
+        ..., description="Indicator values at each year"
+    )
+    effects: Dict[int, Dict[str, EffectDetailV31]] = Field(
+        ..., description="Top effects at each year"
+    )
+    causal_paths: Optional[Dict[str, CausalPathEntry]] = Field(
+        None,
+        description="Causal path for each affected indicator: hop distance, immediate source, and edge beta. "
+                    "First-write-wins (shortest path). Source selected by max |beta * source_percent_change|."
+    )
+    affected_per_year: Dict[int, int] = Field(
+        ..., description="Number of affected indicators per year"
+    )
+    graphs_used: Dict[int, str] = Field(
+        ..., description="Which graph view was used for each year"
+    )
+    risk_flags: Optional[List[str]] = Field(
+        None,
+        description="Risk flags: large_shock, extreme_shock, long_horizon, multiple_interventions, near_clamp_saturation"
+    )
+    simulation_stress_score: Optional[float] = Field(
+        None,
+        description="Fraction of effects hitting saturation or ±2σ clamp (0=relaxed, 1=all clamped)"
+    )
+    warnings: Optional[List[str]] = Field(
+        None, description="Warnings about graph fallbacks, missing data, risk flags, etc."
+    )
+    spillovers: Optional[Dict[str, Any]] = Field(
+        None, description="Spillover effects for final year"
+    )
+    debug_trace: Optional[Dict[str, Any]] = Field(
+        None, description="Debug trace (saturation, clamp, convergence details). Only present when debug=true."
+    )
+    metadata: Dict[str, Any] = Field(
+        ..., description="Propagation and computation metadata"
+    )

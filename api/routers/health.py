@@ -11,8 +11,8 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 
 from ..config import (
-    PROJECT_ROOT, GRAPHS_DIR, PANEL_PATH, V21_GRAPH_PATH,
-    API_VERSION, ENV
+    VIZ_ROOT, GRAPHS_DIR, PANEL_PATH, V21_GRAPH_PATH,
+    API_VERSION, ENV, HEALTH_DETAILED_ENABLED
 )
 
 router = APIRouter(tags=["health"])
@@ -63,19 +63,15 @@ def check_panel_data() -> Dict[str, Any]:
 def check_simulation_modules() -> Dict[str, Any]:
     """Check if simulation modules can be imported."""
     try:
-        # Add paths for import
-        sim_path = PROJECT_ROOT / 'scripts' / 'phaseB' / 'B3_simulation'
-        temporal_path = PROJECT_ROOT / 'scripts' / 'phaseC' / 'C2_temporal_simulation'
+        # Add viz/ root to path so `from simulation import ...` works
+        viz_root = str(VIZ_ROOT)
+        if viz_root not in sys.path:
+            sys.path.insert(0, viz_root)
 
-        if str(sim_path) not in sys.path:
-            sys.path.insert(0, str(sim_path))
-        if str(temporal_path) not in sys.path:
-            sys.path.insert(0, str(temporal_path))
+        from simulation import run_simulation_v31
+        from simulation import run_temporal_simulation_v31
 
-        from simulation_runner import run_simulation
-        from temporal_simulation import run_temporal_simulation
-
-        return {"status": "ok", "modules": ["simulation_runner", "temporal_simulation"]}
+        return {"status": "ok", "modules": ["simulation_runner_v31", "temporal_simulation_v31"]}
     except ImportError as e:
         return {"status": "error", "message": f"Import failed: {e}"}
     except Exception as e:
@@ -120,6 +116,9 @@ def detailed_health_check():
 
     Returns 503 if any critical dependency fails.
     """
+    if not HEALTH_DETAILED_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+
     health = {
         "status": "healthy",
         "version": API_VERSION,

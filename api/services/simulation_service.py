@@ -1,198 +1,169 @@
 """
 Simulation Service
 
-Wraps Phase B (instant) and Phase C (temporal) simulation logic.
+V3.1 simulation using pre-computed year-specific temporal graphs.
+
+Features:
+- Non-linear propagation (marginal effects)
+- Ensemble uncertainty quantification
+- Regional spillover effects
+- Year-specific causal graphs (1990-2024)
 """
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Literal
 
-# Add simulation modules to path
-API_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(API_ROOT / 'scripts' / 'phaseB' / 'B3_simulation'))
-sys.path.insert(0, str(API_ROOT / 'scripts' / 'phaseC' / 'C2_temporal_simulation'))
+# Add viz/ root to path so `from simulation import ...` works
+_VIZ_ROOT = str(Path(__file__).parent.parent.parent)
+if _VIZ_ROOT not in sys.path:
+    sys.path.insert(0, _VIZ_ROOT)
 
-from .graph_service import graph_service
-from ..config import GRAPHS_DIR, PANEL_PATH
+# V3.1 type aliases
+ViewType = Literal['country', 'stratified', 'unified']
+SimulationMode = Literal['percentage', 'absolute']
 
 
 class SimulationService:
-    """Service for running instant and temporal simulations."""
+    """Service for running instant and temporal simulations using V3.1."""
 
     def __init__(self):
-        self._simulation_runner = None
-        self._temporal_runner = None
+        self._v31_simulation_runner = None
+        self._v31_temporal_runner = None
 
-    def _get_simulation_runner(self):
-        """Lazy load instant simulation module."""
-        if self._simulation_runner is None:
-            from simulation_runner import run_simulation
-            self._simulation_runner = run_simulation
-        return self._simulation_runner
+    def _get_v31_simulation_runner(self):
+        """Lazy load V3.1 instant simulation module."""
+        if self._v31_simulation_runner is None:
+            from simulation import run_simulation_v31
+            self._v31_simulation_runner = run_simulation_v31
+        return self._v31_simulation_runner
 
-    def _get_temporal_runner(self):
-        """Lazy load temporal simulation module."""
-        if self._temporal_runner is None:
-            from temporal_simulation import run_temporal_simulation
-            self._temporal_runner = run_temporal_simulation
-        return self._temporal_runner
+    def _get_v31_temporal_runner(self):
+        """Lazy load V3.1 temporal simulation module."""
+        if self._v31_temporal_runner is None:
+            from simulation import run_temporal_simulation_v31
+            self._v31_temporal_runner = run_temporal_simulation_v31
+        return self._v31_temporal_runner
 
-    def run_instant_simulation(
+    def run_instant_simulation_v31(
         self,
         country: str,
         interventions: List[Dict[str, Any]],
-        year: Optional[int] = None
+        year: int,
+        mode: SimulationMode = 'percentage',
+        view_type: ViewType = 'country',
+        p_value_threshold: float = 0.05,
+        use_nonlinear: bool = True,
+        n_ensemble_runs: int = 0,
+        include_spillovers: bool = True,
+        top_n_effects: int = 20
     ) -> Dict[str, Any]:
         """
-        Run instant (single-timestep) simulation.
+        Run V3.1 instant simulation with year-specific graph.
 
         Args:
-            country: Country name
+            country: Country name (e.g., 'Australia')
             interventions: List of {"indicator": str, "change_percent": float}
-            year: Optional baseline year
+            year: Year for graph and baseline (1990-2024)
+            mode: 'percentage' (fast, no baselines) or 'absolute' (real values)
+            view_type: 'country', 'stratified', or 'unified'
+            p_value_threshold: Filter edges by p-value
+            use_nonlinear: Use marginal effects when available
+            n_ensemble_runs: 0 = point estimate, >0 = bootstrap ensemble
+            include_spillovers: Include regional spillover effects
+            top_n_effects: Number of top effects to return
 
         Returns:
-            Simulation results with effects and metadata
+            V3.1 simulation results with effects, spillovers, and metadata
         """
-        # Verify country exists
-        if not graph_service.country_exists(country):
-            raise ValueError(f"Country '{country}' not found")
+        run_simulation = self._get_v31_simulation_runner()
 
-        # Get baseline values
-        baseline = graph_service.get_baseline_values(country, year)
-        if not baseline:
-            raise ValueError(f"No baseline data for country '{country}'")
-
-        # Load graph
-        graph = graph_service.get_country_graph(country)
-        if not graph:
-            raise ValueError(f"Could not load graph for '{country}'")
-
-        # Run simulation
-        run_simulation = self._get_simulation_runner()
         result = run_simulation(
-            country_code=country,
+            country=country,
             interventions=interventions,
-            graphs_dir=str(GRAPHS_DIR),
-            panel_path=str(PANEL_PATH),
-            year=year
+            year=year,
+            mode=mode,
+            view_type=view_type,
+            p_value_threshold=p_value_threshold,
+            use_nonlinear=use_nonlinear,
+            n_ensemble_runs=n_ensemble_runs,
+            include_spillovers=include_spillovers,
+            top_n_effects=top_n_effects
         )
 
         # Check for simulation errors
         if result.get('status') == 'error':
-            raise ValueError(result.get('message', 'Simulation failed'))
+            raise ValueError(result.get('message', 'V3.1 simulation failed'))
 
-        # Format response
-        return self._format_instant_result(country, interventions, result, baseline)
+        return result
 
-    def run_temporal_simulation(
+    def run_temporal_simulation_v31(
         self,
         country: str,
         interventions: List[Dict[str, Any]],
+        base_year: int,
         horizon_years: int = 10,
-        year: Optional[int] = None,
-        use_significant_lags_only: bool = False
+        view_type: ViewType = 'country',
+        p_value_threshold: float = 0.05,
+        use_nonlinear: bool = True,
+        use_dynamic_graphs: bool = True,
+        n_ensemble_runs: int = 0,
+        include_spillovers: bool = True,
+        top_n_effects: int = 20,
+        debug: bool = False
     ) -> Dict[str, Any]:
         """
-        Run temporal (multi-year) simulation with lag effects.
+        Run V3.1 temporal simulation with year-by-year graphs.
+
+        Key V3.1 feature: Loads a DIFFERENT graph for each projection year,
+        capturing evolving causal relationships over time.
 
         Args:
             country: Country name
             interventions: List of {"indicator": str, "change_percent": float}
+            base_year: Starting year (1990-2024)
             horizon_years: Years to project forward (1-30)
-            year: Optional baseline year
-            use_significant_lags_only: Only use edges with significant lags
+            view_type: Graph view type
+            p_value_threshold: Edge significance filter
+            use_nonlinear: Use marginal effects when available
+            use_dynamic_graphs: Load year-specific graph for each year
+            n_ensemble_runs: 0 = point estimate, >0 = bootstrap
+            include_spillovers: Include regional spillovers for final year
+            top_n_effects: Number of top effects per year
 
         Returns:
-            Temporal simulation results with year-by-year effects
+            Temporal simulation results with timeline, effects, and spillovers
         """
-        # Verify country exists
-        if not graph_service.country_exists(country):
-            raise ValueError(f"Country '{country}' not found")
+        run_temporal = self._get_v31_temporal_runner()
 
-        # Get baseline values
-        baseline = graph_service.get_baseline_values(country, year)
-        if not baseline:
-            raise ValueError(f"No baseline data for country '{country}'")
+        # Inject per-intervention year into each intervention dict
+        enriched_interventions = []
+        for intv in interventions:
+            enriched = dict(intv)
+            # If intervention has a 'year' field, pass it as 'intervention_year'
+            if 'year' in enriched and enriched['year'] is not None:
+                enriched['intervention_year'] = enriched.pop('year')
+            enriched_interventions.append(enriched)
 
-        # Run temporal simulation
-        run_temporal = self._get_temporal_runner()
         result = run_temporal(
-            country_code=country,
-            interventions=interventions,
+            country=country,
+            interventions=enriched_interventions,
+            base_year=base_year,
             horizon_years=horizon_years,
-            graphs_dir=str(GRAPHS_DIR),
-            panel_path=str(PANEL_PATH),
-            base_year=year,
-            use_significant_lags_only=use_significant_lags_only
+            view_type=view_type,
+            p_value_threshold=p_value_threshold,
+            use_nonlinear=use_nonlinear,
+            use_dynamic_graphs=use_dynamic_graphs,
+            n_ensemble_runs=n_ensemble_runs,
+            include_spillovers=include_spillovers,
+            top_n_effects=top_n_effects
         )
 
-        # Format response
-        return self._format_temporal_result(
-            country, interventions, horizon_years, result, baseline
-        )
+        # Check for simulation errors
+        if result.get('status') == 'error':
+            raise ValueError(result.get('message', 'V3.1 temporal simulation failed'))
 
-    def _format_instant_result(
-        self,
-        country: str,
-        interventions: List[Dict[str, Any]],
-        result: Dict[str, Any],
-        baseline: Dict[str, float]
-    ) -> Dict[str, Any]:
-        """Format instant simulation result for API response."""
-        # Extract effects from simulation result
-        # run_simulation returns: effects.top_effects with pre-computed changes
-        effects_data = result.get('effects', {})
-        top_effects = effects_data.get('top_effects', {})
-
-        # The top_effects already has the proper format with baseline, simulated, etc.
-        effects = top_effects
-
-        propagation = result.get('propagation', {})
-
-        return {
-            'status': 'success',
-            'country': country,
-            'interventions': interventions,
-            'effects': effects,
-            'propagation': {
-                'n_affected': effects_data.get('total_affected', len(effects)),
-                'iterations': propagation.get('iterations', 0),
-                'converged': propagation.get('converged', True)
-            }
-        }
-
-    def _format_temporal_result(
-        self,
-        country: str,
-        interventions: List[Dict[str, Any]],
-        horizon_years: int,
-        result: Dict[str, Any],
-        baseline: Dict[str, float]
-    ) -> Dict[str, Any]:
-        """Format temporal simulation result for API response."""
-        # run_temporal_simulation returns timeline, effects, affected_per_year
-        timeline = result.get('timeline', {})
-        effects = result.get('effects', {})
-        affected_per_year = result.get('affected_per_year', {})
-        metadata = result.get('metadata', {})
-
-        return {
-            'status': 'success',
-            'country': country,
-            'horizon_years': horizon_years,
-            'base_year': result.get('base_year'),
-            'interventions': interventions,
-            'timeline': timeline,
-            'effects': effects,
-            'affected_per_year': affected_per_year,
-            'metadata': {
-                'total_indicators': len(baseline),
-                'n_edges': metadata.get('n_edges', 0),
-                'use_significant_lags_only': metadata.get('use_significant_lags_only', False)
-            }
-        }
+        return result
 
 
 # Singleton instance

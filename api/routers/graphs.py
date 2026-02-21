@@ -69,19 +69,22 @@ async def get_country_graph(
             detail=f"Country '{country}' not found"
         )
 
-    # Load graph
-    graph = graph_service.get_country_graph(country)
+    # Load graph (with year-specific data from V3.1)
+    graph = graph_service.get_country_graph(country, year)
     if not graph:
         raise HTTPException(
             status_code=500,
             detail=f"Error loading graph for '{country}'"
         )
 
+    # Get the actual year from the loaded graph
+    graph_year = graph.get('year')
+
     # Get baseline values
-    baseline = graph_service.get_baseline_values(country, year)
+    baseline = graph_service.get_baseline_values(country, graph_year)
 
     # Get country-specific SHAP importance for node sizing
-    shap_importance = graph_service.get_country_shap(country)
+    shap_importance = graph_service.get_country_shap(country, graph_year)
 
     return GraphResponse(
         country=country,
@@ -91,7 +94,7 @@ async def get_country_graph(
         baseline=baseline,
         shap_importance=shap_importance,
         metadata={
-            'year': year or 'latest',
+            'year': graph_year,
             'has_lag_data': any('lag' in e for e in graph.get('edges', [])),
             'n_significant_lags': sum(
                 1 for e in graph.get('edges', [])

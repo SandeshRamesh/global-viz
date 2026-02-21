@@ -1,23 +1,64 @@
-# Visualization Track
+# Semantic Hierarchy Visualization (Phase 3)
 
-This folder contains the visualization implementation phases.
+Interactive D3 + React visualization with simulation controls backed by the v3.1 FastAPI backend.
 
-## Current Definition (As Of 2026-02-18)
+## Repo Layout
 
-- **Current Implementation**: `viz/phase2/`
-- `viz/phase1/`: Earlier explorer-only build (v2.1)
-- `viz/phase3-5/`: Placeholder notes only
+- `src/` — frontend application code.
+- `api/` — backend API and tests.
+- `docs/` — architecture, plans, reports, runbooks.
+- `scripts/` — dev and CI helper scripts.
+- `deploy/` — deployment scaffolding (docker/nginx/env templates).
 
-## Data Dependencies
+## Quick Start
 
-`viz/phase2/` expects:
+### Frontend
 
-- V2.1 unified graph metadata at:
-  - `viz/phase2/public/data/v2_1_visualization_final.json`
-- V3.1 temporal data for API endpoints (served by `viz/phase2/api/`):
-  - `v3.1/data/v3_1_temporal_shap/`
-  - `v3.1/data/v3_1_temporal_graphs/`
-  - `v3.1/data/v3_1_development_clusters/`
-  - `v3.1/data/v3_1_feedback_loops/`
+```bash
+npm install
+npm run dev
+```
 
-See `viz/phase2/.env.example` and `viz/phase2/api/.env.example` for configuration.
+Open [http://localhost:5174](http://localhost:5174).
+
+### Backend
+
+```bash
+cd api
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+## Quality Checks
+
+```bash
+npm run lint
+npm run build
+api/venv/bin/python -m pytest api/tests -q
+```
+
+## Simulation Endpoints
+
+Canonical:
+- `POST /api/simulate/v31`
+- `POST /api/simulate/v31/temporal`
+
+Compatibility aliases (deprecated):
+- `POST /api/simulate` → `/api/simulate/v31`
+- `POST /api/simulate/temporal` → `/api/simulate/v31/temporal`
+
+## Core References
+
+- Repo organization reference for Claude Code:
+  - `docs/architecture/CLAUDE_CODE_REPO_REFERENCE.md`
+- Roadmap:
+  - `docs/plans/roadmap.md`
+- Current phase plan/progress:
+  - `docs/plans/phase4-cinematic-plan.md`
+  - `docs/reports/phase4-progress.md`
+- Deployment security runbook:
+  - `docs/DEPLOYMENT_SECURITY.md`

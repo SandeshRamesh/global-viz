@@ -22,7 +22,11 @@ import statistics
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "public" / "data"
 OUTPUT_DIR = DATA_DIR / "importance"
-SHAP_FILE = Path("/home/sandesh/Documents/Global_Project/v2.1/outputs/B25/B25_shap_scores.pkl")
+REPO_ROOT = Path(os.getenv("GLOBAL_PROJECT_ROOT", Path(__file__).parents[4]))
+SHAP_FILE = Path(os.getenv(
+    "V21_SHAP_FILE",
+    REPO_ROOT / "v2.1" / "outputs" / "B25" / "B25_shap_scores.pkl"
+))
 VIZ_FILE = DATA_DIR / "v2_1_visualization_final.json"
 
 # Config

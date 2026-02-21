@@ -120,6 +120,28 @@ def linear_diminishing_returns(
     return threshold + diminished_excess
 
 
+def floor_zero_saturation(
+    value: float,
+    baseline: float,
+    **kwargs
+) -> float:
+    """
+    Floor at zero for inherently non-negative quantities (GDP, population, etc.).
+
+    Prevents simulation from producing negative values for indicators that
+    cannot be negative by definition. No upper bound is applied — the ±2σ
+    clamp handles runaway growth.
+
+    Args:
+        value: Current/proposed value
+        baseline: Starting value (unused, for API consistency)
+
+    Returns:
+        max(0, value)
+    """
+    return max(0.0, value)
+
+
 def no_saturation(value: float, baseline: float, **kwargs) -> float:
     """
     Identity function - no saturation applied.
@@ -206,6 +228,40 @@ SATURATION_CONFIG = {
         'function': hard_cap_saturation,
         'params': {'min_val': -10.0, 'max_val': 10.0},
         'patterns': ['e_polity']  # prefix match only
+    },
+
+    # Non-negative quantities — floor at 0, no ceiling (±2σ handles growth)
+    # Only for indicators that CANNOT be negative by definition.
+    # Excludes: growth rates (.ZG), net flows (BN.), net migration, balances.
+    'non_negative': {
+        'function': floor_zero_saturation,
+        'params': {},
+        'patterns': [
+            # GDP levels (not growth rates)
+            'NY.GDP.MKTP.CD', 'NY.GDP.MKTP.KD', 'NY.GDP.MKTP.PP',
+            'NY.GDP.PCAP.CD', 'NY.GDP.PCAP.KD', 'NY.GDP.PCAP.PP',
+            'NY.GNP.MKTP', 'NY.GNP.PCAP',
+            # Value added
+            'NV.AGR', 'NV.IND', 'NV.SRV',
+            # Population (all counts are non-negative)
+            'SP.POP',
+            # Trade volumes (absolute, not net)
+            'BX.GSR.GNFS', 'BM.GSR.GNFS',
+            # Household and government consumption levels
+            'NE.CON.PRVT', 'NE.CON.GOVT',
+            # Human capital value
+            'NW.HCA',
+            # Produced capital
+            'NW.PCA',
+            # Total national wealth
+            'NW.TOW',
+            # School expectancy
+            'SLE.',
+            # Manufacturing output
+            'NV.IND.MANF',
+        ],
+        # Exclude growth rates and other legitimately-negative derivatives
+        'exclude_suffixes': ['.zg', '.zs'],
     }
 }
 
@@ -227,6 +283,11 @@ def get_saturation_function(indicator: str) -> tuple[Callable, dict]:
     ind_lower = indicator.lower()
 
     for config_type, config in SATURATION_CONFIG.items():
+        # Check exclusions first (e.g., .ZG growth rates excluded from non_negative)
+        exclude_suffixes = config.get('exclude_suffixes', [])
+        if any(ind_lower.endswith(s) for s in exclude_suffixes):
+            continue
+
         for pattern in config['patterns']:
             pat_lower = pattern.lower()
             # Suffix patterns (V-Dem suffixes like _ord, _mean, _osp)
@@ -314,9 +375,9 @@ def test_indicator_mapping():
     assert func == hard_cap_saturation
     assert params['max_val'] == 100.0
 
-    # GDP indicator — no longer has saturation config (±2σ handles it)
+    # GDP indicator — now uses non-negative floor (can't go below 0)
     func, params = get_saturation_function('NY.GDP.PCAP.CD')
-    assert func == no_saturation
+    assert func == floor_zero_saturation, f"GDP should use floor_zero, got {func.__name__}"
 
     # V-Dem aggregate index (explicit prefix)
     func, params = get_saturation_function('v2x_polyarchy')
@@ -328,15 +389,37 @@ def test_indicator_mapping():
     assert func == hard_cap_saturation
     assert params['max_val'] == 5.0
 
-    # Population indicator — should NOT match rate config anymore
+    # Population indicator — should match non_negative (floor at 0)
     func, params = get_saturation_function('SP.POP.3539.FE')
-    assert func == no_saturation, "SP.POP should not be capped at 100"
+    assert func == floor_zero_saturation, f"SP.POP should use floor_zero, got {func.__name__}"
+
+    # GDP — should match non_negative (floor at 0)
+    func, params = get_saturation_function('NY.GDP.PCAP.CD')
+    assert func == floor_zero_saturation, f"GDP should use floor_zero, got {func.__name__}"
+
+    # GDP growth rate — should NOT match (ends in .ZG, doesn't start with non-neg prefix)
+    func, params = get_saturation_function('NY.GDP.MKTP.KD.ZG')
+    assert func == no_saturation, "GDP growth rate can be negative"
 
     # Unknown indicator
     func, params = get_saturation_function('random_indicator_xyz')
     assert func == no_saturation
 
     print("  indicator_mapping: PASS")
+
+
+def test_floor_zero_saturation():
+    """Test floor-at-zero saturation for non-negative quantities."""
+    # Positive value passes through
+    assert floor_zero_saturation(50000, baseline=60000) == 50000
+
+    # Negative value floored at 0
+    assert floor_zero_saturation(-5000, baseline=60000) == 0.0
+
+    # Zero passes through
+    assert floor_zero_saturation(0, baseline=100) == 0.0
+
+    print("  floor_zero_saturation: PASS")
 
 
 def test_apply_saturation():
@@ -349,13 +432,21 @@ def test_apply_saturation():
     result = apply_saturation('SP.DYN.LE00.IN', 98, baseline=75)
     assert result == 95.0, f"Expected 95, got {result}"
 
-    # GDP — no saturation, value passes through
+    # GDP — floored at 0 (non-negative), positive passes through
     result = apply_saturation('NY.GDP.PCAP.CD', 150000, baseline=50000)
-    assert result == 150000, f"Expected 150000 (no saturation), got {result}"
+    assert result == 150000, f"Expected 150000, got {result}"
 
-    # Population — no saturation (was wrongly capped at 100 before)
+    # GDP — negative value floored at 0
+    result = apply_saturation('NY.GDP.PCAP.CD', -5000, baseline=50000)
+    assert result == 0.0, f"Expected 0 (non-negative floor), got {result}"
+
+    # Population — floored at 0, positive passes through
     result = apply_saturation('SP.POP.TOTL', 330000000, baseline=320000000)
-    assert result == 330000000, f"Population should not be capped, got {result}"
+    assert result == 330000000, f"Population should pass through, got {result}"
+
+    # Population — negative floored at 0
+    result = apply_saturation('SP.POP.TOTL', -100, baseline=1000000)
+    assert result == 0.0, f"Population should be floored at 0, got {result}"
 
     print("  apply_saturation: PASS")
 
@@ -368,6 +459,7 @@ def run_all_tests():
     test_sigmoid_saturation()
     test_hard_cap_saturation()
     test_linear_diminishing()
+    test_floor_zero_saturation()
     test_indicator_mapping()
     test_apply_saturation()
 

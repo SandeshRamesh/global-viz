@@ -1,21 +1,24 @@
 """
-V3.0 Global Causal Discovery API
+V3.1 Global Causal Discovery API
 
 FastAPI backend for policy intervention simulation.
-Production-ready with rate limiting, logging, and timeout protection.
+Canonical simulation contract is V3.1; legacy aliases remain for compatibility.
 """
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
 import logging
 
 from .config import (
     API_VERSION, API_TITLE, API_DESCRIPTION,
-    CORS_ORIGINS, RATE_LIMIT_ENABLED,
+    CORS_ORIGINS, CORS_ALLOW_CREDENTIALS, RATE_LIMIT_ENABLED, ENV,
     CONTACT_NAME, CONTACT_URL, CONTACT_EMAIL,
-    LOG_LEVEL
+    LOG_LEVEL, API_ENABLE_DOCS, ENFORCE_PRODUCTION_ENV,
+    SIMULATION_AUTH_ENABLED, SIMULATION_AUTH_TOKEN,
+    CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
 )
 from .routers import (
     countries_router,
@@ -24,6 +27,7 @@ from .routers import (
     indicators_router,
     health_router
 )
+from .routers.temporal import router as temporal_router
 from .middleware.rate_limiter import rate_limit_middleware
 from .middleware.logger import log_requests_middleware
 from .services import graph_service, indicator_service
@@ -38,8 +42,8 @@ app = FastAPI(
     title=API_TITLE,
     description=API_DESCRIPTION,
     version=API_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if API_ENABLE_DOCS else None,
+    redoc_url="/redoc" if API_ENABLE_DOCS else None,
     contact={
         "name": CONTACT_NAME,
         "url": CONTACT_URL,
@@ -51,14 +55,47 @@ app = FastAPI(
     }
 )
 
+
+def _is_local_origin(origin: str) -> bool:
+    local_prefixes = ("http://localhost", "http://127.0.0.1")
+    return origin.startswith(local_prefixes)
+
+
+def _validate_security_config() -> None:
+    if ENFORCE_PRODUCTION_ENV and ENV != "production":
+        raise RuntimeError("ENFORCE_PRODUCTION_ENV is enabled but API_ENV is not 'production'.")
+
+    if SIMULATION_AUTH_ENABLED:
+        has_service_token = bool(CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET)
+        has_api_token = bool(SIMULATION_AUTH_TOKEN)
+        if not (has_service_token or has_api_token):
+            raise RuntimeError(
+                "Simulation auth enabled but no credentials configured. "
+                "Set SIMULATION_AUTH_TOKEN or CF_ACCESS_CLIENT_ID/CF_ACCESS_CLIENT_SECRET."
+            )
+
+    if ENFORCE_PRODUCTION_ENV and ENV == "production":
+        if any(origin == "*" for origin in CORS_ORIGINS):
+            raise RuntimeError("Wildcard CORS origin is not allowed in enforced production mode.")
+        if any(_is_local_origin(origin) for origin in CORS_ORIGINS):
+            raise RuntimeError("Localhost CORS origins are not allowed in enforced production mode.")
+
+
+_validate_security_config()
+
 # CORS middleware (must be first)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# GZip compression middleware
+# Compresses responses > 1KB, typically 75-90% reduction for JSON
+# Order matters: GZip runs AFTER CORS (middleware stack is LIFO)
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 
 # Request logging middleware
@@ -66,6 +103,37 @@ app.add_middleware(
 async def logging_middleware(request: Request, call_next):
     """Log all requests."""
     return await log_requests_middleware(request, call_next)
+
+
+@app.middleware("http")
+async def simulation_auth_middleware(request: Request, call_next):
+    """Optional auth gate for simulation endpoints."""
+    if (
+        not SIMULATION_AUTH_ENABLED
+        or request.method == "OPTIONS"
+        or not request.url.path.startswith("/api/simulate")
+    ):
+        return await call_next(request)
+
+    has_service_token = bool(CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET)
+    if has_service_token:
+        req_id = request.headers.get("CF-Access-Client-Id", "")
+        req_secret = request.headers.get("CF-Access-Client-Secret", "")
+        if req_id == CF_ACCESS_CLIENT_ID and req_secret == CF_ACCESS_CLIENT_SECRET:
+            return await call_next(request)
+
+    if SIMULATION_AUTH_TOKEN:
+        api_key = request.headers.get("X-API-Key", "")
+        auth_header = request.headers.get("Authorization", "")
+        bearer = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+        if api_key == SIMULATION_AUTH_TOKEN or bearer == SIMULATION_AUTH_TOKEN:
+            return await call_next(request)
+
+    return JSONResponse(
+        status_code=401,
+        content={"error": "unauthorized", "message": "Authentication required"},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # Rate limiting middleware
@@ -86,7 +154,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "error": "internal_error",
             "message": "An unexpected error occurred",
-            "details": str(exc) if app.debug else None
         }
     )
 
@@ -97,6 +164,7 @@ app.include_router(countries_router, prefix="/api")
 app.include_router(graphs_router, prefix="/api")
 app.include_router(simulation_router, prefix="/api")
 app.include_router(indicators_router, prefix="/api")
+app.include_router(temporal_router)  # V3.1 temporal data (has own /api/temporal prefix)
 
 
 # Root endpoint
@@ -108,16 +176,46 @@ async def root():
     return {
         "name": API_TITLE,
         "version": API_VERSION,
+        "environment": ENV,
         "docs": "/docs",
         "health": "/health",
+        "api_contract": {
+            "canonical": {
+                "instant": "/api/simulate/v31",
+                "temporal": "/api/simulate/v31/temporal",
+            },
+            "compatibility_aliases": {
+                "instant": {
+                    "path": "/api/simulate",
+                    "status": "deprecated",
+                    "forwards_to": "/api/simulate/v31",
+                },
+                "temporal": {
+                    "path": "/api/simulate/temporal",
+                    "status": "deprecated",
+                    "forwards_to": "/api/simulate/v31/temporal",
+                },
+            },
+        },
         "endpoints": {
+            # Core endpoints
             "countries": "/api/countries",
             "graph": "/api/graph/{country}",
-            "simulate": "/api/simulate",
-            "temporal": "/api/simulate/temporal",
             "indicators": "/api/indicators",
             "indicator_detail": "/api/indicators/{id}",
-            "metadata": "/api/metadata"
+            "metadata": "/api/metadata",
+            # Canonical simulation endpoints (V3.1)
+            "simulate_v31": "/api/simulate/v31",
+            "simulate_v31_temporal": "/api/simulate/v31/temporal",
+            # Deprecated compatibility aliases
+            "simulate": "/api/simulate",
+            "simulate_temporal": "/api/simulate/temporal",
+            # V3.1 temporal data endpoints
+            "temporal_status": "/api/temporal/status",
+            "temporal_shap": "/api/temporal/shap/{target}/{year}",
+            "temporal_shap_timeline": "/api/temporal/shap/{target}/timeline",
+            "temporal_graph": "/api/temporal/graph/{year}",
+            "temporal_clusters": "/api/temporal/clusters/{year}"
         }
     }
 
@@ -164,22 +262,26 @@ def custom_openapi():
         license_info=app.license_info
     )
 
-    # Add example for SimulationRequest
-    if "SimulationRequest" in openapi_schema.get("components", {}).get("schemas", {}):
-        openapi_schema["components"]["schemas"]["SimulationRequest"]["example"] = {
-            "country": "Australia",
-            "interventions": [
-                {"indicator": "v2elvotbuy", "change_percent": 20}
-            ]
-        }
-
-    # Add example for TemporalSimulationRequest
-    if "TemporalSimulationRequest" in openapi_schema.get("components", {}).get("schemas", {}):
-        openapi_schema["components"]["schemas"]["TemporalSimulationRequest"]["example"] = {
+    # Add example for SimulationRequestV31
+    if "SimulationRequestV31" in openapi_schema.get("components", {}).get("schemas", {}):
+        openapi_schema["components"]["schemas"]["SimulationRequestV31"]["example"] = {
             "country": "Australia",
             "interventions": [
                 {"indicator": "v2elvotbuy", "change_percent": 20}
             ],
+            "year": 2020,
+            "mode": "percentage",
+            "view_type": "country",
+        }
+
+    # Add example for TemporalSimulationRequestV31
+    if "TemporalSimulationRequestV31" in openapi_schema.get("components", {}).get("schemas", {}):
+        openapi_schema["components"]["schemas"]["TemporalSimulationRequestV31"]["example"] = {
+            "country": "Australia",
+            "interventions": [
+                {"indicator": "v2elvotbuy", "change_percent": 20}
+            ],
+            "base_year": 2020,
             "horizon_years": 10
         }
 
@@ -195,7 +297,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "api.main:app",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=8000,
         reload=True
     )
