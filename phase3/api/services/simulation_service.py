@@ -155,8 +155,7 @@ class SimulationService:
             use_dynamic_graphs=use_dynamic_graphs,
             n_ensemble_runs=n_ensemble_runs,
             include_spillovers=include_spillovers,
-            top_n_effects=top_n_effects,
-            debug=debug
+            top_n_effects=top_n_effects
         )
 
         # Check for simulation errors

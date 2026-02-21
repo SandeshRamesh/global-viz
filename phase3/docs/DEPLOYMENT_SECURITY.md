@@ -4,12 +4,33 @@ This project is currently configured for active development (`API_ENV=developmen
 
 Use this runbook when exposing the app publicly through Cloudflare Tunnel.
 
+## Current Production Deployment (atlas.argonanalytics.org)
+
+**Deployed:** 2026-02-21
+
+| Component | URL | Port |
+|-----------|-----|------|
+| Frontend | https://atlas.argonanalytics.org | 3005 (local) |
+| API | https://api.argonanalytics.org | 8000 (local) |
+
+**Security model:** Rate limiting + CORS (no token auth)
+
+- CORS locked to `https://atlas.argonanalytics.org`
+- Rate limits: 100 req/min, 1000 req/hr per IP
+- API on localhost only; Cloudflare Tunnel handles external access
+- Swagger docs disabled in production
+
+**Services (systemd):**
+- `global-causal-api.service` - API server
+- `atlas-frontend.service` - Static file server
+- `cloudflared-argon.service` - Cloudflare Tunnel
+
 ## Current Dev Mode (safe for local iteration)
 
 - Keep `API_ENV=development`
 - Keep docs enabled (`API_ENABLE_DOCS=true`)
 - Keep detailed health enabled (`HEALTH_DETAILED_ENABLED=true`)
-- You can keep simulation auth off while developing (`SIMULATION_AUTH_ENABLED=false`)
+- Keep simulation auth off (`SIMULATION_AUTH_ENABLED=false`)
 
 ## Public Deployment Checklist
 
@@ -17,25 +38,26 @@ Use this runbook when exposing the app publicly through Cloudflare Tunnel.
 
 ```bash
 API_ENV=production
-ENFORCE_PRODUCTION_ENV=true
-CORS_ORIGINS=https://your-domain.example
+CORS_ORIGINS=https://atlas.argonanalytics.org
 CORS_ALLOW_WILDCARD=false
 API_ENABLE_DOCS=false
 HEALTH_DETAILED_ENABLED=false
-SIMULATION_AUTH_ENABLED=true
+SIMULATION_AUTH_ENABLED=false  # Rate limiting is sufficient for public research tools
 ```
 
-2. Choose auth mode for `/api/simulate*`:
+2. (Optional) Enable auth for `/api/simulate*` if needed:
 
 - API token mode:
 
 ```bash
+SIMULATION_AUTH_ENABLED=true
 SIMULATION_AUTH_TOKEN=<long-random-token>
 ```
 
 - Cloudflare Access service token mode:
 
 ```bash
+SIMULATION_AUTH_ENABLED=true
 CF_ACCESS_CLIENT_ID=<client-id>
 CF_ACCESS_CLIENT_SECRET=<client-secret>
 ```
