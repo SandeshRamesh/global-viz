@@ -16,7 +16,7 @@ if _API_ROOT not in sys.path:
     sys.path.insert(0, _API_ROOT)
 
 from simulation.region_mapping import validate_region_mapping, get_region_for_country
-from simulation.graph_loader_v31 import load_temporal_graph
+from simulation.graph_loader_v31 import load_temporal_graph, build_adjacency_v31
 from simulation.simulation_runner_v31 import run_simulation_v31
 from models.requests import SimulationRequestV31, TemporalSimulationRequestV31
 
@@ -37,6 +37,9 @@ def test_region_mapping_has_full_coverage():
 def test_region_mapping_alias_derivation():
     assert get_region_for_country("United States") == "north_america"
     assert get_region_for_country("United States of America") == "north_america"
+    assert get_region_for_country("USA") == "north_america"
+    assert get_region_for_country("Canada") == "north_america"
+    assert get_region_for_country("Mexico") == "latin_america_caribbean"
 
 
 @pytest.mark.parametrize("view_type", ["country", "stratified"])
@@ -83,6 +86,29 @@ def test_unified_null_country_percentage_regression():
 
     assert result["status"] == "success"
     assert result["view_used"] in {"unified", "regional", "stratified", "country"}
+
+
+def test_adjacency_preserves_nonlinearity_and_marginal_effects():
+    graph = {
+        "edges": [
+            {
+                "source": "education",
+                "target": "gdp",
+                "beta": 0.12,
+                "relationship_type": "threshold",
+                "nonlinearity": {
+                    "type": "threshold",
+                    "detected": True,
+                    "marginal_effects": {"p25": 0.08, "p50": 0.1, "p75": 0.12},
+                },
+            }
+        ]
+    }
+
+    adj = build_adjacency_v31(graph)
+    edge = adj["education"][0]
+    assert edge["nonlinearity"]["detected"] is True
+    assert edge["marginal_effects"]["p50"] == pytest.approx(0.1)
 
 
 def test_temporal_debug_is_forwarded_to_runner(monkeypatch):

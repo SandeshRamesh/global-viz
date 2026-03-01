@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -29,6 +29,20 @@ COVERAGE_REPORT_PATH = DATA_ROOT / "v31" / "metadata" / "regional_shap_coverage.
 YEARS = list(range(1990, 2025))
 MIN_COUNTRIES_PER_YEAR = 3
 MIN_COUNTRIES_PER_INDICATOR = 3
+REGION_MIN_COUNTRIES_PER_YEAR = {
+    "north_america": 1,
+}
+REGION_MIN_COUNTRIES_PER_INDICATOR = {
+    "north_america": 1,
+}
+
+
+def _required_countries_per_year(region_key: str) -> int:
+    return int(REGION_MIN_COUNTRIES_PER_YEAR.get(region_key, MIN_COUNTRIES_PER_YEAR))
+
+
+def _required_countries_per_indicator(region_key: str) -> int:
+    return int(REGION_MIN_COUNTRIES_PER_INDICATOR.get(region_key, MIN_COUNTRIES_PER_INDICATOR))
 
 
 def _discover_targets() -> List[str]:
@@ -85,12 +99,13 @@ def _aggregate_shap(region_key: str, target: str, year: int) -> tuple[dict | Non
             if mean_value is not None:
                 indicator_values[indicator].append(mean_value)
 
-    if len(contributors) < MIN_COUNTRIES_PER_YEAR:
+    if len(contributors) < _required_countries_per_year(region_key):
         return None, contributors
 
     shap_importance = {}
+    indicator_floor = min(_required_countries_per_indicator(region_key), len(contributors))
     for indicator, values in indicator_values.items():
-        if len(values) < MIN_COUNTRIES_PER_INDICATOR:
+        if len(values) < indicator_floor:
             continue
         arr = np.array(values)
         shap_importance[indicator] = {
@@ -117,10 +132,10 @@ def _aggregate_shap(region_key: str, target: str, year: int) -> tuple[dict | Non
             "aggregation": "median",
         },
         "provenance": {
-            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "method": "aggregate_country_shap",
             "source": "data/v31/temporal_shap/countries",
-            "min_countries_per_year": MIN_COUNTRIES_PER_YEAR,
+            "min_countries_per_year": _required_countries_per_year(region_key),
         },
     }
     return payload, contributors
@@ -135,6 +150,9 @@ def precompute_regional_shap() -> dict:
         "targets": targets,
         "years": YEARS,
         "min_countries_per_year": MIN_COUNTRIES_PER_YEAR,
+        "region_min_countries_per_year": REGION_MIN_COUNTRIES_PER_YEAR,
+        "min_countries_per_indicator": MIN_COUNTRIES_PER_INDICATOR,
+        "region_min_countries_per_indicator": REGION_MIN_COUNTRIES_PER_INDICATOR,
         "regions": {},
     }
     files_written = 0
@@ -151,6 +169,8 @@ def precompute_regional_shap() -> dict:
                 target_rows[str(year)] = {
                     "n_countries_total": len(get_countries_in_region(region_key)),
                     "n_countries_contributing": len(contributors),
+                    "n_countries_required": _required_countries_per_year(region_key),
+                    "n_countries_required_per_indicator": _required_countries_per_indicator(region_key),
                     "written": payload is not None,
                     "n_indicators": len((payload or {}).get("shap_importance", {})),
                 }

@@ -240,6 +240,11 @@ def build_adjacency_v31(
             continue
 
         # Extract edge properties
+        nonlinearity = edge.get('nonlinearity') if isinstance(edge.get('nonlinearity'), dict) else None
+        marginal_effects = edge.get('marginal_effects')
+        if marginal_effects is None and nonlinearity:
+            marginal_effects = nonlinearity.get('marginal_effects')
+
         edge_info = {
             'target': edge.get('target'),
             'beta': edge.get('beta', 0),
@@ -253,7 +258,8 @@ def build_adjacency_v31(
             'n_bootstrap': edge.get('n_bootstrap'),
             'relationship_type': edge.get('relationship_type', 'linear'),
             # V3.1 v2 fields (may not exist in v1 data)
-            'marginal_effects': edge.get('marginal_effects'),
+            'marginal_effects': marginal_effects,
+            'nonlinearity': nonlinearity,
             'nonlinearity_metadata': edge.get('nonlinearity_metadata')
         }
 

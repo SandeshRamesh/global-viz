@@ -28,6 +28,20 @@ COVERAGE_REPORT_PATH = DATA_ROOT / "v31" / "metadata" / "regional_baseline_cover
 YEARS = list(range(1990, 2025))
 MIN_COUNTRIES_PER_YEAR = 3
 MIN_COUNTRIES_PER_INDICATOR = 3
+REGION_MIN_COUNTRIES_PER_YEAR = {
+    "north_america": 1,
+}
+REGION_MIN_COUNTRIES_PER_INDICATOR = {
+    "north_america": 1,
+}
+
+
+def _required_countries_per_year(region_key: str) -> int:
+    return int(REGION_MIN_COUNTRIES_PER_YEAR.get(region_key, MIN_COUNTRIES_PER_YEAR))
+
+
+def _required_countries_per_indicator(region_key: str) -> int:
+    return int(REGION_MIN_COUNTRIES_PER_INDICATOR.get(region_key, MIN_COUNTRIES_PER_INDICATOR))
 
 
 def _load_country_baseline(country: str, year: int) -> Dict[str, float]:
@@ -58,12 +72,13 @@ def _compute_regional_baseline(region_key: str, year: int) -> tuple[Dict[str, fl
                 continue
             indicator_values[indicator].append(float(value))
 
-    if len(contributors) < MIN_COUNTRIES_PER_YEAR:
+    if len(contributors) < _required_countries_per_year(region_key):
         return {}, contributors
 
     aggregated = {}
+    indicator_floor = min(_required_countries_per_indicator(region_key), len(contributors))
     for indicator, values in indicator_values.items():
-        if len(values) < MIN_COUNTRIES_PER_INDICATOR:
+        if len(values) < indicator_floor:
             continue
         aggregated[indicator] = float(np.median(values))
 
@@ -96,6 +111,9 @@ def precompute_regional_baselines() -> dict:
     coverage = {
         "years": YEARS,
         "min_countries_per_year": MIN_COUNTRIES_PER_YEAR,
+        "region_min_countries_per_year": REGION_MIN_COUNTRIES_PER_YEAR,
+        "min_countries_per_indicator": MIN_COUNTRIES_PER_INDICATOR,
+        "region_min_countries_per_indicator": REGION_MIN_COUNTRIES_PER_INDICATOR,
         "regions": {},
     }
     files_written = 0
@@ -110,6 +128,8 @@ def precompute_regional_baselines() -> dict:
             region_rows[str(year)] = {
                 "n_countries_total": len(get_countries_in_region(region_key)),
                 "n_countries_contributing": len(contributors),
+                "n_countries_required": _required_countries_per_year(region_key),
+                "n_countries_required_per_indicator": _required_countries_per_indicator(region_key),
                 "n_indicators": len(baseline),
                 "written": bool(baseline),
             }

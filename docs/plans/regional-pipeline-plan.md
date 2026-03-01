@@ -15,12 +15,19 @@ Completed in code:
 - New precompute jobs:
   - `simulation/precompute_regional_graphs.py`
   - `simulation/precompute_regional_baselines.py`
+  - `simulation/precompute_regional_stats.py`
   - `simulation/precompute_regional_shap.py`
 - Feature flag: `ENABLE_REGIONAL_VIEW` (default `false`).
 
 Still required operationally:
 - Run regional precompute scripts and verify coverage reports in `data/v31/metadata/`.
 - Enable flag in staging, then production after validation.
+
+Operational snapshot (2026-03-01 local run):
+- Regional graphs: `286` files
+- Regional baselines: `286` files
+- Regional SHAP: `286` files
+- Regional indicator stats: `11` files
 
 ---
 
@@ -63,7 +70,7 @@ Still required operationally:
 | east_asia_pacific | East Asia & Pacific | 6 | Expand to ~15 |
 | central_asia | Central Asia | 5 | Small but keep |
 | europe_central_asia | Europe & Central Asia | 4 | Russia/Turkey/Ukraine/Kazakhstan |
-| north_america | North America | 3 | Smallest — 2-3 countries |
+| north_america | North America | 2 | Canonical membership is Canada + United States (Mexico in LAC) |
 
 **Action completed:** Canonical mapping now covers all 178 countries with graph data. World Bank regional groups are used as the base, then deterministically split into the 11-key hybrid taxonomy (EAP/ECA splits + historical overrides).
 
@@ -139,9 +146,9 @@ After expanding the mapping, print counts per region. Expected:
 - southeast_asia: ~10
 - central_asia: ~5-8
 - europe_central_asia: ~4-6
-- north_america: ~3
+- north_america: 2
 
-Minimum viable: 3 countries (North America). At 3 countries × 35 years = 105 data points per edge, Ridge regression is stable (especially with alpha=1.0 regularization).
+Runtime rule in implementation: default minimum contributors is 3, with a regional override for `north_america` so it is generated with its 2-country membership.
 
 ---
 

@@ -26,6 +26,7 @@ DATA_ROOT = Path(__file__).parent.parent / "data"
 PANEL_PATH = DATA_ROOT / "raw" / "v21_panel_data_for_v3.parquet"
 STATS_CACHE_PATH = DATA_ROOT / "v31" / "indicator_stats.json"
 COUNTRY_STATS_CACHE_DIR = DATA_ROOT / "v31" / "country_indicator_stats"
+BASELINE_CACHE_DIR = DATA_ROOT / "v31" / "baselines"
 
 # Module-level caches
 _stats_cache: Optional[Dict[int, Dict[str, Dict[str, float]]]] = None
@@ -158,6 +159,53 @@ def compute_country_temporal_stats(
     return result
 
 
+def compute_country_temporal_stats_from_baselines(
+    country: str,
+    baseline_dir: Optional[Path] = None,
+) -> Dict[str, Dict[str, float]]:
+    """
+    Compute per-indicator temporal stats from cached yearly baseline JSON files.
+
+    This fallback avoids parquet runtime dependencies and preserves calibration
+    for absolute-mode propagation when panel loading is unavailable.
+    """
+    base_dir = baseline_dir or BASELINE_CACHE_DIR
+    country_dir = base_dir / country
+    if not country_dir.exists():
+        return {}
+
+    series_by_indicator: Dict[str, list] = {}
+    for year_file in sorted(country_dir.glob("*.json")):
+        try:
+            with open(year_file) as f:
+                payload = json.load(f)
+            values = payload.get("values", {})
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        if not isinstance(values, dict):
+            continue
+        for indicator, value in values.items():
+            if value is None:
+                continue
+            try:
+                series_by_indicator.setdefault(str(indicator), []).append(float(value))
+            except (TypeError, ValueError):
+                continue
+
+    result: Dict[str, Dict[str, float]] = {}
+    for indicator, values in series_by_indicator.items():
+        if not values:
+            continue
+        arr = np.array(values, dtype=float)
+        result[indicator] = {
+            "mean": float(np.mean(arr)),
+            "std": float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0,
+            "count": int(len(arr)),
+        }
+    return result
+
+
 def save_country_stats_cache(
     country: str,
     stats: Dict[str, Dict[str, float]],
@@ -205,8 +253,14 @@ def get_country_indicator_stats(
     # Try file cache
     stats = load_country_stats_cache(country)
     if stats is None:
-        # Compute from panel data
-        stats = compute_country_temporal_stats(country, panel_path)
+        # Compute from panel data; fallback to baseline JSON cache if parquet
+        # dependencies are unavailable in lightweight runtime environments.
+        try:
+            stats = compute_country_temporal_stats(country, panel_path)
+        except Exception:
+            stats = {}
+        if not stats:
+            stats = compute_country_temporal_stats_from_baselines(country)
         if stats:
             save_country_stats_cache(country, stats)
 
@@ -363,6 +417,8 @@ def compute_regional_temporal_stats(
     if not countries:
         return {}
 
+    min_countries_per_indicator = 2 if len(countries) <= 2 else 3
+
     per_country_stats: Dict[str, list] = {}
     per_country_means: Dict[str, list] = {}
 
@@ -387,7 +443,7 @@ def compute_regional_temporal_stats(
 
     result: Dict[str, Dict[str, float]] = {}
     for ind, stds in per_country_stats.items():
-        if len(stds) < 3:
+        if len(stds) < min_countries_per_indicator:
             continue
         means = per_country_means.get(ind, [])
         result[ind] = {

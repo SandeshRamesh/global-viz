@@ -69,6 +69,7 @@ COUNTRY_ALIASES = {
     "syrian arab republic": "Syria",
     "timor leste": "Timor-Leste",
     "turkiye": "Turkey",
+    "usa": "United States",
     "united states of america": "United States",
     "venezuela rb": "Venezuela, RB",
     "viet nam": "Vietnam",
