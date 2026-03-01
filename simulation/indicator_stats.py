@@ -367,7 +367,14 @@ def compute_regional_temporal_stats(
     per_country_means: Dict[str, list] = {}
 
     for country in countries:
-        c_stats = get_country_indicator_stats(country, panel_path=panel_path)
+        c_stats = load_country_stats_cache(country)
+        if c_stats is None:
+            try:
+                c_stats = get_country_indicator_stats(country, panel_path=panel_path)
+            except Exception:
+                # In lightweight runtime environments parquet engines may be absent.
+                # Skip this country instead of failing the entire region.
+                c_stats = {}
         if not c_stats:
             continue
         for ind, stat in c_stats.items():
