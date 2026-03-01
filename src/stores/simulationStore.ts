@@ -22,6 +22,7 @@ import {
   type IncomeStratum,
   type StratumCounts,
   type AllClassifications,
+  type QolScoresByCountry,
   getShapImportance
 } from '../services/api';
 import type { ScenarioTemplate } from '../types/scenarioTemplate';
@@ -73,18 +74,18 @@ function saveScenariosToStorage(scenarios: SavedScenario[]): void {
 const simCache = new Map<string, TemporalResults>()
 
 function makeSimCacheKey(
-  country: string,
+  country: string | null,
   interventions: Intervention[],
   baseYear: number,
   horizon: number,
-  viewType: 'country' | 'stratified' | 'unified',
+  viewType: 'country' | 'stratified' | 'unified' | 'regional',
   stratum: IncomeStratum | 'unified'
 ): string {
   const intKey = interventions
     .map(i => `${i.indicator}:${i.change_percent}:${i.year ?? 0}`)
     .sort()
     .join('|')
-  return `${viewType}:${stratum}::${country}::${intKey}::${baseYear}::${horizon}`
+  return `${viewType}:${stratum}::${country ?? 'null'}::${intKey}::${baseYear}::${horizon}`
 }
 
 // ============================================
@@ -182,8 +183,17 @@ interface SimulationState {
   activeTemplate: ScenarioTemplate | null;
   templateModified: boolean;
 
+  // Map layer
+  mapForeground: boolean;
+  qolScores: Record<string, QolScoresByCountry> | null;
+  qolScoresLoading: boolean;
+
   // Error handling
   error: string | null;
+
+  // Actions - Map
+  toggleMapForeground: () => void;
+  loadQolScores: () => Promise<void>;
 
   // Actions - Panel
   openPanel: () => void;
@@ -327,6 +337,25 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   activeTemplate: null,
   templateModified: false,
   error: null,
+
+  // Map layer
+  mapForeground: false,
+  qolScores: null,
+  qolScoresLoading: false,
+
+  // Map actions
+  toggleMapForeground: () => set((state) => ({ mapForeground: !state.mapForeground })),
+  loadQolScores: async () => {
+    if (get().qolScores || get().qolScoresLoading) return;
+    set({ qolScoresLoading: true });
+    try {
+      const response = await simulationAPI.getQolScoresAll();
+      set({ qolScores: response.scores, qolScoresLoading: false });
+    } catch (err) {
+      debug.warn('Failed to load QOL scores:', err);
+      set({ qolScoresLoading: false });
+    }
+  },
 
   // Panel actions
   openPanel: () => set({ isPanelOpen: true }),
@@ -850,9 +879,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       emerging: 'China',
       advanced: 'United States',
     };
-    let apiCountry: string = selectedCountry || 'United States';
+    let apiCountry: string | null = selectedCountry || 'United States';
     if (viewType === 'unified') {
-      apiCountry = 'United States';
+      apiCountry = null;
     } else if (viewType === 'stratified') {
       apiCountry = STRATA_REPRESENTATIVE[selectedStratum] || 'India';
     }

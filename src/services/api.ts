@@ -155,10 +155,12 @@ export interface CausalPathEntry {
 /** Response from POST /api/simulate/v31/temporal */
 export interface TemporalResults {
   status: string;
-  country: string;
+  country: string | null;
   horizon_years: number;
   base_year: number;
   view_type: string;
+  scope_used?: string;
+  region_used?: string | null;
   interventions: Array<Record<string, unknown>>;
   timeline: Record<string, Record<string, number>>;
   effects: Record<string, Record<string, TemporalEffect>>;
@@ -455,6 +457,20 @@ export interface StratumDistribution {
   countries: Record<IncomeStratum, StratumCountryInfo[]>;
 }
 
+/** QOL scores for all countries across all years */
+export interface QolScoresByCountry {
+  iso3: string;
+  by_year: Record<string, number>;
+}
+
+export interface QolScoresAllResponse {
+  definition_id: string;
+  scale_min: number;
+  scale_max: number;
+  calibrated_to: string;
+  scores: Record<string, QolScoresByCountry>;
+}
+
 // ============================================
 // API Client
 // ============================================
@@ -517,11 +533,12 @@ export const simulationAPI = {
    * POST /api/simulate/v31/temporal
    */
   runTemporalSimulation: async (
-    country: string,
+    country: string | null,
     interventions: Intervention[],
     horizonYears: number = 5,
     baseYear?: number,
-    viewType: 'country' | 'stratified' | 'unified' = 'country',
+    viewType: 'country' | 'stratified' | 'unified' | 'regional' = 'country',
+    region?: string,
     signal?: AbortSignal
   ): Promise<TemporalResults> => {
     // Map frontend field names to V3.1 API field names
@@ -537,6 +554,7 @@ export const simulationAPI = {
       signal,
       body: JSON.stringify({
         country,
+        ...(region ? { region } : {}),
         interventions: apiInterventions,
         base_year: baseYear ?? INTERVENTION_YEAR_MAX,
         horizon_years: horizonYears,
@@ -996,6 +1014,22 @@ export const simulationAPI = {
         throw new Error(`Invalid year: ${year}`);
       }
       throw new Error(`Failed to fetch stratum distribution: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  // ============================================
+  // Map QOL Scores Endpoints
+  // ============================================
+
+  /**
+   * Get QOL (gap_index) scores for all countries across all years.
+   * GET /api/map/qol-scores/all
+   */
+  getQolScoresAll: async (signal?: AbortSignal): Promise<QolScoresAllResponse> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/map/qol-scores/all`, { signal });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch QOL scores: ${res.status}`);
     }
     return res.json();
   }

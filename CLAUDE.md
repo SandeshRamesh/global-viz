@@ -122,9 +122,9 @@ Phase 2 complete 2026-02-18. Phase 3 sim polish complete 2026-02-19. Phase 4 sim
 ### Pre-Launch (remaining)
 
 2. ~~**Pre-built scenario library**~~ — **DONE** (2026-02-20)
-3. **Export suite** — PNG screenshot, CSV results, shareable URL with encoded state (NOT STARTED)
+3. ~~**Export suite**~~ — **DONE** (2026-03-01): PNG screenshot, CSV results, shareable URL with encoded state
 
-### Launch Features
+### Launch Features (current)
 
 4. **2D + Globe map integration** — choropleth world map + 3D globe showing country-level simulation results geographically
 5. **Regional views** — aggregate results by region (Sub-Saharan Africa, SE Asia, etc.)

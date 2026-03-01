@@ -28,6 +28,7 @@ from .routers import (
     health_router
 )
 from .routers.temporal import router as temporal_router
+from .routers.map import router as map_router
 from .middleware.rate_limiter import rate_limit_middleware
 from .middleware.logger import log_requests_middleware
 from .services import graph_service, indicator_service
@@ -165,6 +166,7 @@ app.include_router(graphs_router, prefix="/api")
 app.include_router(simulation_router, prefix="/api")
 app.include_router(indicators_router, prefix="/api")
 app.include_router(temporal_router)  # V3.1 temporal data (has own /api/temporal prefix)
+app.include_router(map_router, prefix="/api")  # Map QOL scores for choropleth
 
 
 # Root endpoint

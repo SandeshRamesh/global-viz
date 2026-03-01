@@ -33,7 +33,7 @@ from .propagation_v31 import (
     get_top_effects,
     apply_saturation
 )
-from .simulation_runner_v31 import load_baseline_values, load_precomputed_baseline, BASELINE_DIR
+from .simulation_runner_v31 import load_baseline_values, load_precomputed_baseline, BASELINE_DIR, _compute_qol_delta
 from .indicator_stats import (
     get_country_indicator_stats,
     get_stratum_indicator_stats,
@@ -1050,6 +1050,18 @@ def run_temporal_simulation_v31(
                 }
             }
         }
+
+        # Compute QoL timeline
+        try:
+            qol_timeline: Dict = {}
+            for year, sim_values in result['timeline'].items():
+                qol = _compute_qol_delta(baseline, sim_values)
+                if qol is not None:
+                    qol_timeline[year] = qol
+            if qol_timeline:
+                response['qol_timeline'] = qol_timeline
+        except Exception:
+            pass  # QoL is non-critical
 
         # Include all warnings (graph fallbacks + risk + stress)
         if warnings:

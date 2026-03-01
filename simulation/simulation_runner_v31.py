@@ -30,11 +30,79 @@ from .propagation_v31 import (
     get_top_effects,
     get_top_percent_effects
 )
+from .qol_definition import compute_qol, load_indicator_metadata
 
 # Project paths
 DATA_ROOT = Path(__file__).parent.parent / "data"
 PANEL_PATH = DATA_ROOT / "raw" / "v21_panel_data_for_v3.parquet"
 BASELINE_DIR = DATA_ROOT / "v31" / "baselines"
+METADATA_DIR = DATA_ROOT / "v31" / "metadata"
+
+# Module-level QoL computation cache
+_qol_metadata: Optional[Dict] = None
+_qol_norm_stats: Optional[Dict] = None
+_qol_calibration: Optional[Dict] = None
+_qol_direction_overrides: Optional[Dict] = None
+
+
+def _get_qol_assets() -> tuple:
+    """Load and cache QoL computation assets (metadata, norm_stats, calibration, directions)."""
+    global _qol_metadata, _qol_norm_stats, _qol_calibration, _qol_direction_overrides
+
+    if _qol_metadata is None:
+        _qol_metadata = load_indicator_metadata(
+            DATA_ROOT / "raw" / "v21_nodes.csv",
+            METADATA_DIR / "indicator_properties.json",
+        )
+    if _qol_norm_stats is None:
+        norm_path = METADATA_DIR / "qol_normalization_stats_v1.json"
+        if norm_path.exists():
+            with open(norm_path) as f:
+                _qol_norm_stats = json.load(f)
+        else:
+            _qol_norm_stats = {}
+    if _qol_calibration is None:
+        cal_path = METADATA_DIR / "qol_calibration_v1.json"
+        if cal_path.exists():
+            with open(cal_path) as f:
+                _qol_calibration = json.load(f).get("calibration", {})
+        else:
+            _qol_calibration = {}
+    if _qol_direction_overrides is None:
+        dir_path = METADATA_DIR / "qol_direction_overrides_v1.json"
+        if dir_path.exists():
+            with open(dir_path) as f:
+                _qol_direction_overrides = json.load(f)
+        else:
+            _qol_direction_overrides = {}
+
+    return _qol_metadata, _qol_norm_stats, _qol_calibration, _qol_direction_overrides
+
+
+def _compute_qol_delta(
+    baseline_values: Dict[str, float],
+    simulated_values: Dict[str, float],
+) -> Optional[Dict[str, float]]:
+    """Compute QoL for baseline and simulated indicator sets, return delta."""
+    meta, norm_stats, calibration, dir_overrides = _get_qol_assets()
+    if not norm_stats or not calibration or not calibration.get("breakpoints"):
+        return None
+
+    base_qol = compute_qol(baseline_values, meta, norm_stats, calibration, dir_overrides)
+    if base_qol is None:
+        return None
+
+    sim_qol = compute_qol(simulated_values, meta, norm_stats, calibration, dir_overrides)
+    if sim_qol is None:
+        return None
+
+    return {
+        "baseline": round(base_qol["calibrated"], 4),
+        "simulated": round(sim_qol["calibrated"], 4),
+        "delta": round(sim_qol["calibrated"] - base_qol["calibrated"], 4),
+        "n_indicators": base_qol["n_indicators"],
+        "n_domains": base_qol["n_domains"],
+    }
 
 # Type definitions
 ViewType = Literal['country', 'stratified', 'unified', 'regional']
@@ -476,6 +544,14 @@ def run_simulation_v31(
             },
             'warnings': warnings or None,
         }
+
+        # Compute QoL delta
+        try:
+            qol = _compute_qol_delta(baseline, result['values'])
+            if qol is not None:
+                response['qol'] = qol
+        except Exception:
+            pass  # QoL is non-critical; don't fail the simulation
 
         # Add ensemble stats if applicable
         if is_ensemble:

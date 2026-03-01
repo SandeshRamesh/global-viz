@@ -19,6 +19,7 @@ import type {
 import { ViewTabs } from './components/ViewTabs'
 import { StrataTabs } from './components/StrataTabs'
 import { LocalView } from './components/LocalView'
+import { WorldMap } from './components/WorldMap'
 import { CountrySelector, SimulationPanel, TimelinePlayer, DataQualityPanel } from './components/simulation'
 import { useSimulationStore, useIsPanelOpen } from './stores/simulationStore'
 import { simulationAPI, type CountryGraphEdge } from './services/api'
@@ -314,7 +315,11 @@ function App() {
     setLayoutReady,
     highlightedIndicator,
     setHighlightedIndicator,
-    clearResults
+    clearResults,
+    mapForeground,
+    qolScores,
+    loadQolScores,
+    classificationsCache
   } = useSimulationStore()
   const isPanelOpen = useIsPanelOpen()
 
@@ -353,10 +358,18 @@ function App() {
     }
   }, [temporalResults])
 
+  // Current year derived from timeline (for WorldMap and other components)
+  const mapCurrentYear = temporalShapTimeline?.years?.[currentYearIndex] ?? 2020
+
   // Load all classifications once at startup (cached for other features)
   useEffect(() => {
     loadAllClassifications()
   }, [loadAllClassifications])
+
+  // Load QOL scores for world map background layer
+  useEffect(() => {
+    loadQolScores()
+  }, [loadQolScores])
 
   // Cleanup any pending layout-ready timer on unmount
   useEffect(() => {
@@ -2017,6 +2030,9 @@ function App() {
         if (localViewTargets.length > 0 || localViewSimMode) {
           setViewMode('split')
         }
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault()
+        useSimulationStore.getState().toggleMapForeground()
       }
     }
 
@@ -4922,7 +4938,18 @@ function App() {
   }, [visibleNodes, expandedNodes, viewMode, splitRatio])
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#fafafa' }}>
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#fafafa', position: 'relative' }}>
+      {/* World Map - background choropleth layer */}
+      <WorldMap
+        foreground={mapForeground}
+        qolScores={qolScores}
+        currentYear={mapCurrentYear}
+        selectedStratum={selectedStratum}
+        classificationsCache={classificationsCache}
+        // TODO: Wire simAdjustments from temporal simulation qol_timeline
+        // once backend returns per-country QoL deltas in temporal sim results
+      />
+
       {/* Left Sidebar - Responsive flex container */}
       <div
         className="left-sidebar"
@@ -5306,7 +5333,10 @@ function App() {
           height: '100%',
           position: 'absolute',
           top: 0,
-          left: 0
+          left: 0,
+          opacity: mapForeground ? 0.12 : 1,
+          transition: 'opacity 0.3s ease',
+          background: mapForeground ? 'transparent' : undefined
         }}
       >
         {/* Global View */}
