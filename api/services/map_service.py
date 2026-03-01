@@ -23,6 +23,8 @@ class MapService:
     def __init__(self) -> None:
         self._qol_cache: Optional[dict] = None
         self._qol_meta: Optional[dict] = None
+        self._qol_year_min: Optional[int] = None
+        self._qol_year_max: Optional[int] = None
         self._gap_cache: Optional[dict] = None
 
     # ---- QoL V1 (precomputed, HDI-calibrated) ----
@@ -39,6 +41,8 @@ class MapService:
             logger.error("Failed to load QoL scores from %s: %s", QOL_SCORES_PATH, e)
             self._qol_cache = {}
             self._qol_meta = {}
+            self._qol_year_min = None
+            self._qol_year_max = None
             return
 
         self._qol_meta = {
@@ -46,6 +50,22 @@ class MapService:
             "calibration": data.get("calibration", {}),
         }
         self._qol_cache = data.get("scores", {})
+        years = []
+        for country_data in self._qol_cache.values():
+            by_year = country_data.get("by_year", {})
+            for year_str in by_year.keys():
+                try:
+                    years.append(int(year_str))
+                except (TypeError, ValueError):
+                    continue
+        if years:
+            self._qol_year_min = min(years)
+            self._qol_year_max = max(years)
+            self._qol_meta["year_min"] = self._qol_year_min
+            self._qol_meta["year_max"] = self._qol_year_max
+        else:
+            self._qol_year_min = None
+            self._qol_year_max = None
         logger.info("Loaded QoL V1 scores for %d countries", len(self._qol_cache))
 
     def get_qol_metadata(self) -> dict:

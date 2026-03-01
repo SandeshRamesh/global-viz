@@ -358,8 +358,30 @@ function App() {
     }
   }, [temporalResults])
 
-  // Current year derived from timeline (for WorldMap and other components)
-  const mapCurrentYear = temporalShapTimeline?.years?.[currentYearIndex] ?? 2020
+  // Current year derived from active playback source (historical SHAP vs simulation timeline)
+  const mapCurrentYear = useMemo(() => {
+    if (playbackMode === 'simulation' && temporalResults) {
+      return temporalResults.base_year + currentYearIndex
+    }
+    if (selectedStratum !== 'unified' && stratifiedShapTimeline?.years?.[currentYearIndex] !== undefined) {
+      return stratifiedShapTimeline.years[currentYearIndex]
+    }
+    return temporalShapTimeline?.years?.[currentYearIndex] ?? 2020
+  }, [playbackMode, temporalResults, currentYearIndex, selectedStratum, stratifiedShapTimeline, temporalShapTimeline])
+
+  // Apply simulation QoL delta to selected country on the map during simulation playback.
+  const mapSimAdjustments = useMemo(() => {
+    if (playbackMode !== 'simulation' || !temporalResults?.qol_timeline || !selectedCountry || !classificationsCache) {
+      return undefined
+    }
+    const qolYear = temporalResults.qol_timeline[String(mapCurrentYear)]
+    if (!qolYear) return undefined
+
+    const iso3 = classificationsCache.classifications[selectedCountry]?.iso3
+    if (!iso3) return undefined
+
+    return { [iso3]: qolYear.delta }
+  }, [playbackMode, temporalResults, selectedCountry, classificationsCache, mapCurrentYear])
 
   // Load all classifications once at startup (cached for other features)
   useEffect(() => {
@@ -4946,8 +4968,7 @@ function App() {
         currentYear={mapCurrentYear}
         selectedStratum={selectedStratum}
         classificationsCache={classificationsCache}
-        // TODO: Wire simAdjustments from temporal simulation qol_timeline
-        // once backend returns per-country QoL deltas in temporal sim results
+        simAdjustments={mapSimAdjustments}
       />
 
       {/* Left Sidebar - Responsive flex container */}

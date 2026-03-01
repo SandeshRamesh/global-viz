@@ -6,7 +6,7 @@ from leaf-level indicator values. All core functions are pure (no I/O);
 only `load_indicator_metadata()` reads files.
 
 Score pipeline:
-  raw values → z-score normalize (flip negatives) → domain means → overall mean → HDI calibration
+  raw values → min-max normalize (flip negatives) → domain means → overall mean → HDI calibration
 
 DEFINITION_ID tracks the scoring version so cached scores can be invalidated
 when the methodology changes.
@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, TypedDict
 
 
-DEFINITION_ID = "qol_v1_hdi_calibrated"
+DEFINITION_ID = "qol_v2_minmax_hdi_calibrated"
 
 
 class IndicatorMeta(TypedDict):
@@ -28,8 +28,8 @@ class IndicatorMeta(TypedDict):
 
 
 class NormStats(TypedDict):
-    mean: float
-    std: float
+    min: float
+    max: float
     n: int
 
 
@@ -90,18 +90,18 @@ def compute_normalization_stats(
     all_baselines: Dict[str, Dict[str, Dict[str, float]]],
 ) -> Dict[str, NormStats]:
     """
-    Compute per-indicator mean and std across all country-years.
+    Compute per-indicator min/max across all country-years.
 
     Args:
         all_baselines: { country: { year: { indicator_id: value } } }
 
     Returns:
-        { indicator_id: { mean, std, n } }
+        { indicator_id: { min, max, n } }
     """
-    # Accumulate running sums for Welford's online algorithm
+    # Track observed ranges and counts
     count: Dict[str, int] = {}
-    mean_acc: Dict[str, float] = {}
-    m2_acc: Dict[str, float] = {}
+    min_acc: Dict[str, float] = {}
+    max_acc: Dict[str, float] = {}
 
     for country_years in all_baselines.values():
         for year_values in country_years.values():
@@ -109,21 +109,21 @@ def compute_normalization_stats(
                 if value is None or (isinstance(value, float) and math.isnan(value)):
                     continue
                 val = float(value)
-                n = count.get(ind_id, 0) + 1
-                count[ind_id] = n
-                old_mean = mean_acc.get(ind_id, 0.0)
-                new_mean = old_mean + (val - old_mean) / n
-                mean_acc[ind_id] = new_mean
-                m2_acc[ind_id] = m2_acc.get(ind_id, 0.0) + (val - old_mean) * (val - new_mean)
+                count[ind_id] = count.get(ind_id, 0) + 1
+                prev_min = min_acc.get(ind_id)
+                prev_max = max_acc.get(ind_id)
+                min_acc[ind_id] = val if prev_min is None else min(prev_min, val)
+                max_acc[ind_id] = val if prev_max is None else max(prev_max, val)
 
     result: Dict[str, NormStats] = {}
     for ind_id, n in count.items():
-        if n < 2:
+        min_val = min_acc.get(ind_id)
+        max_val = max_acc.get(ind_id)
+        if n < 2 or min_val is None or max_val is None:
             continue
-        std = math.sqrt(m2_acc[ind_id] / (n - 1))
-        if std < 1e-12:
-            std = 1e-12
-        result[ind_id] = {"mean": mean_acc[ind_id], "std": std, "n": n}
+        if abs(max_val - min_val) < 1e-12:
+            continue
+        result[ind_id] = {"min": min_val, "max": max_val, "n": n}
 
     return result
 
@@ -136,7 +136,7 @@ def normalize_indicator(
     direction_overrides: Optional[Dict[str, str]] = None,
 ) -> Optional[float]:
     """
-    Z-score normalize a single indicator value, inverting sign for
+    Min-max normalize a single indicator value to [0, 1], inverting for
     negative-direction indicators so that higher = better for all.
 
     If direction_overrides is provided, it takes precedence over metadata
@@ -149,7 +149,15 @@ def normalize_indicator(
     if stats is None:
         return None
 
-    z = (value - stats["mean"]) / stats["std"]
+    min_val = stats["min"]
+    max_val = stats["max"]
+    span = max_val - min_val
+    if span < 1e-12:
+        return None
+
+    normalized = (value - min_val) / span
+    # Clamp to avoid extreme outliers pushing values outside [0,1]
+    normalized = max(0.0, min(1.0, normalized))
 
     # Check override first, then metadata
     direction = None
@@ -161,9 +169,9 @@ def normalize_indicator(
             direction = meta["direction"]
 
     if direction == "negative":
-        z = -z
+        normalized = 1.0 - normalized
 
-    return z
+    return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -200,12 +208,12 @@ def compute_raw_qol(
         if value is None or (isinstance(value, float) and math.isnan(value)):
             continue
 
-        z = normalize_indicator(float(value), ind_id, norm_stats, metadata, direction_overrides)
-        if z is None:
+        normalized = normalize_indicator(float(value), ind_id, norm_stats, metadata, direction_overrides)
+        if normalized is None:
             continue
 
         domain = meta["domain"]
-        domain_scores.setdefault(domain, []).append(z)
+        domain_scores.setdefault(domain, []).append(normalized)
         n_indicators += 1
 
     if len(domain_scores) < 3:

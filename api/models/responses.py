@@ -180,6 +180,15 @@ class EffectDetailV31(BaseModel):
     std: Optional[float] = Field(None, description="Standard deviation (if ensemble)")
 
 
+class QoLDelta(BaseModel):
+    """QoL summary for baseline vs simulated state."""
+    baseline: float = Field(..., description="Baseline QoL score")
+    simulated: float = Field(..., description="Simulated QoL score")
+    delta: float = Field(..., description="Simulated - baseline QoL score")
+    n_indicators: int = Field(..., description="Number of indicators used in QoL computation")
+    n_domains: int = Field(..., description="Number of domains used in QoL computation")
+
+
 class SimulationResponseV31(BaseModel):
     """
     Response for POST /api/simulate/v31.
@@ -210,6 +219,9 @@ class SimulationResponseV31(BaseModel):
     )
     ensemble: Optional[EnsembleStats] = Field(
         None, description="Ensemble statistics (if n_ensemble_runs > 0)"
+    )
+    qol: Optional[QoLDelta] = Field(
+        None, description="QoL baseline/simulated/delta summary for this simulation"
     )
     warnings: Optional[List[str]] = Field(
         None, description="Adaptive-year and fallback warnings"
@@ -267,6 +279,10 @@ class TemporalSimulationResponseV31(BaseModel):
     simulation_stress_score: Optional[float] = Field(
         None,
         description="Fraction of effects hitting saturation or ±2σ clamp (0=relaxed, 1=all clamped)"
+    )
+    qol_timeline: Optional[Dict[int, QoLDelta]] = Field(
+        None,
+        description="QoL baseline/simulated/delta by year for temporal simulations"
     )
     warnings: Optional[List[str]] = Field(
         None, description="Warnings about graph fallbacks, missing data, risk flags, etc."

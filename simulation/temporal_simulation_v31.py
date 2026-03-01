@@ -1055,9 +1055,46 @@ def run_temporal_simulation_v31(
         try:
             qol_timeline: Dict = {}
             for year, sim_values in result['timeline'].items():
-                qol = _compute_qol_delta(baseline, sim_values)
+                year_int = int(year)
+                baseline_for_year = baseline
+
+                if view_type == 'stratified':
+                    stratum_year = get_stratum_for_country(country, year_int) if country else None
+                    if stratum_year:
+                        loaded = load_precomputed_baseline(
+                            country=f"stratified/{stratum_year}",
+                            year=year_int,
+                        )
+                        if loaded:
+                            baseline_for_year = loaded
+                elif view_type == 'unified':
+                    loaded = load_precomputed_baseline(
+                        country="unified",
+                        year=year_int,
+                    )
+                    if loaded:
+                        baseline_for_year = loaded
+                elif view_type == 'regional':
+                    region_year = region_used or (get_region_for_country(country) if country else None)
+                    if region_year:
+                        loaded = load_precomputed_baseline(
+                            country=f"regional/{region_year}",
+                            year=year_int,
+                        )
+                        if loaded:
+                            baseline_for_year = loaded
+                elif country:
+                    loaded = load_precomputed_baseline(country, year_int)
+                    if loaded:
+                        baseline_for_year = loaded
+                    else:
+                        loaded_fallback, _, _ = load_baseline_values(country, year_int, panel_path)
+                        if loaded_fallback:
+                            baseline_for_year = loaded_fallback
+
+                qol = _compute_qol_delta(baseline_for_year, sim_values, year_int)
                 if qol is not None:
-                    qol_timeline[year] = qol
+                    qol_timeline[year_int] = qol
             if qol_timeline:
                 response['qol_timeline'] = qol_timeline
         except Exception:

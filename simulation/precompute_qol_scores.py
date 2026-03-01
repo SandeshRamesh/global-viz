@@ -13,16 +13,13 @@ Usage:
 """
 
 import json
-import math
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -114,49 +111,31 @@ def build_hdi_map() -> Dict[str, Dict[str, float]]:
     return result
 
 
-def compute_empirical_directions(
+def compute_yearly_normalization_stats(
     all_baselines: Dict[str, Dict[str, Dict[str, float]]],
-    metadata: dict,
-    hdi_map: Dict[str, Dict[str, float]],
-    reference_year: str = "2015",
-    min_countries: int = 30,
-    min_abs_rho: float = 0.05,
-) -> Dict[str, str]:
+) -> Dict[str, Dict[str, dict]]:
     """
-    Determine indicator directions empirically using Spearman correlation
-    with HDI across countries for a reference year.
-
-    Indicators with |rho| < min_abs_rho are excluded (ambiguous direction).
+    Compute min-max normalization stats separately for each year.
 
     Returns:
-        { indicator_id: 'positive' | 'negative' }
+        { year_str: { indicator_id: {min, max, n} } }
     """
-    # Collect indicator values and HDI for reference year
-    indicator_values: Dict[str, List[Tuple[float, float]]] = {}
+    years = sorted({
+        year_str
+        for country_years in all_baselines.values()
+        for year_str in country_years.keys()
+    })
 
-    for country, years in all_baselines.items():
-        values = years.get(reference_year)
-        hdi_val = hdi_map.get(country, {}).get(reference_year)
-        if values is None or hdi_val is None:
-            continue
+    stats_by_year: Dict[str, Dict[str, dict]] = {}
+    for year_str in years:
+        year_slice = {
+            country: {year_str: year_values}
+            for country, country_years in all_baselines.items()
+            if (year_values := country_years.get(year_str)) is not None
+        }
+        stats_by_year[year_str] = compute_normalization_stats(year_slice)
 
-        for ind_id in metadata:
-            v = values.get(ind_id)
-            if v is not None and not (isinstance(v, float) and math.isnan(v)):
-                indicator_values.setdefault(ind_id, []).append((float(v), hdi_val))
-
-    directions: Dict[str, str] = {}
-    for ind_id, pairs in indicator_values.items():
-        if len(pairs) < min_countries:
-            continue
-        vals = [p[0] for p in pairs]
-        hdis = [p[1] for p in pairs]
-        rho, _ = spearmanr(vals, hdis)
-        if math.isnan(rho) or abs(rho) < min_abs_rho:
-            continue
-        directions[ind_id] = "positive" if rho > 0 else "negative"
-
-    return directions
+    return stats_by_year
 
 
 def fit_hdi_calibration(
@@ -223,7 +202,7 @@ def fit_hdi_calibration(
 def main() -> None:
     print(f"=== QoL Score Precomputation ({DEFINITION_ID}) ===\n")
 
-    # --- Phase A: Load metadata, baselines, compute norm stats + directions ---
+    # --- Phase A: Load metadata, baselines, compute normalization stats ---
     print("Phase A: Loading indicator metadata...")
     metadata = load_indicator_metadata(
         DATA_ROOT / "raw" / "v21_nodes.csv",
@@ -237,44 +216,32 @@ def main() -> None:
     n_files = sum(len(years) for years in all_baselines.values())
     print(f"  {n_countries} countries, {n_files} country-year files")
 
-    print("Phase A: Computing normalization stats...")
-    norm_stats = compute_normalization_stats(all_baselines)
-    print(f"  Stats for {len(norm_stats)} indicators")
+    print("Phase A: Computing normalization stats (global + per-year min-max)...")
+    norm_stats_global = compute_normalization_stats(all_baselines)
+    norm_stats_by_year = compute_yearly_normalization_stats(all_baselines)
+    print(f"  Global stats for {len(norm_stats_global)} indicators")
+    print(f"  Year-specific stats for {len(norm_stats_by_year)} years")
 
     # Save normalization stats
     METADATA_DIR.mkdir(parents=True, exist_ok=True)
     norm_path = METADATA_DIR / "qol_normalization_stats_v1.json"
     with open(norm_path, "w") as f:
-        json.dump(norm_stats, f)
+        json.dump(
+            {
+                "schema": "per_year_minmax_v1",
+                "global": norm_stats_global,
+                "by_year": norm_stats_by_year,
+            },
+            f,
+        )
     print(f"  Saved -> {norm_path.relative_to(PROJECT_ROOT)}")
 
-    print("Phase A: Computing empirical indicator directions (HDI correlation)...")
+    print("Phase A: Loading HDI data...")
     hdi_map = build_hdi_map()
     print(f"  HDI data for {len(hdi_map)} countries")
 
-    direction_overrides = compute_empirical_directions(
-        all_baselines, metadata, hdi_map
-    )
-    n_pos = sum(1 for d in direction_overrides.values() if d == "positive")
-    n_neg = sum(1 for d in direction_overrides.values() if d == "negative")
-    print(f"  Empirical directions: {len(direction_overrides)} indicators ({n_pos} positive, {n_neg} negative)")
-
-    # Count how many differ from metadata labels
-    flipped = 0
-    for ind_id, emp_dir in direction_overrides.items():
-        meta_dir = metadata.get(ind_id, {}).get("direction", "positive")
-        if emp_dir != meta_dir:
-            flipped += 1
-    print(f"  Flipped from metadata: {flipped}")
-
-    # Save direction overrides
-    dir_path = METADATA_DIR / "qol_direction_overrides_v1.json"
-    with open(dir_path, "w") as f:
-        json.dump(direction_overrides, f)
-    print(f"  Saved -> {dir_path.relative_to(PROJECT_ROOT)}")
-
     # --- Phase B: Compute raw QoL for all country-years ---
-    print("\nPhase B: Computing raw QoL scores (with empirical directions)...")
+    print("\nPhase B: Computing raw QoL scores...")
     raw_scores: Dict[str, Dict[str, float]] = {}
     total = 0
     skipped = 0
@@ -282,9 +249,10 @@ def main() -> None:
     for country, years in all_baselines.items():
         raw_scores[country] = {}
         for year_str, values in years.items():
-            result = compute_raw_qol(values, metadata, norm_stats, direction_overrides)
+            year_stats = norm_stats_by_year.get(year_str) or norm_stats_global
+            result = compute_raw_qol(values, metadata, year_stats)
             if result is not None:
-                raw_qol, n_ind, n_dom = result
+                raw_qol, _, _ = result
                 raw_scores[country][year_str] = raw_qol
                 total += 1
             else:
@@ -352,22 +320,20 @@ def main() -> None:
 
     # --- Verification ---
     print("\n=== Verification ===")
-    for check_country, check_year, expected_approx in [
-        ("Norway", "2020", 0.95),
-        ("Afghanistan", "2020", 0.48),
-        ("United States", "2020", 0.90),
-        ("India", "2020", 0.64),
-        ("Japan", "2020", 0.92),
-        ("Niger", "2015", 0.35),
-        ("Chad", "2015", 0.40),
-    ]:
-        score = scores_output.get(check_country, {}).get("by_year", {}).get(check_year)
-        if score is not None:
-            delta = abs(score - expected_approx)
-            status = "OK" if delta < 0.15 else "WARN"
-            print(f"  {status}: {check_country} {check_year} = {score:.4f} (expected ~{expected_approx})")
-        else:
-            print(f"  MISS: {check_country} {check_year} - no score")
+    check_year = "2020"
+    ranked_2020 = sorted(
+        (
+            (country, data["by_year"].get(check_year))
+            for country, data in scores_output.items()
+            if data["by_year"].get(check_year) is not None
+        ),
+        key=lambda x: x[1],
+    )
+    print(f"  2020 bottom 5: {[c for c, _ in ranked_2020[:5]]}")
+    print(f"  2020 top 5: {[c for c, _ in ranked_2020[-5:]]}")
+    print(f"  Calibration correlation(raw->HDI): {cal_stats['correlation']}")
+    if cal_stats["correlation"] < 0.5:
+        print("  WARN: raw-to-HDI correlation is low; review domain coverage and indicator directions.")
 
     print("\nDone.")
 

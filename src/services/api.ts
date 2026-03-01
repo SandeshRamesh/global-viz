@@ -142,6 +142,15 @@ export interface TemporalEffect {
   percent_change: number;
 }
 
+/** QoL delta summary (baseline vs simulated). */
+export interface QolDelta {
+  baseline: number;
+  simulated: number;
+  delta: number;
+  n_indicators: number;
+  n_domains: number;
+}
+
 /** Causal path entry for a single affected indicator */
 export interface CausalPathEntry {
   /** Distance from intervention node (0=intervention, 1=direct effect, etc.) */
@@ -168,6 +177,7 @@ export interface TemporalResults {
   causal_paths?: Record<string, CausalPathEntry>;
   affected_per_year: Record<string, number>;
   graphs_used: Record<string, string>;
+  qol_timeline?: Record<string, QolDelta>;
   warnings?: string[];
   metadata: Record<string, unknown>;
 }
@@ -356,6 +366,18 @@ export interface IncomeClassification {
   gni_per_capita: number | null;
 }
 
+/** Raw yearly classification payload used by /api/temporal/classifications */
+export interface ClassificationByYear {
+  classification_4tier: string;
+  classification_3tier: string;
+  gni_per_capita: number | null;
+}
+
+export interface CountryClassifications {
+  iso3: string;
+  by_year: Record<string, ClassificationByYear>;
+}
+
 /** Response from GET /api/temporal/classifications/{year} */
 export interface StratumCounts {
   year: number;
@@ -366,7 +388,7 @@ export interface StratumCounts {
 /** Response from GET /api/temporal/classifications (all years) */
 export interface AllClassifications {
   total_countries: number;
-  classifications: Record<string, Record<string, IncomeClassification>>;  // { countryName: { year: classification } }
+  classifications: Record<string, CountryClassifications>;
 }
 
 /** Available strata info */
@@ -465,6 +487,8 @@ export interface QolScoresByCountry {
 
 export interface QolScoresAllResponse {
   definition_id: string;
+  year_min?: number;
+  year_max?: number;
   scale_min: number;
   scale_max: number;
   calibrated_to: string;
@@ -1023,7 +1047,7 @@ export const simulationAPI = {
   // ============================================
 
   /**
-   * Get QOL (gap_index) scores for all countries across all years.
+   * Get precomputed QoL scores for all countries across all years.
    * GET /api/map/qol-scores/all
    */
   getQolScoresAll: async (signal?: AbortSignal): Promise<QolScoresAllResponse> => {

@@ -86,11 +86,9 @@ function buildStratumIso3s(
   // The classification_3tier values are "Developing", "Emerging", "Advanced"
   const targetLabel = stratum.charAt(0).toUpperCase() + stratum.slice(1) // e.g. "developing" → "Developing"
   for (const [, countryData] of Object.entries(classifications.classifications)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cd = countryData as any
-    const iso3 = cd.iso3 as string | undefined
+    const iso3 = countryData.iso3
     if (!iso3) continue
-    const yearInfo = cd.by_year?.[yearStr]
+    const yearInfo = countryData.by_year?.[yearStr]
     if (yearInfo?.classification_3tier === targetLabel) {
       allowed.add(iso3)
     }
@@ -113,7 +111,8 @@ function buildYearMap(
     const value = data.by_year[yearStr]
     if (value != null) {
       const adj = simAdjustments?.[data.iso3] ?? 0
-      map.set(data.iso3, value + adj)
+      const adjusted = value + adj
+      map.set(data.iso3, Math.max(0, Math.min(1, adjusted)))
     }
   }
   return map

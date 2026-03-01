@@ -2,7 +2,7 @@
 Map Router — QoL V1 score endpoints for choropleth world map.
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from ..services.map_service import map_service
 
@@ -10,17 +10,27 @@ router = APIRouter(prefix="/map", tags=["map"])
 
 
 @router.get("/qol-scores")
-async def get_qol_scores(year: int = Query(2020, ge=1990, le=2024)):
+async def get_qol_scores(year: int = Query(2020)):
     """
     Get QoL V1 (HDI-calibrated) scores for all countries in a given year.
 
     Returns { year, definition_id, scale_min, scale_max, scores: { country: { qol, iso3 } } }
     """
-    scores = map_service.get_scores_for_year(year)
     meta = map_service.get_qol_metadata()
+    year_min = meta.get("year_min")
+    year_max = meta.get("year_max")
+    if year_min is not None and year_max is not None and not (year_min <= year <= year_max):
+        raise HTTPException(
+            status_code=400,
+            detail=f"year must be between {year_min} and {year_max} for precomputed QoL scores"
+        )
+
+    scores = map_service.get_scores_for_year(year)
     return {
         "year": year,
         "definition_id": meta.get("definition_id", "unknown"),
+        "year_min": year_min,
+        "year_max": year_max,
         "scale_min": 0,
         "scale_max": 1,
         "calibrated_to": "undp_hdi",
@@ -39,6 +49,8 @@ async def get_qol_scores_all():
     meta = map_service.get_qol_metadata()
     return {
         "definition_id": meta.get("definition_id", "unknown"),
+        "year_min": meta.get("year_min"),
+        "year_max": meta.get("year_max"),
         "scale_min": 0,
         "scale_max": 1,
         "calibrated_to": "undp_hdi",

@@ -42,12 +42,11 @@ METADATA_DIR = DATA_ROOT / "v31" / "metadata"
 _qol_metadata: Optional[Dict] = None
 _qol_norm_stats: Optional[Dict] = None
 _qol_calibration: Optional[Dict] = None
-_qol_direction_overrides: Optional[Dict] = None
 
 
 def _get_qol_assets() -> tuple:
-    """Load and cache QoL computation assets (metadata, norm_stats, calibration, directions)."""
-    global _qol_metadata, _qol_norm_stats, _qol_calibration, _qol_direction_overrides
+    """Load and cache QoL computation assets (metadata, norm_stats, calibration)."""
+    global _qol_metadata, _qol_norm_stats, _qol_calibration
 
     if _qol_metadata is None:
         _qol_metadata = load_indicator_metadata(
@@ -68,31 +67,43 @@ def _get_qol_assets() -> tuple:
                 _qol_calibration = json.load(f).get("calibration", {})
         else:
             _qol_calibration = {}
-    if _qol_direction_overrides is None:
-        dir_path = METADATA_DIR / "qol_direction_overrides_v1.json"
-        if dir_path.exists():
-            with open(dir_path) as f:
-                _qol_direction_overrides = json.load(f)
-        else:
-            _qol_direction_overrides = {}
 
-    return _qol_metadata, _qol_norm_stats, _qol_calibration, _qol_direction_overrides
+    return _qol_metadata, _qol_norm_stats, _qol_calibration
+
+
+def _get_norm_stats_for_year(norm_stats_asset: Dict, year: Optional[int]) -> Dict:
+    """Resolve per-year normalization stats with global fallback."""
+    if not norm_stats_asset:
+        return {}
+
+    # Backward compatibility: flat indicator->stats mapping
+    if "by_year" not in norm_stats_asset:
+        return norm_stats_asset
+
+    if year is not None:
+        year_stats = norm_stats_asset.get("by_year", {}).get(str(year))
+        if year_stats:
+            return year_stats
+
+    return norm_stats_asset.get("global", {})
 
 
 def _compute_qol_delta(
     baseline_values: Dict[str, float],
     simulated_values: Dict[str, float],
+    year: Optional[int] = None,
 ) -> Optional[Dict[str, float]]:
     """Compute QoL for baseline and simulated indicator sets, return delta."""
-    meta, norm_stats, calibration, dir_overrides = _get_qol_assets()
+    meta, norm_stats_asset, calibration = _get_qol_assets()
+    norm_stats = _get_norm_stats_for_year(norm_stats_asset, year)
     if not norm_stats or not calibration or not calibration.get("breakpoints"):
         return None
 
-    base_qol = compute_qol(baseline_values, meta, norm_stats, calibration, dir_overrides)
+    base_qol = compute_qol(baseline_values, meta, norm_stats, calibration)
     if base_qol is None:
         return None
 
-    sim_qol = compute_qol(simulated_values, meta, norm_stats, calibration, dir_overrides)
+    sim_qol = compute_qol(simulated_values, meta, norm_stats, calibration)
     if sim_qol is None:
         return None
 
@@ -547,7 +558,7 @@ def run_simulation_v31(
 
         # Compute QoL delta
         try:
-            qol = _compute_qol_delta(baseline, result['values'])
+            qol = _compute_qol_delta(baseline, result['values'], year_used or year)
             if qol is not None:
                 response['qol'] = qol
         except Exception:
