@@ -15,6 +15,7 @@ from .graph_loader_v31 import (
     build_adjacency_v31,
     get_available_years,
     get_available_countries,
+    get_available_regions,
     get_all_indicators,
     get_edge_statistics,
 )
@@ -32,6 +33,14 @@ from .regional_spillovers import (
     get_region_info,
     compute_regional_spillover,
     is_global_power,
+)
+from .region_mapping import (
+    get_country_region_map,
+    get_region_for_country,
+    get_countries_in_region,
+    get_all_region_keys,
+    get_region_metadata,
+    validate_region_mapping,
 )
 from .propagation_v31 import (
     propagate_intervention_v31,
@@ -59,6 +68,7 @@ __all__ = [
     'build_adjacency_v31',
     'get_available_years',
     'get_available_countries',
+    'get_available_regions',
     'get_all_indicators',
     'get_edge_statistics',
     # Income classification
@@ -74,6 +84,13 @@ __all__ = [
     'get_region_info',
     'compute_regional_spillover',
     'is_global_power',
+    # Region mapping
+    'get_country_region_map',
+    'get_region_for_country',
+    'get_countries_in_region',
+    'get_all_region_keys',
+    'get_region_metadata',
+    'validate_region_mapping',
     # Propagation
     'propagate_intervention_v31',
     'propagate_intervention_ensemble',

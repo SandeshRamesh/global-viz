@@ -25,6 +25,7 @@ import numpy as np
 from .graph_loader_v31 import load_temporal_graph, build_adjacency_v31
 from .income_classifier import get_country_classification, get_stratum_for_country
 from .regional_spillovers import compute_regional_spillover, get_region_info
+from .region_mapping import get_region_for_country
 from .propagation_v31 import (
     propagate_intervention_v31,
     propagate_intervention_ensemble,
@@ -36,6 +37,7 @@ from .simulation_runner_v31 import load_baseline_values, load_precomputed_baseli
 from .indicator_stats import (
     get_country_indicator_stats,
     get_stratum_indicator_stats,
+    get_regional_indicator_stats,
 )
 
 # Project paths
@@ -102,16 +104,17 @@ def _get_indicator_std(
 
 
 # Type definitions
-ViewType = Literal['country', 'stratified', 'unified']
+ViewType = Literal['country', 'stratified', 'unified', 'regional']
 
 
 def propagate_temporal_v31(
-    country: str,
+    country: Optional[str],
     intervention: Optional[Dict[str, float]] = None,
     baseline_values: Dict[str, float] = None,
     base_year: int = 2024,
     horizon_years: int = 10,
     view_type: ViewType = 'country',
+    region: Optional[str] = None,
     p_value_threshold: float = 0.05,
     use_nonlinear: bool = True,
     use_dynamic_graphs: bool = True,
@@ -119,6 +122,9 @@ def propagate_temporal_v31(
     max_iterations_per_year: int = 10,
     convergence_threshold: float = 0.001,
     debug: bool = False,
+    resample_edges: bool = False,
+    rng_seed: Optional[int] = None,
+    uncertainty_multiplier: float = 1.0,
 ) -> dict:
     """
     Propagate intervention across multiple years using year-specific graphs.
@@ -130,12 +136,13 @@ def propagate_temporal_v31(
     simulation) so effects cascade through the full graph, not just one hop.
 
     Args:
-        country: Country name
+        country: Country name (optional for unified/regional)
         intervention: {indicator: absolute_delta} — all applied at base_year (legacy)
         baseline_values: {indicator: baseline_value}
         base_year: Starting year (intervention year)
         horizon_years: Years to project forward
         view_type: Graph view type
+        region: Region key for regional view
         p_value_threshold: Edge significance filter
         use_nonlinear: Use marginal effects
         use_dynamic_graphs: Load year-specific graph for each year
@@ -150,6 +157,17 @@ def propagate_temporal_v31(
         - graphs_used: {year: view_type_used}
         - converged_years: List of years that converged
     """
+    rng = np.random.default_rng(rng_seed) if resample_edges else None
+
+    def _maybe_resample_beta(edge: dict, beta: float) -> float:
+        """Resample beta from edge std when ensemble mode is enabled."""
+        if rng is None or beta == 0:
+            return beta
+        edge_std = edge.get('std', 0.0) or 0.0
+        if edge_std <= 0:
+            return beta
+        return float(rng.normal(beta, edge_std * uncertainty_multiplier))
+
     timeline = {}
     deltas_timeline = {}
     graphs_used = {}
@@ -213,10 +231,12 @@ def propagate_temporal_v31(
 
     # Load temporal stats matching the simulation level
     if view_type == 'country':
-        country_stats = get_country_indicator_stats(country)
+        country_stats = get_country_indicator_stats(country) if country else {}
     elif view_type == 'stratified':
         stratum = get_stratum_for_country(country, base_year)
         country_stats = get_stratum_indicator_stats(stratum) if stratum else {}
+    elif view_type == 'regional':
+        country_stats = get_regional_indicator_stats(region) if region else {}
     else:  # unified
         # Use median temporal std across ALL countries (same approach as stratum)
         country_stats = get_stratum_indicator_stats('unified')
@@ -236,12 +256,16 @@ def propagate_temporal_v31(
             country=country,
             year=graph_year_base,
             view_type=view_type,
-            p_value_threshold=p_value_threshold
+            p_value_threshold=p_value_threshold,
+            region=region,
         )
         if base_graph is not None:
             base_adj = build_adjacency_v31(base_graph)
             view_used = base_graph.get('view_used', view_type)
             graphs_used[base_year] = view_used
+            for warn in base_graph.get('warnings') or []:
+                if warn not in warnings:
+                    warnings.append(warn)
             if view_used != view_type:
                 msg = f"Year {base_year}: requested '{view_type}', fell back to '{view_used}'"
                 warnings.append(msg)
@@ -281,6 +305,7 @@ def propagate_temporal_v31(
                         beta = edge.get('beta', 0)
                         if use_nonlinear and edge.get('marginal_effects'):
                             beta = edge['marginal_effects'].get('p50', beta)
+                        beta = _maybe_resample_beta(edge, beta)
                         if beta == 0:
                             continue
                         contribution = beta * inc_std
@@ -369,14 +394,16 @@ def propagate_temporal_v31(
                 country=country,
                 year=graph_year,
                 view_type=view_type,
-                p_value_threshold=p_value_threshold
+                p_value_threshold=p_value_threshold,
+                region=region,
             )
         else:
             graph = load_temporal_graph(
                 country=country,
                 year=base_year,
                 view_type=view_type,
-                p_value_threshold=p_value_threshold
+                p_value_threshold=p_value_threshold,
+                region=region,
             )
 
         if graph is None:
@@ -389,6 +416,9 @@ def propagate_temporal_v31(
 
         view_used = graph.get('view_used', view_type)
         graphs_used[actual_year] = view_used
+        for warn in graph.get('warnings') or []:
+            if warn not in warnings:
+                warnings.append(warn)
         if view_used != view_type:
             msg = f"Year {actual_year}: requested '{view_type}', fell back to '{view_used}'"
             warnings.append(msg)
@@ -449,6 +479,7 @@ def propagate_temporal_v31(
                     beta = edge['marginal_effects'].get('p50', edge.get('beta', 0))
                 else:
                     beta = edge.get('beta', 0)
+                beta = _maybe_resample_beta(edge, beta)
 
                 if beta == 0:
                     continue
@@ -509,6 +540,7 @@ def propagate_temporal_v31(
                         beta = edge['marginal_effects'].get('p50', edge.get('beta', 0))
                     else:
                         beta = edge.get('beta', 0)
+                    beta = _maybe_resample_beta(edge, beta)
 
                     if beta == 0:
                         continue
@@ -634,11 +666,12 @@ def propagate_temporal_v31(
 
 
 def run_temporal_simulation_v31(
-    country: str,
+    country: Optional[str],
     interventions: List[dict],
     base_year: int,
     horizon_years: int = 10,
     view_type: ViewType = 'country',
+    region: Optional[str] = None,
     p_value_threshold: float = 0.05,
     use_nonlinear: bool = True,
     use_dynamic_graphs: bool = True,
@@ -652,11 +685,12 @@ def run_temporal_simulation_v31(
     Run temporal simulation with year-by-year graphs.
 
     Args:
-        country: Country name
+        country: Country name (optional for unified/regional)
         interventions: List of {indicator: str, change_percent: float}
         base_year: Intervention year
         horizon_years: Years to project forward (1-30)
         view_type: Graph view type
+        region: Region key for regional view
         p_value_threshold: Edge significance filter
         use_nonlinear: Use marginal effects when available
         use_dynamic_graphs: Load year-specific graph for each projection year
@@ -669,6 +703,19 @@ def run_temporal_simulation_v31(
         Dict with timeline, effects per year, metadata
     """
     try:
+        region_used = region or (get_region_for_country(country) if country else None)
+
+        if view_type in ('country', 'stratified') and not country:
+            return {
+                'status': 'error',
+                'message': f"country is required for view_type='{view_type}'"
+            }
+        if view_type == 'regional' and not (region_used or country):
+            return {
+                'status': 'error',
+                'message': "region or country is required for view_type='regional'"
+            }
+
         # Load baseline — branch on view_type
         if view_type == 'stratified':
             stratum = get_stratum_for_country(country, base_year)
@@ -700,9 +747,32 @@ def run_temporal_simulation_v31(
                     'status': 'error',
                     'message': f"No unified baseline for {base_year}. Run precompute_strata_baselines.py."
                 }
+        elif view_type == 'regional':
+            if not region_used:
+                return {
+                    'status': 'error',
+                    'message': "Could not resolve region for regional simulation"
+                }
+            baseline = load_precomputed_baseline(
+                country=f"regional/{region_used}",
+                year=base_year,
+            )
+            year_used = base_year
+            percentiles = {}
+            if not baseline:
+                return {
+                    'status': 'error',
+                    'message': f"No regional baseline for '{region_used}' in {base_year}. Run precompute_regional_baselines.py."
+                }
         else:
             # Country-specific baseline
-            baseline, year_used, percentiles = load_baseline_values(country, base_year, panel_path)
+            baseline = load_precomputed_baseline(country, base_year)
+            year_used = base_year
+            percentiles = {}
+            if not baseline:
+                baseline, loaded_year, percentiles = load_baseline_values(country, base_year, panel_path)
+                if loaded_year is not None:
+                    year_used = int(loaded_year)
             if not baseline:
                 return {
                     'status': 'error',
@@ -754,19 +824,85 @@ def run_temporal_simulation_v31(
         # Ensure horizon covers from earliest intervention to latest + horizon_years
         effective_horizon = max(horizon_years, (max_intervention_year - effective_base_year) + horizon_years)
 
-        # Run temporal propagation (proper unit conversion, no arbitrary dampening)
-        result = propagate_temporal_v31(
-            country=country,
-            baseline_values=baseline,
-            base_year=effective_base_year,
-            horizon_years=effective_horizon,
-            view_type=view_type,
-            p_value_threshold=p_value_threshold,
-            use_nonlinear=use_nonlinear,
-            use_dynamic_graphs=use_dynamic_graphs,
-            interventions_by_year=dict(interventions_by_year),
-            debug=debug,
-        )
+        def _run_single_temporal(seed: Optional[int], resample_edges: bool) -> dict:
+            return propagate_temporal_v31(
+                country=country,
+                baseline_values=baseline,
+                base_year=effective_base_year,
+                horizon_years=effective_horizon,
+                view_type=view_type,
+                region=region_used,
+                p_value_threshold=p_value_threshold,
+                use_nonlinear=use_nonlinear,
+                use_dynamic_graphs=use_dynamic_graphs,
+                interventions_by_year=dict(interventions_by_year),
+                debug=debug,
+                resample_edges=resample_edges,
+                rng_seed=seed,
+                uncertainty_multiplier=1.0,
+            )
+
+        ensemble_runs: List[dict] = []
+        if n_ensemble_runs > 0:
+            for i in range(n_ensemble_runs):
+                ensemble_runs.append(_run_single_temporal(seed=42 + i, resample_edges=True))
+
+            # Aggregate timeline by median across runs.
+            timeline_median: Dict[int, Dict[str, float]] = {}
+            all_years = sorted({
+                y for run in ensemble_runs for y in run.get('timeline', {}).keys()
+            })
+            for y in all_years:
+                by_indicator: Dict[str, List[float]] = defaultdict(list)
+                for run in ensemble_runs:
+                    for ind, val in run.get('timeline', {}).get(y, {}).items():
+                        by_indicator[ind].append(float(val))
+                timeline_median[y] = {
+                    ind: float(np.median(vals))
+                    for ind, vals in by_indicator.items()
+                    if vals
+                }
+
+            all_warnings: List[str] = []
+            for run in ensemble_runs:
+                all_warnings.extend(run.get('warnings') or [])
+
+            graphs_used = ensemble_runs[0].get('graphs_used', {}) if ensemble_runs else {}
+            causal_paths = ensemble_runs[0].get('causal_paths', {}) if ensemble_runs else {}
+
+            convergence_info: Dict[int, dict] = {}
+            for y in all_years:
+                per_run_info = [r.get('convergence_info', {}).get(y, {}) for r in ensemble_runs]
+                per_run_info = [x for x in per_run_info if x]
+                if not per_run_info:
+                    continue
+                iterations = [float(x.get('iterations', 0)) for x in per_run_info]
+                max_updates = [float(x.get('max_update', 0.0)) for x in per_run_info]
+                l1_norms = [float(x.get('l1_norm', 0.0)) for x in per_run_info]
+                convergence_info[y] = {
+                    'iterations_mean': round(float(np.mean(iterations)), 3),
+                    'max_update_mean': round(float(np.mean(max_updates)), 6),
+                    'l1_norm_mean': round(float(np.mean(l1_norms)), 6),
+                }
+
+            converged_counts: Dict[int, int] = defaultdict(int)
+            for run in ensemble_runs:
+                for y in run.get('converged_years', []):
+                    converged_counts[int(y)] += 1
+
+            result = {
+                'timeline': timeline_median,
+                'deltas': {},  # not used downstream in API response
+                'graphs_used': graphs_used,
+                'converged_years': sorted([y for y, c in converged_counts.items() if c == n_ensemble_runs]),
+                'warnings': list(dict.fromkeys(all_warnings)) or None,
+                'convergence_info': convergence_info,
+                'causal_paths': causal_paths,
+            }
+            if debug and ensemble_runs and ensemble_runs[0].get('debug_trace'):
+                result['debug_trace'] = ensemble_runs[0]['debug_trace']
+        else:
+            result = _run_single_temporal(seed=None, resample_edges=False)
 
         # Load temporal stats for display-safe percent computation
         if view_type == 'country':
@@ -774,6 +910,8 @@ def run_temporal_simulation_v31(
         elif view_type == 'stratified':
             stratum = get_stratum_for_country(country, base_year)
             country_stats = get_stratum_indicator_stats(stratum) if stratum else {}
+        elif view_type == 'regional':
+            country_stats = get_regional_indicator_stats(region_used) if region_used else {}
         else:  # unified
             country_stats = get_stratum_indicator_stats('unified')
 
@@ -784,6 +922,20 @@ def run_temporal_simulation_v31(
         for year, values in result['timeline'].items():
             year_effects = compute_effects(baseline, values, country_stats=country_stats)
             top = get_top_effects(year_effects, top_n=top_n_effects)
+
+            if n_ensemble_runs > 0:
+                # Attach uncertainty to top effects from ensemble sampled trajectories.
+                for ind in list(top.keys()):
+                    samples = []
+                    for run in ensemble_runs:
+                        value = run.get('timeline', {}).get(year, {}).get(ind)
+                        if value is not None:
+                            samples.append(float(value))
+                    if len(samples) >= 2:
+                        top[ind]['ci_lower'] = float(np.percentile(samples, 2.5))
+                        top[ind]['ci_upper'] = float(np.percentile(samples, 97.5))
+                        top[ind]['std'] = float(np.std(samples))
+
             effects_by_year[year] = top
             affected_per_year[year] = len([e for e in year_effects.values()
                                             if e.get('absolute_change', 0) != 0])
@@ -797,7 +949,7 @@ def run_temporal_simulation_v31(
             stratum = get_stratum_for_country(country, base_year) or 'unknown'
             for year in result['timeline'].keys():
                 income_evolution[year] = {'group_3tier': stratum.title()}
-        # unified: no income classification (it's the global aggregate)
+        # unified/regional: no income classification aggregate
 
         # ---- Risk flags & stress scoring ----
         risk_flags = []
@@ -870,6 +1022,8 @@ def run_temporal_simulation_v31(
             'base_year': year_used or effective_base_year,
             'horizon_years': effective_horizon,
             'view_type': view_type,
+            'scope_used': view_type,
+            'region_used': region_used,
             'interventions': intervention_details,
             'timeline': result['timeline'],
             'effects': effects_by_year,
@@ -888,7 +1042,12 @@ def run_temporal_simulation_v31(
                 'use_dynamic_graphs': use_dynamic_graphs,
                 'converged_years': result['converged_years'],
                 'convergence_info': result.get('convergence_info', {}),
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'ensemble': {
+                    'enabled': n_ensemble_runs > 0,
+                    'n_runs': n_ensemble_runs,
+                    'seed_start': 42 if n_ensemble_runs > 0 else None,
+                }
             }
         }
 
@@ -901,7 +1060,7 @@ def run_temporal_simulation_v31(
             response['debug_trace'] = result['debug_trace']
 
         # Add spillovers for final year if enabled (country-level only)
-        if include_spillovers and view_type == 'country':
+        if include_spillovers and view_type == 'country' and country:
             final_year = effective_base_year + effective_horizon
             final_effects = effects_by_year.get(final_year, {})
             abs_effects = {ind: eff.get('absolute_change', 0) for ind, eff in final_effects.items()}

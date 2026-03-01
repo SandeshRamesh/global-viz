@@ -16,6 +16,7 @@ from ..config import (
     DEFAULT_GRAPH_YEAR,
     SIMULATION_TIMEOUT as CONFIG_SIMULATION_TIMEOUT,
     TEMPORAL_TIMEOUT as CONFIG_TEMPORAL_TIMEOUT,
+    ENABLE_REGIONAL_VIEW,
 )
 from ..models import (
     InterventionInput,
@@ -88,10 +89,14 @@ async def run_instant_simulation_v31(request: SimulationRequestV31):
     - `country`: Country-specific graph (most accurate)
     - `stratified`: Income-group graph (fallback if country unavailable)
     - `unified`: Global average graph (least specific)
+    - `regional`: Region-level aggregate graph (feature-flagged)
 
     **Timeout:** 30 seconds (60s for ensemble runs)
     """
     try:
+        if request.view_type == "regional" and not ENABLE_REGIONAL_VIEW:
+            raise HTTPException(status_code=403, detail="Regional simulation view is disabled")
+
         interventions = [
             {
                 'indicator': i.indicator,
@@ -115,11 +120,13 @@ async def run_instant_simulation_v31(request: SimulationRequestV31):
                     year=request.year,
                     mode=request.mode,
                     view_type=request.view_type,
+                    region=request.region,
                     p_value_threshold=request.p_value_threshold,
                     use_nonlinear=request.use_nonlinear,
                     n_ensemble_runs=request.n_ensemble_runs,
                     include_spillovers=request.include_spillovers,
-                    top_n_effects=request.top_n_effects
+                    top_n_effects=request.top_n_effects,
+                    debug=request.debug,
                 ),
                 timeout=timeout
             )
@@ -162,7 +169,7 @@ async def run_temporal_simulation_v31(request: TemporalSimulationRequestV31):
     **Parameters:**
     - `use_dynamic_graphs`: If True (default), loads year-specific graph for each
       projection year. If False, uses base_year graph for all years (V3.0 behavior).
-    - `view_type`: Graph source - 'country', 'stratified', or 'unified'
+    - `view_type`: Graph source - 'country', 'stratified', 'unified', or 'regional'
     - `include_spillovers`: Add regional spillover effects for final year
 
     **Timeline Output:**
@@ -171,6 +178,9 @@ async def run_temporal_simulation_v31(request: TemporalSimulationRequestV31):
     **Timeout:** 60 seconds (more for ensemble runs)
     """
     try:
+        if request.view_type == "regional" and not ENABLE_REGIONAL_VIEW:
+            raise HTTPException(status_code=403, detail="Regional simulation view is disabled")
+
         interventions = [
             {
                 'indicator': i.indicator,
@@ -196,6 +206,7 @@ async def run_temporal_simulation_v31(request: TemporalSimulationRequestV31):
                     base_year=request.base_year,
                     horizon_years=request.horizon_years,
                     view_type=request.view_type,
+                    region=request.region,
                     p_value_threshold=request.p_value_threshold,
                     use_nonlinear=request.use_nonlinear,
                     use_dynamic_graphs=request.use_dynamic_graphs,

@@ -31,10 +31,38 @@ Propagation Engine                     Iterative multi-hop propagation with unit
 | Router | `api/routers/simulation.py` |
 | Models | `api/models/requests.py`, `api/models/responses.py` |
 | Service | `api/services/simulation_service.py` |
-| Runner | `v3.1/simulation/run_simulation_v31.py`, `v3.1/simulation/run_temporal_simulation_v31.py` |
-| Propagation | `v3.1/simulation/propagation_v31.py` |
-| Saturation | `v3.0/scripts/phaseB/B1_saturation/saturation_functions.py` |
-| Indicator Stats | `v3.1/simulation/indicator_stats.py` |
+| Runner | `simulation/simulation_runner_v31.py`, `simulation/temporal_simulation_v31.py` |
+| Propagation | `simulation/propagation_v31.py` |
+| Saturation | `simulation/saturation_functions.py` |
+| Indicator Stats | `simulation/indicator_stats.py` |
+| Region Mapping | `simulation/region_mapping.py`, `simulation/regional_spillovers.py` |
+
+---
+
+## Regional Integration (2026-03-01)
+
+- `view_type` now supports `regional` in both instant and temporal endpoints.
+- Request validation contract:
+  - `view_type=country|stratified`: `country` required
+  - `view_type=regional`: `region` or `country` required (`country` derives `region`)
+  - `view_type=unified`: `country` optional
+- Regional view is gated by `ENABLE_REGIONAL_VIEW` (default `false`).
+- Adaptive-year behavior: if requested year is unavailable for a scope, nearest available year in that scope is used and returned via warnings.
+
+### Precompute Commands
+
+Run before enabling `regional` in production:
+
+```bash
+python -m simulation.precompute_regional_graphs
+python -m simulation.precompute_regional_baselines
+python -m simulation.precompute_regional_shap
+```
+
+Coverage reports are written under `data/v31/metadata/` as:
+- `regional_graph_coverage.json`
+- `regional_baseline_coverage.json`
+- `regional_shap_coverage.json`
 
 ---
 
@@ -225,16 +253,18 @@ Run an instant simulation for a single country and year.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `country` | string | *required* | Country name (e.g., "Australia") |
+| `country` | string or null | `null` | Required for `country|stratified`; optional for `unified`; optional fallback for `regional` |
+| `region` | string or null | `null` | Region key for `regional` view (e.g., `sub_saharan_africa`) |
 | `interventions` | array | *required* | 1-20 interventions (see below) |
 | `year` | integer | *required* | Graph and baseline year (1990-2024) |
 | `mode` | string | `"percentage"` | `"percentage"` (fast) or `"absolute"` (includes real values) |
-| `view_type` | string | `"country"` | `"country"`, `"stratified"`, or `"unified"` |
+| `view_type` | string | `"country"` | `"country"`, `"stratified"`, `"unified"`, or `"regional"` |
 | `p_value_threshold` | float | `0.05` | Edge significance filter (0.001-0.10) |
 | `use_nonlinear` | boolean | `true` | Use non-linear marginal effects when available |
 | `n_ensemble_runs` | integer | `0` | Bootstrap ensemble runs (0 = point estimate, 100 recommended for CIs, max 500) |
 | `include_spillovers` | boolean | `true` | Include regional spillover effects |
 | `top_n_effects` | integer | `20` | Number of top effects to return (1-500) |
+| `debug` | boolean | `false` | Include debug metadata in response |
 
 **Intervention object:**
 
@@ -289,6 +319,8 @@ curl -X POST http://localhost:8000/api/simulate/v31 \
   "base_year": 2020,
   "view_type": "country",
   "view_used": "country",
+  "scope_used": "country",
+  "region_used": "east_asia_pacific",
   "income_classification": {
     "group_4tier": "High",
     "group_3tier": "Advanced",
@@ -320,6 +352,9 @@ curl -X POST http://localhost:8000/api/simulate/v31 \
     "is_global_power": false
   },
   "ensemble": null,
+  "warnings": [
+    "Requested year 1990 unavailable for 'country', used nearest year 1999"
+  ],
   "metadata": {
     "n_edges": 312,
     "p_value_threshold": 0.05,
@@ -358,17 +393,19 @@ Run a temporal simulation that projects interventions forward year-by-year, opti
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `country` | string | *required* | Country name |
+| `country` | string or null | `null` | Required for `country|stratified`; optional for `unified`; optional fallback for `regional` |
+| `region` | string or null | `null` | Region key for `regional` view |
 | `interventions` | array | *required* | 1-20 interventions |
 | `base_year` | integer | *required* | Starting year (1990-2024) |
 | `horizon_years` | integer | `10` | Years to project forward (1-40) |
-| `view_type` | string | `"country"` | Graph source type |
+| `view_type` | string | `"country"` | `"country"`, `"stratified"`, `"unified"`, or `"regional"` |
 | `p_value_threshold` | float | `0.05` | Edge significance filter |
 | `use_nonlinear` | boolean | `true` | Use marginal effects |
 | `use_dynamic_graphs` | boolean | `true` | Load year-specific graph per projection year (V3.1 feature). If false, uses base_year graph for all years (V3.0 behavior). |
 | `n_ensemble_runs` | integer | `0` | Bootstrap ensemble runs |
 | `include_spillovers` | boolean | `true` | Spillover effects for final year |
 | `top_n_effects` | integer | `20` | Top effects per year |
+| `debug` | boolean | `false` | Include debug trace in response |
 
 #### Example: Temporal Simulation with Staggered Interventions
 
@@ -397,6 +434,8 @@ curl -X POST http://localhost:8000/api/simulate/v31/temporal \
   "base_year": 2010,
   "horizon_years": 15,
   "view_type": "country",
+  "scope_used": "country",
+  "region_used": null,
   "income_classification_evolution": {
     "2010": {"group_3tier": "Emerging", "gni_per_capita": 9800},
     "2015": {"group_3tier": "Emerging", "gni_per_capita": 8600},
@@ -450,11 +489,16 @@ Default 60 seconds. Extended for large horizons (>15 years: +30s) and ensemble r
 
 ## Graph Statistics
 
-- **4,768 pre-computed temporal graphs** covering 178 countries across 35 years (1990-2024), plus unified and stratified variants
+- **Country temporal graphs:** 178 countries across 26 years (1999-2024)
+- **Aggregate temporal graphs:** unified + stratified across 35 years (1990-2024)
+- **Regional temporal graphs:** generated via `precompute_regional_graphs.py` (11 regions x available years)
 - **Edge counts** vary significantly by country and year, typically 100-500 edges per graph after p-value filtering at 0.05
 - **Betas** are standardized regression coefficients estimated via Ridge regression on within-country z-scored time series; typically |beta| < 0.5
 - **P-value filtering** defaults to 0.05 and can be adjusted per request (range 0.001-0.10); lower thresholds yield sparser, more statistically robust graphs
-- **View type fallback:** If a country-specific graph is unavailable for a given year, the system falls back to the stratified (income-group) graph, then to the unified (global) graph. The `view_used` response field indicates which was actually used.
+- **View fallback:** If a graph is unavailable, fallback is by scope:
+  - country -> stratified -> unified
+  - regional -> unified
+- **Adaptive years:** if requested year is missing in a scope, nearest available year in that scope is used with a warning in the response.
 
 ---
 

@@ -109,8 +109,8 @@ def compute_unified_baseline(year: int) -> Dict[str, float]:
     for country_dir in sorted(BASELINE_DIR.iterdir()):
         if not country_dir.is_dir():
             continue
-        # Skip strata/unified dirs (which we're about to create)
-        if country_dir.name in ['stratified', 'unified']:
+        # Skip aggregate directories.
+        if country_dir.name in ['stratified', 'unified', 'regional']:
             continue
 
         baseline = load_country_baseline(country_dir.name, year)

@@ -343,6 +343,104 @@ def get_stratum_indicator_stats(
     return stats
 
 
+REGIONAL_STATS_CACHE_DIR = DATA_ROOT / "v31" / "regional_indicator_stats"
+_regional_stats_cache: Dict[str, Dict[str, Dict[str, float]]] = {}
+
+
+def compute_regional_temporal_stats(
+    region: str,
+    panel_path: Optional[Path] = None
+) -> Dict[str, Dict[str, float]]:
+    """
+    Compute per-indicator temporal stats for a region.
+
+    Uses median of country-level temporal std across member countries,
+    mirroring stratum-level aggregation but with region membership.
+    """
+    from .region_mapping import get_countries_in_region
+
+    countries = get_countries_in_region(region)
+    if not countries:
+        return {}
+
+    per_country_stats: Dict[str, list] = {}
+    per_country_means: Dict[str, list] = {}
+
+    for country in countries:
+        c_stats = get_country_indicator_stats(country, panel_path=panel_path)
+        if not c_stats:
+            continue
+        for ind, stat in c_stats.items():
+            std_val = float(stat.get('std', 0.0) or 0.0)
+            mean_val = stat.get('mean')
+            if std_val > 0:
+                per_country_stats.setdefault(ind, []).append(std_val)
+            if mean_val is not None:
+                per_country_means.setdefault(ind, []).append(float(mean_val))
+
+    result: Dict[str, Dict[str, float]] = {}
+    for ind, stds in per_country_stats.items():
+        if len(stds) < 3:
+            continue
+        means = per_country_means.get(ind, [])
+        result[ind] = {
+            'mean': float(np.median(means)) if means else 0.0,
+            'std': float(np.median(stds)),
+            'count': len(stds),
+        }
+
+    return result
+
+
+def save_regional_stats_cache(
+    region: str,
+    stats: Dict[str, Dict[str, float]],
+    cache_dir: Optional[Path] = None
+) -> None:
+    """Save per-region temporal stats cache."""
+    base_dir = cache_dir or REGIONAL_STATS_CACHE_DIR
+    base_dir.mkdir(parents=True, exist_ok=True)
+    path = base_dir / f"{region}.json"
+    with open(path, 'w') as f:
+        json.dump(stats, f)
+
+
+def load_regional_stats_cache(
+    region: str,
+    cache_dir: Optional[Path] = None
+) -> Optional[Dict[str, Dict[str, float]]]:
+    """Load per-region temporal stats cache."""
+    base_dir = cache_dir or REGIONAL_STATS_CACHE_DIR
+    path = base_dir / f"{region}.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def get_regional_indicator_stats(
+    region: str,
+    panel_path: Optional[Path] = None
+) -> Dict[str, Dict[str, float]]:
+    """
+    Get per-indicator temporal std for a region with file+memory caching.
+    """
+    global _regional_stats_cache
+
+    if region in _regional_stats_cache:
+        return _regional_stats_cache[region]
+
+    stats = load_regional_stats_cache(region)
+    if stats is None:
+        print(f"Computing temporal stats for region '{region}' (first time)...")
+        stats = compute_regional_temporal_stats(region, panel_path)
+        if stats:
+            save_regional_stats_cache(region, stats)
+
+    _regional_stats_cache[region] = stats
+    return stats
+
+
 def get_country_indicator_std(country: str, indicator: str) -> float:
     """
     Get temporal std for an indicator within a specific country.

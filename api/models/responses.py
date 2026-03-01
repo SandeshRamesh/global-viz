@@ -193,6 +193,8 @@ class SimulationResponseV31(BaseModel):
     base_year: int = Field(..., description="Year used for graph and baseline")
     view_type: str = Field(..., description="Requested view type")
     view_used: str = Field(..., description="Actual view used (may differ due to fallback)")
+    scope_used: str = Field(..., description="Effective simulation scope used")
+    region_used: Optional[str] = Field(None, description="Resolved region key for regional scope")
     income_classification: Optional[IncomeClassification] = Field(
         None, description="Country's income classification for this year"
     )
@@ -208,6 +210,9 @@ class SimulationResponseV31(BaseModel):
     )
     ensemble: Optional[EnsembleStats] = Field(
         None, description="Ensemble statistics (if n_ensemble_runs > 0)"
+    )
+    warnings: Optional[List[str]] = Field(
+        None, description="Adaptive-year and fallback warnings"
     )
     metadata: Dict[str, Any] = Field(
         ..., description="Additional metadata (n_edges, p_value_threshold, etc.)"
@@ -232,6 +237,8 @@ class TemporalSimulationResponseV31(BaseModel):
     base_year: int = Field(..., description="Starting year")
     horizon_years: int = Field(..., description="Years projected forward")
     view_type: str = Field(..., description="Requested view type")
+    scope_used: str = Field(..., description="Effective simulation scope used")
+    region_used: Optional[str] = Field(None, description="Resolved region key for regional scope")
     income_classification_evolution: Optional[Dict[int, IncomeClassification]] = Field(
         None, description="Income classification at each year"
     )
