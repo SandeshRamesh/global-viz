@@ -3,6 +3,10 @@
  *
  * Renders TopoJSON world geometry colored by QoL V1 (0-1 HDI-calibrated) values.
  * Sits behind the graph as a subtle background, toggleable to foreground via M key.
+ *
+ * Smooth transitions: pre-interpolates all iso3→year scores on data load so
+ * timeline scrubbing never flickers.  Years outside the data range are filled
+ * with the nearest available value.
  */
 
 import { useEffect, useRef, useMemo, useCallback } from 'react'
@@ -55,6 +59,10 @@ const NUMERIC_TO_ISO3: Record<string, string> = {
   '498': 'MDA', '31': 'AZE', '238': 'FLK', '260': 'ATF', '540': 'NCL'
 }
 
+/** Full year range we support for timeline playback. */
+const YEAR_MIN = 1990
+const YEAR_MAX = 2030
+
 /** Normalize TopoJSON feature id (may be zero-padded string like "004" or number) */
 function normalizeId(id: string | number | undefined): string {
   if (id == null) return ''
@@ -72,51 +80,121 @@ interface WorldMapProps {
 }
 
 /**
- * Build Set<iso3> of countries belonging to the selected stratum for a given year.
+ * Build Set<iso3> of countries belonging to the selected stratum.
  * Returns null when stratum is 'unified' (show all).
+ *
+ * Uses a stable membership rule: a country is included if it belongs to
+ * the stratum in ANY year.  This prevents countries from flickering on/off
+ * the map as their classification shifts between years during timeline playback.
  */
 function buildStratumIso3s(
   classifications: AllClassifications | null,
   stratum: IncomeStratum | 'unified',
-  year: number
 ): Set<string> | null {
   if (stratum === 'unified' || !classifications) return null
   const allowed = new Set<string>()
-  const yearStr = String(year)
-  // The classification_3tier values are "Developing", "Emerging", "Advanced"
-  const targetLabel = stratum.charAt(0).toUpperCase() + stratum.slice(1) // e.g. "developing" → "Developing"
+  const targetLabel = stratum.charAt(0).toUpperCase() + stratum.slice(1)
   for (const [, countryData] of Object.entries(classifications.classifications)) {
     const iso3 = countryData.iso3
     if (!iso3) continue
-    const yearInfo = countryData.by_year?.[yearStr]
-    if (yearInfo?.classification_3tier === targetLabel) {
-      allowed.add(iso3)
+    const byYear = countryData.by_year as Record<string, { classification_3tier?: string }>
+    for (const yearInfo of Object.values(byYear)) {
+      if (yearInfo?.classification_3tier === targetLabel) {
+        allowed.add(iso3)
+        break // found at least one year — include this country
+      }
     }
   }
   return allowed
 }
 
-/** Build a Map<iso3, QoL score> for the given year from the scores data. */
-function buildYearMap(
-  scores: Record<string, QolScoresByCountry>,
+/**
+ * Pre-interpolate QoL scores for every iso3 across the full year range.
+ *
+ * For each country:
+ *   - Known year values are kept as-is
+ *   - Years between two known values are linearly interpolated
+ *   - Years before the earliest known value use the earliest value (hold)
+ *   - Years after the latest known value use the latest value (hold)
+ *
+ * Returns Map<iso3, Map<year, score>> covering YEAR_MIN..YEAR_MAX.
+ */
+function buildInterpolatedScores(
+  scores: Record<string, QolScoresByCountry>
+): Map<string, Map<number, number>> {
+  const result = new Map<string, Map<number, number>>()
+
+  for (const [, data] of Object.entries(scores)) {
+    const iso3 = data.iso3
+    if (!iso3) continue
+
+    // Collect known (year, value) pairs sorted by year
+    const known: Array<[number, number]> = []
+    for (const [yStr, val] of Object.entries(data.by_year)) {
+      if (val != null) known.push([Number(yStr), val])
+    }
+    if (known.length === 0) continue
+    known.sort((a, b) => a[0] - b[0])
+
+    const yearMap = new Map<number, number>()
+    const firstYear = known[0][0]
+    const firstVal = known[0][1]
+    const lastYear = known[known.length - 1][0]
+    const lastVal = known[known.length - 1][1]
+
+    let ki = 0 // index into known[]
+    for (let y = YEAR_MIN; y <= YEAR_MAX; y++) {
+      if (y <= firstYear) {
+        // Before or at first data point — hold first value
+        yearMap.set(y, firstVal)
+      } else if (y >= lastYear) {
+        // At or after last data point — hold last value
+        yearMap.set(y, lastVal)
+      } else {
+        // Advance ki so known[ki] <= y < known[ki+1]
+        while (ki < known.length - 2 && known[ki + 1][0] <= y) ki++
+        const [y0, v0] = known[ki]
+        const [y1, v1] = known[ki + 1]
+        if (y1 === y0) {
+          yearMap.set(y, v0)
+        } else {
+          const t = (y - y0) / (y1 - y0)
+          yearMap.set(y, v0 + t * (v1 - v0))
+        }
+      }
+    }
+
+    result.set(iso3, yearMap)
+  }
+
+  return result
+}
+
+/**
+ * Build iso3→score map for a given year from pre-interpolated data,
+ * with optional stratum filtering and simulation adjustments.
+ */
+function buildYearMapFromInterpolated(
+  interpolated: Map<string, Map<number, number>>,
   year: number,
   stratumIso3s: Set<string> | null,
   simAdjustments?: Record<string, number>
 ): Map<string, number> {
   const map = new Map<string, number>()
-  const yearStr = String(year)
-  for (const [, data] of Object.entries(scores)) {
-    // If filtering by stratum, skip countries not in the stratum
-    if (stratumIso3s && !stratumIso3s.has(data.iso3)) continue
-    const value = data.by_year[yearStr]
+  for (const [iso3, yearScores] of interpolated) {
+    if (stratumIso3s && !stratumIso3s.has(iso3)) continue
+    const value = yearScores.get(year)
     if (value != null) {
-      const adj = simAdjustments?.[data.iso3] ?? 0
+      const adj = simAdjustments?.[iso3] ?? 0
       const adjusted = value + adj
-      map.set(data.iso3, Math.max(0, Math.min(1, adjusted)))
+      map.set(iso3, Math.max(0, Math.min(1, adjusted)))
     }
   }
   return map
 }
+
+/** Transition duration for fill color changes (ms). */
+const COLOR_TRANSITION_MS = 400
 
 export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, classificationsCache, simAdjustments }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -126,24 +204,40 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
   const pathGenRef = useRef<d3.GeoPath | null>(null)
   const featuresRef = useRef<GeoJSON.Feature[]>([])
   const initializedRef = useRef(false)
+  const prevYearRef = useRef<number | null>(null)
 
-  // Color scale: QoL V1 0-1 (HDI-calibrated) → green for high, red for low
+  // Color scale: QoL V1 (HDI-calibrated) — green for high, red for low
   const colorScale = useMemo(
-    () => d3.scaleSequential(d3.interpolateRdYlGn).domain([0, 1]),
+    () => d3.scaleSequential(d3.interpolateRdYlGn).domain([0.3, 0.95]),
     []
   )
 
-  // Build stratum filter (null = show all)
-  const stratumIso3s = useMemo(
-    () => buildStratumIso3s(classificationsCache, selectedStratum, currentYear),
-    [classificationsCache, selectedStratum, currentYear]
+  // Pre-interpolate all scores once when data loads (O(countries * years), ~7k entries)
+  const interpolated = useMemo(
+    () => qolScores ? buildInterpolatedScores(qolScores) : new Map<string, Map<number, number>>(),
+    [qolScores]
   )
 
-  // Build iso3→value map for current year, filtered by stratum
-  const yearMap = useMemo(
-    () => qolScores ? buildYearMap(qolScores, currentYear, stratumIso3s, simAdjustments) : new Map<string, number>(),
-    [qolScores, currentYear, stratumIso3s, simAdjustments]
+  // Build stratum filter (null = show all) — stable across all years
+  const stratumIso3s = useMemo(
+    () => buildStratumIso3s(classificationsCache, selectedStratum),
+    [classificationsCache, selectedStratum]
   )
+
+  // Build iso3→value map for current year from interpolated data
+  const yearMap = useMemo(
+    () => buildYearMapFromInterpolated(interpolated, currentYear, stratumIso3s, simAdjustments),
+    [interpolated, currentYear, stratumIso3s, simAdjustments]
+  )
+
+  /** Resolve fill color for a TopoJSON feature. */
+  const fillColor = useCallback((d: GeoJSON.Feature): string => {
+    const numId = normalizeId(d.id)
+    const iso3 = NUMERIC_TO_ISO3[numId]
+    if (!iso3) return '#1a1a2e'
+    const val = yearMap.get(iso3)
+    return val != null ? colorScale(val) : '#1a1a2e'
+  }, [yearMap, colorScale])
 
   // Load TopoJSON once
   useEffect(() => {
@@ -154,7 +248,6 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
         topoRef.current = topo
         const geom = topo.objects.countries as GeometryCollection
         featuresRef.current = (topojson.feature(topo, geom) as GeoJSON.FeatureCollection).features
-        // Trigger initial render
         renderMap()
       })
       .catch(err => console.warn('Failed to load world map:', err))
@@ -187,18 +280,12 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
       .enter()
       .append('path')
       .attr('d', d => pathGen(d) || '')
-      .attr('fill', d => {
-        const numId = normalizeId(d.id)
-        const iso3 = NUMERIC_TO_ISO3[numId]
-        if (!iso3) return '#1a1a2e'
-        const val = yearMap.get(iso3)
-        return val != null ? colorScale(val) : '#1a1a2e'
-      })
+      .attr('fill', fillColor)
       .attr('stroke', '#555')
       .attr('stroke-width', 0.3)
 
     initializedRef.current = true
-  }, [yearMap, colorScale])
+  }, [fillColor])
 
   // Render on mount and resize
   useEffect(() => {
@@ -212,20 +299,27 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
     return () => ro.disconnect()
   }, [renderMap])
 
-  // Update fill colors when year/sim data changes (fast path: just update fill, no re-render)
+  // Smooth color transition when year/sim data changes
   useEffect(() => {
     const svg = svgRef.current
     if (!svg || !initializedRef.current) return
 
-    d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path')
-      .attr('fill', d => {
-        const numId = normalizeId(d.id)
-        const iso3 = NUMERIC_TO_ISO3[numId]
-        if (!iso3) return '#1a1a2e'
-        const val = yearMap.get(iso3)
-        return val != null ? colorScale(val) : '#1a1a2e'
-      })
-  }, [yearMap, colorScale])
+    const isFirstPaint = prevYearRef.current === null
+    prevYearRef.current = currentYear
+
+    const paths = d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path')
+
+    if (isFirstPaint) {
+      // No transition on initial paint
+      paths.attr('fill', fillColor)
+    } else {
+      // Smooth color transition during timeline scrubbing
+      paths
+        .transition()
+        .duration(COLOR_TRANSITION_MS)
+        .attr('fill', fillColor)
+    }
+  }, [fillColor, currentYear])
 
   return (
     <div

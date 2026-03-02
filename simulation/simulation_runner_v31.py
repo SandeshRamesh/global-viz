@@ -42,11 +42,12 @@ METADATA_DIR = DATA_ROOT / "v31" / "metadata"
 _qol_metadata: Optional[Dict] = None
 _qol_norm_stats: Optional[Dict] = None
 _qol_calibration: Optional[Dict] = None
+_qol_direction_overrides: Optional[Dict] = None
 
 
 def _get_qol_assets() -> tuple:
-    """Load and cache QoL computation assets (metadata, norm_stats, calibration)."""
-    global _qol_metadata, _qol_norm_stats, _qol_calibration
+    """Load and cache QoL computation assets (metadata, norm_stats, calibration, direction_overrides)."""
+    global _qol_metadata, _qol_norm_stats, _qol_calibration, _qol_direction_overrides
 
     if _qol_metadata is None:
         _qol_metadata = load_indicator_metadata(
@@ -67,8 +68,15 @@ def _get_qol_assets() -> tuple:
                 _qol_calibration = json.load(f).get("calibration", {})
         else:
             _qol_calibration = {}
+    if _qol_direction_overrides is None:
+        dir_path = METADATA_DIR / "qol_direction_overrides_v1.json"
+        if dir_path.exists():
+            with open(dir_path) as f:
+                _qol_direction_overrides = json.load(f)
+        else:
+            _qol_direction_overrides = {}
 
-    return _qol_metadata, _qol_norm_stats, _qol_calibration
+    return _qol_metadata, _qol_norm_stats, _qol_calibration, _qol_direction_overrides
 
 
 def _get_norm_stats_for_year(norm_stats_asset: Dict, year: Optional[int]) -> Dict:
@@ -94,16 +102,16 @@ def _compute_qol_delta(
     year: Optional[int] = None,
 ) -> Optional[Dict[str, float]]:
     """Compute QoL for baseline and simulated indicator sets, return delta."""
-    meta, norm_stats_asset, calibration = _get_qol_assets()
+    meta, norm_stats_asset, calibration, dir_overrides = _get_qol_assets()
     norm_stats = _get_norm_stats_for_year(norm_stats_asset, year)
     if not norm_stats or not calibration or not calibration.get("breakpoints"):
         return None
 
-    base_qol = compute_qol(baseline_values, meta, norm_stats, calibration)
+    base_qol = compute_qol(baseline_values, meta, norm_stats, calibration, dir_overrides)
     if base_qol is None:
         return None
 
-    sim_qol = compute_qol(simulated_values, meta, norm_stats, calibration)
+    sim_qol = compute_qol(simulated_values, meta, norm_stats, calibration, dir_overrides)
     if sim_qol is None:
         return None
 

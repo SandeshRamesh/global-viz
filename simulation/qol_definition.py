@@ -6,7 +6,7 @@ from leaf-level indicator values. All core functions are pure (no I/O);
 only `load_indicator_metadata()` reads files.
 
 Score pipeline:
-  raw values → min-max normalize (flip negatives) → domain means → overall mean → HDI calibration
+  raw values → z-score normalize (flip negatives) → domain means → overall mean → HDI calibration
 
 DEFINITION_ID tracks the scoring version so cached scores can be invalidated
 when the methodology changes.
@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, TypedDict
 
 
-DEFINITION_ID = "qol_v2_minmax_hdi_calibrated"
+DEFINITION_ID = "qol_v1_hdi_calibrated"
 
 
 class IndicatorMeta(TypedDict):
@@ -28,8 +28,8 @@ class IndicatorMeta(TypedDict):
 
 
 class NormStats(TypedDict):
-    min: float
-    max: float
+    mean: float
+    std: float
     n: int
 
 
@@ -90,18 +90,18 @@ def compute_normalization_stats(
     all_baselines: Dict[str, Dict[str, Dict[str, float]]],
 ) -> Dict[str, NormStats]:
     """
-    Compute per-indicator min/max across all country-years.
+    Compute per-indicator mean and std across all country-years using
+    Welford's online algorithm (numerically stable single-pass).
 
     Args:
         all_baselines: { country: { year: { indicator_id: value } } }
 
     Returns:
-        { indicator_id: { min, max, n } }
+        { indicator_id: { mean, std, n } }
     """
-    # Track observed ranges and counts
     count: Dict[str, int] = {}
-    min_acc: Dict[str, float] = {}
-    max_acc: Dict[str, float] = {}
+    mean_acc: Dict[str, float] = {}
+    m2_acc: Dict[str, float] = {}
 
     for country_years in all_baselines.values():
         for year_values in country_years.values():
@@ -109,21 +109,21 @@ def compute_normalization_stats(
                 if value is None or (isinstance(value, float) and math.isnan(value)):
                     continue
                 val = float(value)
-                count[ind_id] = count.get(ind_id, 0) + 1
-                prev_min = min_acc.get(ind_id)
-                prev_max = max_acc.get(ind_id)
-                min_acc[ind_id] = val if prev_min is None else min(prev_min, val)
-                max_acc[ind_id] = val if prev_max is None else max(prev_max, val)
+                n = count.get(ind_id, 0) + 1
+                count[ind_id] = n
+                old_mean = mean_acc.get(ind_id, 0.0)
+                new_mean = old_mean + (val - old_mean) / n
+                mean_acc[ind_id] = new_mean
+                m2_acc[ind_id] = m2_acc.get(ind_id, 0.0) + (val - old_mean) * (val - new_mean)
 
     result: Dict[str, NormStats] = {}
     for ind_id, n in count.items():
-        min_val = min_acc.get(ind_id)
-        max_val = max_acc.get(ind_id)
-        if n < 2 or min_val is None or max_val is None:
+        if n < 2:
             continue
-        if abs(max_val - min_val) < 1e-12:
+        std = math.sqrt(m2_acc[ind_id] / (n - 1))
+        if std < 1e-12:
             continue
-        result[ind_id] = {"min": min_val, "max": max_val, "n": n}
+        result[ind_id] = {"mean": mean_acc[ind_id], "std": std, "n": n}
 
     return result
 
@@ -136,7 +136,7 @@ def normalize_indicator(
     direction_overrides: Optional[Dict[str, str]] = None,
 ) -> Optional[float]:
     """
-    Min-max normalize a single indicator value to [0, 1], inverting for
+    Z-score normalize a single indicator value, inverting sign for
     negative-direction indicators so that higher = better for all.
 
     If direction_overrides is provided, it takes precedence over metadata
@@ -149,15 +149,7 @@ def normalize_indicator(
     if stats is None:
         return None
 
-    min_val = stats["min"]
-    max_val = stats["max"]
-    span = max_val - min_val
-    if span < 1e-12:
-        return None
-
-    normalized = (value - min_val) / span
-    # Clamp to avoid extreme outliers pushing values outside [0,1]
-    normalized = max(0.0, min(1.0, normalized))
+    z = (value - stats["mean"]) / stats["std"]
 
     # Check override first, then metadata
     direction = None
@@ -169,9 +161,9 @@ def normalize_indicator(
             direction = meta["direction"]
 
     if direction == "negative":
-        normalized = 1.0 - normalized
+        z = -z
 
-    return normalized
+    return z
 
 
 # ---------------------------------------------------------------------------
