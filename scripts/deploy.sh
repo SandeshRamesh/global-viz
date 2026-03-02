@@ -11,10 +11,6 @@ git fetch origin live
 git checkout live
 git pull origin live
 
-echo "Ensuring data symlinks..."
-mkdir -p /home/sandesh/argon_primary/v3.1/data/metadata
-ln -sf /home/sandesh/argon_primary/atlas/data/v31/metadata/regional_groups.json /home/sandesh/argon_primary/v3.1/data/metadata/regional_groups.json
-
 echo "Installing dependencies..."
 npm ci
 
