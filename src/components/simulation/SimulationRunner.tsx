@@ -11,6 +11,7 @@
 import { useCallback, useState, useMemo, useRef, useEffect } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
 import { SIMULATION_YEAR_MAX, SIMULATION_YEAR_MIN } from '../../constants/time'
+import { REGION_DISPLAY_NAMES } from '../../constants/regions'
 import {
   generateSummaryCSV,
   generateTimelineCSV,
@@ -42,6 +43,7 @@ export function SimulationRunner() {
     loadScenario,
     deleteScenario,
     selectedStratum,
+    selectedRegion,
     targetVisibleEffects,
     setTargetVisibleEffects
   } = useSimulationStore()
@@ -85,6 +87,8 @@ export function SimulationRunner() {
   // Derive scope label from current graph view
   const scopeLabel = selectedCountry
     ? selectedCountry
+    : selectedRegion
+      ? `Region: ${REGION_DISPLAY_NAMES[selectedRegion] ?? selectedRegion}`
     : selectedStratum === 'unified'
       ? 'Global (unified)'
       : `${selectedStratum.charAt(0).toUpperCase() + selectedStratum.slice(1)} countries`

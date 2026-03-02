@@ -379,18 +379,30 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     regionLoadController = controller;
 
     if (region === null) {
+      const { cachedUnifiedShap, cachedUnifiedTimeline } = get();
       set({
         selectedRegion: null,
+        selectedCountry: null,
         mapViewMode: 'country',
         countryGraph: null,
         countryLoading: false,
-        historicalTimeline: null,
-        temporalShapTimeline: null,
+        timelineLoading: false,
+        shapTimelineLoading: false,
+        historicalTimeline: cachedUnifiedTimeline,
+        temporalShapTimeline: cachedUnifiedShap,
         temporalResults: null,
         playbackMode: 'historical',
-        currentYearIndex: 0,
+        currentYearIndex: cachedUnifiedShap ? cachedUnifiedShap.years.length - 1 : 0,
         isPlaying: false,
       });
+
+      if (!cachedUnifiedShap || !cachedUnifiedTimeline) {
+        get().loadUnifiedTimeline();
+      }
+
+      if (regionLoadController === controller) {
+        regionLoadController = null;
+      }
       return;
     }
 
@@ -1127,8 +1139,6 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     highlightedIndicator: null,
     activeTemplate: null,
     templateModified: false,
-    selectedRegion: null,
-    mapViewMode: 'country',
   }),
 
   // Temporal playback actions
