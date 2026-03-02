@@ -1,7 +1,7 @@
 """
 Graphs Router
 
-Endpoints for country graph data.
+Endpoints for country and regional graph data.
 """
 
 from typing import Optional
@@ -9,8 +9,84 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ..services import graph_service
 from ..models import GraphResponse
+from ..config import ENABLE_REGIONAL_VIEW
 
 router = APIRouter(prefix="/graph", tags=["graphs"])
+
+
+@router.get("/region/{region}/timeline")
+async def get_regional_timeline(
+    region: str,
+    start_year: Optional[int] = Query(None, description="Start year"),
+    end_year: Optional[int] = Query(None, description="End year")
+):
+    """Get historical timeline of indicator values for a region (from baselines)."""
+    if not ENABLE_REGIONAL_VIEW:
+        raise HTTPException(status_code=403, detail="Regional views are disabled")
+
+    if not graph_service.region_exists(region):
+        raise HTTPException(status_code=404, detail=f"Region '{region}' not found")
+
+    timeline = graph_service.get_regional_timeline(region, start_year, end_year)
+
+    if not timeline['years']:
+        raise HTTPException(status_code=404, detail=f"No timeline data found for region '{region}'")
+
+    return {
+        'country': None,
+        'region': region,
+        'start_year': timeline['years'][0] if timeline['years'] else None,
+        'end_year': timeline['years'][-1] if timeline['years'] else None,
+        'years': timeline['years'],
+        'values': timeline['values'],
+        'n_indicators': len(timeline['indicators'])
+    }
+
+
+@router.get("/region/{region}")
+async def get_regional_graph(
+    region: str,
+    year: Optional[int] = Query(None, description="Baseline year for indicator values")
+):
+    """
+    Get full graph data for a region.
+
+    Returns all edges with coefficients, baseline values, and SHAP importance.
+    """
+    if not ENABLE_REGIONAL_VIEW:
+        raise HTTPException(status_code=403, detail="Regional views are disabled")
+
+    if not graph_service.region_exists(region):
+        raise HTTPException(status_code=404, detail=f"Region '{region}' not found")
+
+    graph = graph_service.get_regional_graph(region, year)
+    if not graph:
+        raise HTTPException(status_code=500, detail=f"Error loading graph for region '{region}'")
+
+    graph_year = graph.get('year')
+    baseline = graph_service.get_regional_baseline(region, graph_year)
+    shap_importance = graph_service.get_regional_shap(region, graph_year)
+
+    return {
+        'country': region,  # compatibility with CountryGraph type on frontend
+        'region': region,
+        'n_edges': graph.get('n_edges', 0),
+        'n_edges_with_data': graph.get('n_edges_with_data', 0),
+        'edges': graph.get('edges', []),
+        'baseline': baseline,
+        'shap_importance': shap_importance,
+        'metadata': {
+            'year': graph_year,
+            'is_regional': True,
+            'has_lag_data': any('lag' in e for e in graph.get('edges', [])),
+            'n_significant_lags': sum(
+                1 for e in graph.get('edges', [])
+                if e.get('lag_significant', False)
+            ),
+            'has_country_shap': len(shap_importance) > 0,
+            'n_shap_indicators': len(shap_importance)
+        }
+    }
 
 
 @router.get("/{country}/timeline")

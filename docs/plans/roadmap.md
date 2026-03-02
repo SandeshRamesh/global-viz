@@ -1,89 +1,116 @@
 # ROADMAP.md
 
-Development roadmap for the Global Project causal visualization tool (Phase 2 repo).
+Development roadmap for the Global Project causal visualization tool.
 
 ---
 
-## Phase 2 — Simulation & Temporal Analysis (COMPLETE)
+## Phase 2 — Simulation & Temporal Analysis (COMPLETE 2026-02-18)
 
-**Completed: 2026-02-18**
-
-### Weeks 5-6
 - Income stratification tabs (StrataTabs with dynamic country counts per stratum)
 - Timeline player with 1990-2024 scrubbing and auto-collapse
 - Country selector with 178 countries, region grouping, and Fuse.js autocomplete
-- Temporal SHAP caching for smooth playback with no flash
-
-### Week 7
+- Temporal SHAP caching for smooth playback
 - Data Quality Panel (coverage metrics, confidence bands, stratum transitions)
 - Local View temporal edges (year-aware edge updates in DAG flow view)
-
-### Week 8 — Simulation Enhancement
-- Per-intervention year support: each intervention in a scenario can target a different year, enabling staggered policy simulations
-- Timeline scrubber drives the default intervention year for newly added interventions
-- Simulation range control: dual-thumb slider selecting start/end year (1990-2030)
-- Node glow effects on the radial viz: green for positive effects, red for negative, intensity proportional to effect magnitude (sourced from `temporalResults.effects`)
-- Auto-expand after simulation: only branches of the radial viz containing intervened indicators expand; unrelated branches stay collapsed
-- Scenario save/load via localStorage: saves scenario name, country, full intervention list with per-intervention years, and year range; loading restores complete UI state
-- Backend: `temporal_simulation_v31.py` updated with `interventions_by_year` support for staggered inputs
-- V3.1 API integration with year-specific temporal graph lookups (`/api/simulate/v31/temporal`)
-
-### Deferred to Phase 3
-- Scenario comparison / overlay mode (was P0 Week 8)
-- Click-node-to-intervene flow (was P1 Week 8)
-- Top N quick filter for indicators (was P1 Week 8)
-- Pre-built scenario templates (WHO, Education, Infrastructure) (was P2 Week 8)
+- Per-intervention year support (staggered policy simulations)
+- Simulation range control (dual-thumb slider, 1990-2030)
+- Node glow effects (green/red proportional to effect magnitude)
+- Auto-expand affected branches post-simulation
+- Scenario save/load to localStorage
+- V3.1 API integration with year-specific temporal graphs
 
 ---
 
-## Phase 3 — Analysis Depth (Weeks 9-11)
+## Phase 3 — Simulation Polish (COMPLETE 2026-02-19)
 
-Goal: Give researchers tools to interrogate and communicate causal findings.
-
-### P0 — Critical
-- **Scenario comparison (overlay mode)**: Run two scenarios side-by-side, overlay effect deltas on the radial viz with a split-color glow scheme
-- **Methodology panel**: Explain the causal discovery approach (PC algorithm, SHAP attribution, temporal bootstrapping), targeted at a policy-audience reading level
-
-### P1 — Important
-- **Sensitivity analysis**: Perturb edge weights by a configurable percentage, observe variance in simulation outcomes to quantify robustness
-- **Click-node-to-intervene flow**: Click any indicator node on the radial viz to pre-populate a new intervention in SimulationPanel
-- **Top N quick filter**: Filter indicator list in InterventionBuilder to the top N by SHAP importance for the selected target
-- **Export suite**: PNG snapshot of current viz, CSV of simulation results, shareable URL encoding scenario state
-
-### P2 — Nice-to-have
-- **Pre-built scenario templates**: Curated intervention bundles for WHO health targets, education investment, and infrastructure spending
-- **Animated effect propagation**: Show causal chain lighting up step-by-step after simulation run
+- Selective branch expansion (pinnedPaths): post-simulation shows only direct paths to affected indicators
+- Parent aggregate effects: affected-only mean + coverage ratio
+- Border gating: leaves |pct| >= 0.5%, parents coverage >= 15% AND |pct| >= 1.0%, top-K per ring
+- Saturating-curve border widths
+- Single-child intermediate pruning with skip-edges
+- Ring compression via parent remapping
 
 ---
 
-## Phase 4 — Multi-Target & Country Comparison (Weeks 12-14)
+## Phase 4 — Simulation UX Polish (COMPLETE 2026-02-20)
 
-Goal: Enable comparative and multi-objective policy analysis.
-
-- **Multi-target simulation**: Select multiple outcome targets; display joint effect surface
-- **Country comparison view**: Run the same scenario across two countries, diff the outcome distributions side-by-side
-- **Pareto optimization**: Given a budget constraint (max N interventions), surface the Pareto-optimal frontier of outcome tradeoffs
-
----
-
-## Phase 5 — Geographic & 3D Visualization (Weeks 15-18)
-
-Goal: Situate causal findings in geographic and dimensional space.
-
-- **Map overlay**: Choropleth world map shaded by selected SHAP importance or simulation outcome magnitude, linked to country selector
-- **3D causal graph**: Three.js or WebGL radial viz with depth encoding causal distance from target node
-- **Region-level aggregation**: Collapse countries into regional averages for macro-level comparison
+- Sim in Local View: intervention nodes center, negative effects left, positive right
+- Edge pulse cascade: 3-tier CSS animations radiating from intervention via BFS hop distance
+- Cyan intervention glow with `intervention-pulse` CSS animation
+- Node flash glow: red/green flash synced to edge ripple arrival at each ring
+- Auto-zoom on sim node count change
+- Zoom-to-node on results panel click (smooth 400ms pan)
+- Hover cards with sim info (% change, year, coverage)
+- Effects count slider (3-50, pre-simulation)
+- `T` hotkey toggles timeline with auto-play
+- `C` hotkey clears local view targets + simulation state
 
 ---
 
-## Phase 6 — Education Mode & Accessibility (Weeks 19-24)
+## Phase 5 — Pre-Launch Polish (COMPLETE 2026-02-20)
 
-Goal: Broaden the audience beyond researchers to students and policymakers.
+- Pre-built scenario library: 17 curated policy templates (6 categories) with research-backed interventions
+- TemplateSelector with category-grouped dropdown, expandable descriptions
+- Draggable SimulationPanel with viewport constraints
 
-- **Education mode**: Step-by-step guided tour of the causal graph, explaining each domain ring and what it represents
-- **Accessibility audit**: Full WCAG 2.1 AA compliance, keyboard navigation, screen reader labels on D3 elements
-- **PWA (Progressive Web App)**: Offline capability via service worker; installable on desktop and mobile
-- **Internationalization (i18n)**: Label translation infrastructure for at least French and Spanish
+---
+
+## Phase 6 — Export & Map Integration (COMPLETE 2026-03-02)
+
+- Export suite: PNG screenshot, CSV results, shareable URL with encoded state
+- WorldMap choropleth with QoL heatmap (RdYlGn scale)
+- M-key toggle: tap toggles, hold (≥250ms) peeks and reverts on release
+- Smooth crossfade transitions (opacity-based, no z-index flash)
+- Dynamic QoL root node encoding: size encodes level, grey fill with RdYlGn outline
+- QoL score interpolation across all years (1990-2024)
+- QoL x/10 label below root node
+- Ring 0 cyan pulse during simulation timeline playback
+- Ref-based positioning (eliminates React re-renders during zoom/pan)
+- Animated reset: collapse to root → 1s delay → expand ring 1
+- Progressive pinning capped to keepCount
+
+---
+
+## Phase 7 — Regional Views (CURRENT)
+
+Goal: Regional aggregate simulation and exploration across 11 regions.
+
+**Backend status: READY** — `view_type: "regional"` supported in both `/api/simulate/v31` and `/api/simulate/v31/temporal`, feature-flagged via `ENABLE_REGIONAL_VIEW`. Precomputed data exists for all 11 regions (baselines, graphs, SHAP, indicator stats).
+
+**11 regions:** East Asia & Pacific, Europe & Central Asia, Latin America & Caribbean, MENA, North America, South Asia, Sub-Saharan Africa, Western Europe, Eastern Europe, Central Asia, Southeast Asia
+
+### TODO
+- [ ] Enable `ENABLE_REGIONAL_VIEW` feature flag
+- [ ] Region selector UI (dropdown or map-based selection)
+- [ ] Regional graph rendering on radial viz
+- [ ] Regional simulation integration (run sims against regional aggregate graphs)
+- [ ] Regional QoL scores on map (region-level choropleth shading)
+- [ ] Region ↔ country drill-down (click region to see member countries)
+
+---
+
+## Phase 8 — 3D Global Graph View (PLANNED)
+
+Goal: Radial viz rendered in 3D with depth, rotation, fly-through.
+
+- Three.js or WebGL radial viz with depth encoding causal distance
+- Camera controls: orbit, zoom, fly-through
+- 3D node interaction (hover, click, select)
+
+---
+
+## Future Phases (BACKLOG)
+
+- **Scenario comparison**: Two scenarios side-by-side with diff view
+- **Country comparison**: Same scenario across two countries
+- **Methodology page**: PC algorithm, SHAP, temporal bootstrapping explainer
+- **Sensitivity analysis**: Edge weight perturbation, ensemble runs, confidence intervals
+- **Education mode**: Guided tour of the causal graph
+- **Accessibility**: WCAG 2.1 AA, keyboard navigation, screen reader support
+- **Mobile support**: Responsive layout, touch interactions
+- **PWA**: Offline capability, installable app
+- **Public API**: Documented REST API with auth and rate limits
+- **i18n**: Translation infrastructure (French, Spanish)
 
 ---
 
@@ -92,7 +119,7 @@ Goal: Broaden the audience beyond researchers to students and policymakers.
 | Version | Endpoint prefix | Notes |
 |---------|----------------|-------|
 | V3.0 | `/api/simulate/` | Original simulation, uniform year |
-| V3.1 | `/api/simulate/v31/` | Staggered interventions, year-specific temporal graphs |
+| V3.1 | `/api/simulate/v31/` | Staggered interventions, year-specific temporal graphs, regional views |
 
 ---
 
@@ -102,3 +129,4 @@ Goal: Broaden the audience beyond researchers to students and policymakers.
 - Max simultaneous interventions: 5 (`MAX_INTERVENTIONS` constant)
 - Simulation year range: 1990-2030 (historical + 6-year projection)
 - Income strata thresholds: Developing < $4,500 GDP/capita, Emerging $4,500-$14,000, Advanced > $14,000
+- Regional taxonomy: 11 hybrid regions (WB geographic + sub-splits for Europe/Asia)

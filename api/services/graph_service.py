@@ -14,6 +14,7 @@ from collections import OrderedDict
 from ..config import (
     GRAPHS_DIR, PANEL_PATH, COUNTRY_SHAP_DIR,
     DEFAULT_GRAPH_YEAR, V31_TEMPORAL_SHAP_DIR, V31_BASELINES_DIR,
+    V31_TEMPORAL_GRAPHS_DIR,
     GRAPH_SERVICE_GRAPH_CACHE_MAX, GRAPH_SERVICE_SHAP_CACHE_MAX
 )
 
@@ -291,6 +292,197 @@ class GraphService:
                         self._cache_set(self._shap_cache, cache_key, {}, self._shap_cache_max)
 
         return self._shap_cache[cache_key]
+
+    # ==================== Regional Methods ====================
+
+    def region_exists(self, region: str) -> bool:
+        """Check if regional graph data exists."""
+        region_dir = V31_TEMPORAL_GRAPHS_DIR / "regional" / region
+        return region_dir.exists() and any(region_dir.glob("*_graph.json"))
+
+    def get_regional_graph(self, region: str, year: Optional[int] = None) -> Optional[dict]:
+        """Load regional graph (cached). Uses latest year if not specified."""
+        cache_key = f"regional_{region}_{year}" if year else f"regional_{region}"
+
+        cached = self._cache_get(self._graph_cache, cache_key)
+        if cached is not None:
+            return cached
+
+        if cache_key not in self._graph_cache:
+            region_dir = V31_TEMPORAL_GRAPHS_DIR / "regional" / region
+            if not region_dir.exists():
+                return None
+
+            if year is None:
+                years = []
+                for graph_file in region_dir.glob("*_graph.json"):
+                    try:
+                        y = int(graph_file.stem.split("_")[0])
+                        years.append(y)
+                    except ValueError:
+                        continue
+                year = max(years) if years else DEFAULT_GRAPH_YEAR
+
+            graph_path = region_dir / f"{year}_graph.json"
+            if not graph_path.exists():
+                return None
+
+            with open(graph_path) as f:
+                raw_graph = json.load(f)
+
+            edges = [self._convert_v31_edge(e) for e in raw_graph.get("edges", [])]
+
+            self._cache_set(self._graph_cache, cache_key, {
+                "country": region,  # reuse field for compatibility
+                "region": region,
+                "year": year,
+                "n_edges": len(edges),
+                "n_edges_with_data": len(edges),
+                "edges": edges
+            }, self._graph_cache_max)
+
+        return self._graph_cache[cache_key]
+
+    def get_regional_baseline(self, region: str, year: Optional[int] = None) -> Dict[str, float]:
+        """Get baseline indicator values for a region."""
+        region_dir = V31_BASELINES_DIR / "regional" / region
+        if not region_dir.exists() or not region_dir.is_dir():
+            return {}
+
+        available_years = sorted(
+            int(file.stem)
+            for file in region_dir.glob("*.json")
+            if file.stem.isdigit()
+        )
+        if not available_years:
+            return {}
+
+        target_year = year if year in available_years else available_years[-1]
+        baseline_path = region_dir / f"{target_year}.json"
+        if not baseline_path.exists():
+            return {}
+
+        with open(baseline_path) as f:
+            data = json.load(f)
+        values = data.get("values") if isinstance(data, dict) else None
+        return values if isinstance(values, dict) else {}
+
+    def get_regional_shap(self, region: str, year: Optional[int] = None) -> Dict[str, float]:
+        """Get region-specific SHAP importance values (cached)."""
+        cache_key = f"regional_shap_{region}_{year}" if year else f"regional_shap_{region}"
+
+        cached = self._cache_get(self._shap_cache, cache_key)
+        if cached is not None:
+            return cached
+
+        if cache_key not in self._shap_cache:
+            qol_dir = V31_TEMPORAL_SHAP_DIR / "regional" / region / "quality_of_life"
+
+            if not qol_dir.exists():
+                self._cache_set(self._shap_cache, cache_key, {}, self._shap_cache_max)
+            else:
+                if year is None:
+                    shap_files = list(qol_dir.glob("*_shap.json"))
+                    if shap_files:
+                        years = []
+                        for f in shap_files:
+                            try:
+                                y = int(f.stem.split("_")[0])
+                                years.append(y)
+                            except ValueError:
+                                continue
+                        year = max(years) if years else DEFAULT_GRAPH_YEAR
+                    else:
+                        year = DEFAULT_GRAPH_YEAR
+
+                shap_path = qol_dir / f"{year}_shap.json"
+
+                if not shap_path.exists():
+                    self._cache_set(self._shap_cache, cache_key, {}, self._shap_cache_max)
+                else:
+                    try:
+                        with open(shap_path) as f:
+                            data = json.load(f)
+                        raw_shap = data.get('shap_importance', {})
+                        shap_values = {}
+                        for ind_id, val in raw_shap.items():
+                            if isinstance(val, dict) and 'mean' in val:
+                                shap_values[ind_id] = val['mean']
+                            elif isinstance(val, (int, float)):
+                                shap_values[ind_id] = val
+                        self._cache_set(self._shap_cache, cache_key, shap_values, self._shap_cache_max)
+                    except Exception:
+                        self._cache_set(self._shap_cache, cache_key, {}, self._shap_cache_max)
+
+        return self._shap_cache[cache_key]
+
+    def get_regional_timeline(
+        self,
+        region: str,
+        start_year: Optional[int] = None,
+        end_year: Optional[int] = None
+    ) -> Dict:
+        """Build historical timeline for a region from baseline files."""
+        region_dir = V31_BASELINES_DIR / "regional" / region
+        if not region_dir.exists():
+            return {'years': [], 'values': {}, 'indicators': []}
+
+        available_years = sorted(
+            int(file.stem)
+            for file in region_dir.glob("*.json")
+            if file.stem.isdigit()
+        )
+        if not available_years:
+            return {'years': [], 'values': {}, 'indicators': []}
+
+        if end_year is None:
+            end_year = available_years[-1]
+        if start_year is None:
+            start_year = available_years[0]
+
+        years = [y for y in available_years if start_year <= y <= end_year]
+
+        raw_values = {}
+        all_indicators: set = set()
+        indicator_stats: Dict[str, Dict[str, float]] = {}
+
+        for year in years:
+            baseline_path = region_dir / f"{year}.json"
+            if not baseline_path.exists():
+                continue
+            with open(baseline_path) as f:
+                data = json.load(f)
+            values = data.get("values") if isinstance(data, dict) else None
+            if not isinstance(values, dict):
+                continue
+            raw_values[str(year)] = values
+            all_indicators.update(values.keys())
+            for ind, val in values.items():
+                if val is None:
+                    continue
+                if ind not in indicator_stats:
+                    indicator_stats[ind] = {'min': val, 'max': val}
+                else:
+                    indicator_stats[ind]['min'] = min(indicator_stats[ind]['min'], val)
+                    indicator_stats[ind]['max'] = max(indicator_stats[ind]['max'], val)
+
+        # Normalize
+        normalized_values = {}
+        for year_str, year_vals in raw_values.items():
+            normalized_year = {}
+            for ind, val in year_vals.items():
+                if val is None or ind not in indicator_stats:
+                    continue
+                stats = indicator_stats[ind]
+                val_range = stats['max'] - stats['min']
+                normalized_year[ind] = (val - stats['min']) / val_range if val_range > 0 else 0.5
+            normalized_values[year_str] = normalized_year
+
+        return {
+            'years': years,
+            'values': normalized_values,
+            'indicators': sorted(list(all_indicators))
+        }
 
     def get_historical_timeline(
         self,

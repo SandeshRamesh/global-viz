@@ -161,6 +161,22 @@ export interface CausalPathEntry {
   beta: number;
 }
 
+/** Single spillover effect on a receiving region */
+export interface SpilloverEffect {
+  effect: number;
+  spillover_strength: number;
+  direct_effect: number;
+  region?: string;
+}
+
+/** Spillover results from country-level simulation */
+export interface SpilloverResults {
+  regional: Record<string, SpilloverEffect>;
+  global: Record<string, SpilloverEffect>;
+  is_global_power: boolean;
+  region_info?: { region_key: string; name: string; spillover_strength: number };
+}
+
 /** Response from POST /api/simulate/v31/temporal */
 export interface TemporalResults {
   status: string;
@@ -178,6 +194,7 @@ export interface TemporalResults {
   affected_per_year: Record<string, number>;
   graphs_used: Record<string, string>;
   qol_timeline?: Record<string, QolDelta>;
+  spillovers?: SpilloverResults;
   warnings?: string[];
   metadata: Record<string, unknown>;
 }
@@ -548,6 +565,75 @@ export const simulationAPI = {
         throw new Error(`Timeline not found for country: ${country}`);
       }
       throw new Error(`Failed to fetch country timeline: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get regional graph data (edges, baseline, SHAP importance)
+   * GET /api/graph/region/{region}
+   */
+  getRegionalGraph: async (region: string, signal?: AbortSignal): Promise<CountryGraph> => {
+    const res = await fetchWithPerf(`${API_BASE}/api/graph/region/${encodeURIComponent(region)}`, { signal });
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Graph not found for region: ${region}`);
+      }
+      throw new Error(`Failed to fetch regional graph: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get regional timeline of indicator values (from baselines)
+   * GET /api/graph/region/{region}/timeline
+   */
+  getRegionalTimeline: async (
+    region: string,
+    startYear?: number,
+    endYear?: number,
+    signal?: AbortSignal
+  ): Promise<CountryTimeline> => {
+    const params = new URLSearchParams();
+    if (startYear !== undefined) params.set('start_year', String(startYear));
+    if (endYear !== undefined) params.set('end_year', String(endYear));
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetchWithPerf(`${API_BASE}/api/graph/region/${encodeURIComponent(region)}/timeline${query}`, { signal });
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`Timeline not found for region: ${region}`);
+      }
+      throw new Error(`Failed to fetch regional timeline: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Get regional SHAP timeline for all years
+   * GET /api/temporal/shap/region/{region}/{target}/timeline
+   */
+  getRegionalShapTimeline: async (
+    region: string,
+    target: string,
+    startYear?: number,
+    endYear?: number,
+    signal?: AbortSignal
+  ): Promise<TemporalShapTimeline> => {
+    const params = new URLSearchParams();
+    if (startYear !== undefined) params.set('start_year', String(startYear));
+    if (endYear !== undefined) params.set('end_year', String(endYear));
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetchWithPerf(
+      `${API_BASE}/api/temporal/shap/region/${encodeURIComponent(region)}/${encodeURIComponent(target)}/timeline${query}`,
+      { signal }
+    );
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(`SHAP timeline not found for region ${region}/${target}`);
+      }
+      throw new Error(`Failed to fetch regional SHAP timeline: ${res.status}`);
     }
     return res.json();
   },

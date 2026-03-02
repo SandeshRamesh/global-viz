@@ -1,10 +1,12 @@
-# Phase 1: MVP - Path 1 Foundation 🔄 CURRENT
+# Phase 1: MVP - Path 1 Foundation ✅ COMPLETE
 
-**Timeline:** Weeks 1-4
+**Timeline:** Weeks 1-4 | **Completed:** 2026-01 (approx)
 
 **Objective:** Functional Global + Local Views with core interactions
 
 **Target Users:** Path 1 (Explorer) - policy researchers, NGO workers, curious citizens
+
+> **Note:** This was the original design spec. Actual implementation details and what shipped are tracked in `docs/plans/roadmap.md`. Core deliverables (radial layout, local view, search, filters, Zustand state, D3 rendering) were completed.
 
 ---
 

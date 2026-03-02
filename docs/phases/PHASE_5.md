@@ -1,8 +1,10 @@
-# Phase 5: Polish & Scale
+# Phase 5: Polish & Scale ✅ COMPLETE (as Pre-Launch Polish)
 
-**Timeline:** Month 5+
+**Timeline:** Week 10 | **Completed:** 2026-02-20
 
-**Objective:** Production-ready for consulting clients
+**Original Objective:** Production-ready for consulting clients
+
+> **Note:** This was the original design spec. In practice, Phase 5 became "Pre-Launch Polish" — 17 curated policy templates, draggable panels, hotkeys. WebGL, mobile, accessibility, i18n, and white-label features are in the backlog. See `docs/plans/roadmap.md` Phase 5 for what was delivered.
 
 ---
 

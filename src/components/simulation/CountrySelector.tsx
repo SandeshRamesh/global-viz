@@ -14,6 +14,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
 import type { Country } from '../../services/api'
+import { type RegionKey, REGION_DISPLAY_NAMES, REGION_ICONS, ISO3_TO_REGION, REGION_KEYS } from '../../constants/regions'
 
 // ============================================
 // Country Metadata (ISO codes, regions)
@@ -205,16 +206,6 @@ function getStratumBadgeStyle(stratum: string | null): React.CSSProperties {
   }
 }
 
-// Region order for grouping
-const REGION_ORDER = [
-  'North America',
-  'Europe & Central Asia',
-  'East Asia & Pacific',
-  'Latin America & Caribbean',
-  'Middle East & North Africa',
-  'South Asia',
-  'Sub-Saharan Africa'
-]
 
 // ============================================
 // Component
@@ -243,7 +234,9 @@ export function CountrySelector() {
     classificationsCache,
     loadAllClassifications,
     historicalTimeline,
-    currentYearIndex
+    currentYearIndex,
+    selectedRegion,
+    setSelectedRegion
   } = useSimulationStore()
 
   const mapHoveredCountry = useSimulationStore(s => s.mapHoveredCountry)
@@ -363,32 +356,62 @@ export function CountrySelector() {
     })
   }, [countries, classificationsCache, currentYear])
 
-  // Group countries by region
-  const groupedCountries = useMemo(() => {
-    const groups = new Map<string, CountryWithMeta[]>()
+  // Group countries by backend region key (using ISO3_TO_REGION)
+  const groupedByBackendRegion = useMemo(() => {
+    const groups = new Map<RegionKey | 'other', CountryWithMeta[]>()
 
-    // Initialize groups in order
-    for (const region of REGION_ORDER) {
-      groups.set(region, [])
+    // Initialize in display order
+    for (const rk of REGION_KEYS) {
+      groups.set(rk, [])
     }
-    groups.set('Other', [])
+    groups.set('other', [])
 
-    // Populate groups
     for (const country of enrichedCountries) {
-      const region = country.region
-      if (!groups.has(region)) {
-        groups.set(region, [])
+      const regionKey = country.iso3 ? ISO3_TO_REGION[country.iso3] : undefined
+      if (regionKey && groups.has(regionKey)) {
+        groups.get(regionKey)!.push(country)
+      } else {
+        groups.get('other')!.push(country)
       }
-      groups.get(region)!.push(country)
     }
 
-    // Sort countries within each region alphabetically
+    // Sort within each group
     for (const [, countries] of groups) {
       countries.sort((a, b) => a.name.localeCompare(b.name))
     }
 
     return groups
   }, [enrichedCountries])
+
+  // Region search aliases for common abbreviations
+  const REGION_ALIASES: Record<RegionKey, string[]> = {
+    east_asia_pacific: ['EAP', 'Asia Pacific', 'East Asia'],
+    europe_central_asia: ['ECA'],
+    latin_america_caribbean: ['LAC', 'Latin America', 'Caribbean'],
+    middle_east_north_africa: ['MENA', 'Middle East', 'North Africa'],
+    north_america: ['NA'],
+    south_asia: ['SA'],
+    sub_saharan_africa: ['SSA', 'Sub-Saharan', 'Africa'],
+    western_europe: ['WE', 'West Europe'],
+    eastern_europe: ['EE', 'East Europe'],
+    central_asia: ['CA'],
+    southeast_asia: ['SEA', 'SE Asia', 'ASEAN'],
+  }
+
+  // Regions that match current search term
+  const matchedRegionKeys = useMemo((): Set<RegionKey> => {
+    if (!searchTerm.trim()) return new Set()
+    const term = searchTerm.toLowerCase().trim()
+    const matched = new Set<RegionKey>()
+    for (const rk of REGION_KEYS) {
+      const displayName = REGION_DISPLAY_NAMES[rk]
+      if (displayName.toLowerCase().includes(term)) { matched.add(rk); continue }
+      if (rk.includes(term)) { matched.add(rk); continue }
+      const aliases = REGION_ALIASES[rk] || []
+      if (aliases.some(a => a.toLowerCase().includes(term))) matched.add(rk)
+    }
+    return matched
+  }, [searchTerm])
 
   // Filter countries by search term (with alias support)
   const filteredCountries = useMemo(() => {
@@ -402,9 +425,17 @@ export function CountrySelector() {
 
       // Alias match
       const aliases = COUNTRY_ALIASES[country.name] || []
-      return aliases.some(alias => alias.toLowerCase().includes(term))
+      if (aliases.some(alias => alias.toLowerCase().includes(term))) return true
+
+      // Region match — include all countries in matched regions
+      if (country.iso3) {
+        const regionKey = ISO3_TO_REGION[country.iso3]
+        if (regionKey && matchedRegionKeys.has(regionKey)) return true
+      }
+
+      return false
     })
-  }, [enrichedCountries, searchTerm])
+  }, [enrichedCountries, searchTerm, matchedRegionKeys])
 
   // Get selected country's metadata
   const selectedCountryMeta = useMemo(() => {
@@ -469,9 +500,20 @@ export function CountrySelector() {
       setIsFocused(false)
       return
     }
-    if (event.key === 'Enter' && filteredCountries.length === 1) {
+    if (event.key === 'Enter') {
       event.preventDefault()
-      handleSelect(filteredCountries[0])
+      // Single region match with no individual country matches → select region
+      if (matchedRegionKeys.size === 1 && filteredCountries.length === 0) {
+        const rk = Array.from(matchedRegionKeys)[0]
+        setSelectedRegion(rk)
+        setSearchTerm('')
+        setIsFocused(false)
+        return
+      }
+      // Single country match → select country
+      if (filteredCountries.length === 1 && matchedRegionKeys.size === 0) {
+        handleSelect(filteredCountries[0])
+      }
     }
   }
 
@@ -560,7 +602,23 @@ export function CountrySelector() {
   // Determine header content
   const renderHeader = () => {
     if (countryLoading) {
-      return <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Loading country graph...</span>
+      return <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
+        {selectedRegion ? 'Loading regional graph...' : 'Loading country graph...'}
+      </span>
+    }
+
+    if (selectedRegion) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>{REGION_ICONS[selectedRegion] ?? '🌐'}</span>
+          <div>
+            <div style={{ fontSize: 10, color: '#888', fontWeight: 500 }}>Regional</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#7C3AED' }}>
+              {REGION_DISPLAY_NAMES[selectedRegion] ?? selectedRegion}
+            </div>
+          </div>
+        </div>
+      )
     }
 
     if (selectedCountryMeta) {
@@ -594,10 +652,13 @@ export function CountrySelector() {
       {/* Header showing current state */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         {renderHeader()}
-        {selectedCountry && !countryLoading && (
+        {(selectedCountry || selectedRegion) && !countryLoading && (
           <button
-            onClick={handleClear}
-            aria-label="Clear selected country"
+            onClick={() => {
+              if (selectedRegion) setSelectedRegion(null)
+              handleClear()
+            }}
+            aria-label={selectedRegion ? "Clear selected region" : "Clear selected country"}
             style={{
               background: '#FFEBEE',
               border: '1px solid #FFCDD2',
@@ -617,7 +678,7 @@ export function CountrySelector() {
               e.currentTarget.style.background = '#FFEBEE'
               e.currentTarget.style.borderColor = '#FFCDD2'
             }}
-            title="Clear country selection"
+            title={selectedRegion ? "Clear region selection" : "Clear country selection"}
           >
             ✕ Clear
           </button>
@@ -633,7 +694,7 @@ export function CountrySelector() {
           onChange={(e) => setSearchTerm(e.target.value)}
           onFocus={() => setIsFocused(true)}
           onKeyDown={handleInputKeyDown}
-          placeholder={countriesLoading ? 'Loading...' : 'Search countries (e.g., USA, UK, China)...'}
+          placeholder={countriesLoading ? 'Loading...' : 'Search countries or regions (e.g., USA, MENA, SSA)...'}
           disabled={countriesLoading || countryLoading}
           role="combobox"
           aria-autocomplete="list"
@@ -715,35 +776,154 @@ export function CountrySelector() {
         >
           {/* Country list */}
           <div ref={listRef} style={{ flex: 1, overflowY: 'auto', maxHeight: 280 }}>
-            {filteredCountries.length === 0 ? (
+            {filteredCountries.length === 0 && matchedRegionKeys.size === 0 ? (
               <div style={{ padding: 16, textAlign: 'center', color: '#888', fontSize: 13 }}>
-                No countries found
+                No countries or regions found
               </div>
             ) : searchTerm ? (
-              // When searching, show flat list
-              filteredCountries.slice(0, 50).map(renderCountryRow)
-            ) : (
-              // When not searching, show grouped by region
-              Array.from(groupedCountries.entries())
-                .filter(([, countries]) => countries.length > 0)
-                .map(([region, countries]) => (
-                  <div key={region} role="presentation">
-                    <div style={{
-                      padding: '6px 12px',
-                      background: '#f5f5f5',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: '#666',
-                      borderBottom: '1px solid #e0e0e0',
-                      position: 'sticky',
-                      top: 0,
-                      zIndex: 1
-                    }} role="presentation">
-                      {region} ({countries.length})
+              // When searching, show matched regions (with their countries) + individually matched countries
+              (() => {
+                const elements: React.ReactNode[] = []
+                const shownCountryNames = new Set<string>()
+
+                // First: matched regions with their countries
+                for (const rk of REGION_KEYS) {
+                  if (!matchedRegionKeys.has(rk)) continue
+                  const regionCountries = groupedByBackendRegion.get(rk) || []
+                  const isActive = selectedRegion === rk
+                  elements.push(
+                    <div key={`region-${rk}`} role="presentation">
+                      <div
+                        className="country-option"
+                        onClick={() => { setSelectedRegion(rk); setIsFocused(false) }}
+                        role="option"
+                        aria-selected={isActive}
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            setSelectedRegion(rk); setIsFocused(false)
+                          }
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid #e8e8e8',
+                          transition: 'background 0.1s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          background: isActive ? '#F3E8FF' : '#f9f9fb',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = isActive ? '#EDE5FF' : '#f0eef5' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? '#F3E8FF' : '#f9f9fb' }}
+                      >
+                        <span style={{ fontSize: 16 }}>{REGION_ICONS[rk] ?? '🌐'}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: isActive ? '#7C3AED' : '#444' }}>
+                              {REGION_DISPLAY_NAMES[rk]}
+                            </span>
+                            <span style={{ fontSize: 10, fontWeight: 500, color: '#888' }}>
+                              {regionCountries.length} countries
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {regionCountries.map(c => {
+                        shownCountryNames.add(c.name)
+                        return renderCountryRow(c)
+                      })}
                     </div>
+                  )
+                }
+
+                // Then: individually matched countries not already shown via region
+                const remainingCountries = filteredCountries.filter(c => !shownCountryNames.has(c.name))
+                if (remainingCountries.length > 0) {
+                  elements.push(...remainingCountries.slice(0, 50).map(renderCountryRow))
+                }
+
+                return elements
+              })()
+            ) : (
+              // When not searching, show grouped by backend region: region row → countries
+              Array.from(groupedByBackendRegion.entries())
+                .filter(([, countries]) => countries.length > 0)
+                .map(([regionKey, countries]) => {
+                  const isActive = selectedRegion === regionKey
+                  const displayName = regionKey === 'other'
+                    ? 'Other'
+                    : REGION_DISPLAY_NAMES[regionKey as RegionKey] ?? regionKey
+                  return (
+                  <div key={regionKey} role="presentation">
+                    {/* Region row — clickable, styled like country rows */}
+                    {regionKey !== 'other' && (
+                      <div
+                        className="country-option"
+                        onClick={() => {
+                          setSelectedRegion(regionKey as RegionKey)
+                          setIsFocused(false)
+                        }}
+                        role="option"
+                        aria-selected={isActive}
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            setSelectedRegion(regionKey as RegionKey)
+                            setIsFocused(false)
+                          }
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid #e8e8e8',
+                          transition: 'background 0.1s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          background: isActive ? '#F3E8FF' : '#f9f9fb',
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 1,
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = isActive ? '#EDE5FF' : '#f0eef5' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? '#F3E8FF' : '#f9f9fb' }}
+                      >
+                        <span style={{ fontSize: 16 }}>{REGION_ICONS[regionKey as RegionKey] ?? '🌐'}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: isActive ? '#7C3AED' : '#444' }}>
+                              {displayName}
+                            </span>
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 500,
+                              color: '#888',
+                            }}>
+                              {countries.length} countries
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {regionKey === 'other' && (
+                      <div style={{
+                        padding: '6px 12px',
+                        background: '#f5f5f5',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: '#666',
+                        borderBottom: '1px solid #e0e0e0',
+                      }}>
+                        {displayName} ({countries.length})
+                      </div>
+                    )}
                     {countries.map(renderCountryRow)}
                   </div>
-                ))
+                  )
+                })
             )}
           </div>
 
@@ -755,7 +935,10 @@ export function CountrySelector() {
             fontSize: 11,
             color: '#888'
           }}>
-            {filteredCountries.length} of {countries.length} countries
+            {searchTerm && matchedRegionKeys.size > 0
+              ? `${matchedRegionKeys.size} region${matchedRegionKeys.size > 1 ? 's' : ''} + ${filteredCountries.length} countries`
+              : `${filteredCountries.length} of ${countries.length} countries`
+            }
           </div>
         </div>
       )}

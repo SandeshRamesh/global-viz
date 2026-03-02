@@ -1,12 +1,14 @@
-# Phase 4: Advanced Features - Paths 2 & 5
+# Phase 4: Advanced Features - Paths 2 & 5 ✅ COMPLETE (as Simulation UX Polish)
 
-**Timeline:** Months 3-4
+**Timeline:** Week 10 | **Completed:** 2026-02-20
 
-**Objective:** Support advanced users (optimizers, educators)
+**Original Objective:** Support advanced users (optimizers, educators)
 
-**Target Users:**
+**Original Target Users:**
 - Path 2 (Optimizer) - data scientists, economists, academics
 - Path 5 (Educator) - teachers, science communicators, museum designers
+
+> **Note:** This was the original design spec. In practice, Phase 4 became "Simulation UX Polish" — edge pulse cascades, intervention glows, auto-zoom, hover cards, effects slider, hotkeys. Multi-objective optimization, education mode, and classroom features are in the backlog. See `docs/plans/roadmap.md` Phase 4 for what was delivered.
 
 ---
 

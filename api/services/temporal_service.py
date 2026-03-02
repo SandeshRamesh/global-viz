@@ -180,6 +180,64 @@ class TemporalService:
             'is_mock': is_mock
         }
 
+    # ==================== Regional SHAP Methods ====================
+
+    def get_regional_shap(
+        self,
+        region: str,
+        target: str,
+        year: int
+    ) -> Optional[dict]:
+        """Get regional SHAP importance for a specific region/target/year."""
+        cache_key = f"regional_{region}_{target}_{year}"
+
+        cached = self._cache_get(self._shap_cache, cache_key)
+        if cached is not None:
+            return cached
+
+        if cache_key not in self._shap_cache:
+            path = V31_TEMPORAL_SHAP_DIR / "regional" / region / target / f"{year}_shap.json"
+
+            if not path.exists():
+                return None
+
+            with open(path) as f:
+                self._cache_set(self._shap_cache, cache_key, json.load(f), self._shap_cache_max)
+
+        return self._shap_cache[cache_key]
+
+    def get_regional_shap_timeline(
+        self,
+        region: str,
+        target: str,
+        start_year: Optional[int] = None,
+        end_year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Get regional SHAP importance for all years (preload for timeline)."""
+        start_year = start_year or TEMPORAL_YEAR_MIN
+        end_year = end_year or TEMPORAL_YEAR_MAX
+
+        years = []
+        shap_by_year = {}
+        is_mock = False
+
+        for year in range(start_year, end_year + 1):
+            data = self.get_regional_shap(region, target, year)
+            if data:
+                years.append(year)
+                shap_by_year[str(year)] = data.get('shap_importance', {})
+                if data.get('metadata', {}).get('is_mock_data'):
+                    is_mock = True
+
+        return {
+            'country': None,
+            'region': region,
+            'target': target,
+            'years': years,
+            'shap_by_year': shap_by_year,
+            'is_mock': is_mock
+        }
+
     # ==================== Stratified SHAP Methods ====================
 
     def get_stratified_shap(
