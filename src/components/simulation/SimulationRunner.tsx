@@ -854,7 +854,7 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [showCSVMenu, setShowCSVMenu] = useState(false)
   const csvMenuRef = useRef<HTMLDivElement>(null)
-  const { indicators, effectFilterPct, setEffectFilterPct, highlightedIndicator, setHighlightedIndicator, selectedCountry, interventions, activeTemplate } = useSimulationStore()
+  const { indicators, targetVisibleEffects, setTargetVisibleEffects, highlightedIndicator, setHighlightedIndicator, selectedCountry, interventions, activeTemplate } = useSimulationStore()
   const resultsRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll results into view when they first appear
@@ -931,16 +931,14 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
 
     const totalNonZero = allRows.length
 
-    // Percentile filter: keep top N items by magnitude (deterministic via slice)
-    // effectFilterPct=1 means show all, 0.5 means top 50%, 0.1 means top 10%
-    if (allRows.length > 1 && effectFilterPct < 1) {
-      const keepCount = Math.max(1, Math.round(allRows.length * effectFilterPct))
-      const filtered = allRows.slice(0, keepCount)
+    // Filter to top N by magnitude (matches targetVisibleEffects count)
+    if (allRows.length > targetVisibleEffects) {
+      const filtered = allRows.slice(0, targetVisibleEffects)
       return { affectedCount: filtered.length, totalNonZero, rows: filtered }
     }
 
     return { affectedCount: allRows.length, totalNonZero, rows: allRows }
-  }, [temporalResults, indicatorNames, effectFilterPct])
+  }, [temporalResults, indicatorNames, targetVisibleEffects])
 
   const formatVal = (v: number) => {
     if (isNaN(v)) return 'N/A'
@@ -1034,21 +1032,21 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
       {/* Filter slider — always visible when results exist */}
       <div className="effect-filter-row">
         <label className="effect-filter-label">
-          Show: top {affectedCount} ({Math.round(effectFilterPct * 100)}%)
+          Show: top {affectedCount} of {totalNonZero}
         </label>
         <input
           type="range"
-          min={1}
-          max={100}
+          min={3}
+          max={50}
           step={1}
-          value={Math.round(effectFilterPct * 100)}
-          onChange={(e) => setEffectFilterPct(Number(e.target.value) / 100)}
+          value={targetVisibleEffects}
+          onChange={(e) => setTargetVisibleEffects(Number(e.target.value))}
           className="effect-filter-slider"
-          aria-label="Effect visibility percentile"
-          aria-valuemin={1}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(effectFilterPct * 100)}
-          aria-valuetext={`Show top ${Math.round(effectFilterPct * 100)} percent of effects`}
+          aria-label="Number of effects to display"
+          aria-valuemin={3}
+          aria-valuemax={50}
+          aria-valuenow={targetVisibleEffects}
+          aria-valuetext={`Show top ${targetVisibleEffects} effects`}
         />
       </div>
 

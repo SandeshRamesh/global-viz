@@ -345,7 +345,7 @@ function App() {
     setStratum,
     loadAllClassifications,
     interventions: storeInterventions,
-    effectFilterPct,
+    targetVisibleEffects,
     isPlaying,
     setPlaybackMode,
     layoutReady,
@@ -358,7 +358,10 @@ function App() {
     loadQolScores,
     classificationsCache,
     setCountry: storeSetCountry,
-    setMapHoveredCountry
+    setMapHoveredCountry,
+    selectedRegion,
+    setSelectedRegion,
+    mapViewMode,
   } = useSimulationStore()
   const isPanelOpen = useIsPanelOpen()
 
@@ -427,8 +430,10 @@ function App() {
     const iso3 = classificationsCache.classifications[selectedCountry]?.iso3
     if (!iso3) return undefined
 
-    return { [iso3]: qolYear.delta }
-  }, [playbackMode, temporalResults, selectedCountry, classificationsCache, mapCurrentYear])
+    const base: Record<string, number> = { [iso3]: qolYear.delta }
+
+    return base
+  }, [playbackMode, temporalResults, selectedCountry, classificationsCache, mapCurrentYear, currentYearIndex])
 
   // Component-level QoL score for tooltip/JSX (mirrors D3 render cycle computation)
   const qolNodeScoreForTooltip = useMemo(() => {
@@ -1431,200 +1436,55 @@ function App() {
     return effects
   }, [temporalResults, rawData, playbackMode, currentYearIndex])
 
-  // Ref for progressive reveal: nodes that have ever been affected stay pinned
+  // Ref for progressive reveal: nodes revealed during playback stay permanently
   const everAffectedRef = useRef<Set<string>>(new Set())
 
-  // Auto-expand: pin intervention indicators + ancestors on simulation return.
-  // Only interventions are shown initially — progressive pinning reveals affected nodes
-  // during playback (staged reveal: intervention pulse first, then cascade).
-  useEffect(() => {
-    if (!temporalResults || !rawData || storeInterventions.length === 0) return
-
-    // Build parent lookup
-    const parentOf = new Map<string, string>()
-    for (const n of rawData.nodes) {
-      if (n.parent !== undefined) parentOf.set(String(n.id), String(n.parent))
-    }
-
-    const pins = new Set<string>()
-
-    // Always pin root + all ring 1 nodes (domains always visible)
-    for (const n of rawData.nodes) {
-      if (n.layer <= 1) pins.add(String(n.id))
-    }
-
-    // Set of intervention indicator IDs
-    const interventionIds = new Set(
-      storeInterventions.map(i => i.indicator).filter(Boolean)
-    )
-
-    // Pin intervention indicators + full ancestor chain
-    for (const id of interventionIds) {
-      pins.add(id)
-      let cur = parentOf.get(id)
-      while (cur) { pins.add(cur); cur = parentOf.get(cur) }
-    }
-
-    // NOTE: topLeafIds are NOT pinned here — only interventions.
-    // Progressive pinning (below) handles leaf expansion during playback,
-    // giving a staged reveal: intervention pulse first, then affected nodes.
-
-    // Prune single-child intermediate nodes (ring 2-4).
-    // If a node has exactly 1 pinned child, it's a pass-through hop — remove it.
-    // Branch points (2+ pinned children) stay visible.
-    const layerOf = new Map(rawData.nodes.map(n => [String(n.id), n.layer]))
-    const childrenOf = new Map<string, string[]>()
-    for (const n of rawData.nodes) {
-      if (n.children && n.children.length > 0) {
-        childrenOf.set(String(n.id), n.children.map(String))
-      }
-    }
-
-    // Iterative pruning: removing a node may make its parent a single-child too
-    let pruned = true
-    while (pruned) {
-      pruned = false
-      for (const id of [...pins]) {
-        const layer = layerOf.get(id) ?? 0
-        if (layer <= 1) continue // Never prune root or ring 1
-
-        const children = childrenOf.get(id)
-        if (!children) continue // Leaf node, keep it
-
-        const pinnedChildCount = children.filter(c => pins.has(c)).length
-        if (pinnedChildCount <= 1) {
-          pins.delete(id)
-          pruned = true
-        }
-      }
-    }
-
-    if (pins.size <= 1) return
-
-    // Reset everAffected on new simulation run (empty — progressive pinning fills it)
-    everAffectedRef.current = new Set()
-
-    setExpandedNodes(new Set())
-    setPinnedPaths(pins)
-  }, [temporalResults, rawData, storeInterventions])
-
   /**
-   * Progressive pinning during simulation playback.
-   * As the year scrubs forward, nodes that become affected are added to everAffectedRef
-   * and pinnedPaths grows. Rewinding keeps expanded nodes but tint tracks current year.
-   * Short hold: nodes stay pinned for 2 years after last appearance above threshold.
+   * Pre-compute global top-X effects across ALL simulation years.
+   * For each indicator, take its peak |percent_change| across all years.
+   * The top X (by targetVisibleEffects count) are the ONLY leaves that will ever be revealed.
    */
-  const lastSeenYearRef = useRef<Map<string, number>>(new Map())
-  const HOLD_YEARS = 2  // Keep nodes pinned for 2 extra years after disappearing
+  const globalTopEffectIds = useMemo(() => {
+    if (!temporalResults?.effects) return new Set<string>()
 
-  // Track whether playback has started at least once for this simulation run
-  const playbackStartedRef = useRef(false)
-  useEffect(() => {
-    if (isPlaying && playbackMode === 'simulation') {
-      playbackStartedRef.current = true
-    }
-  }, [isPlaying, playbackMode])
-  // Reset when new results arrive
-  useEffect(() => {
-    playbackStartedRef.current = false
-  }, [temporalResults])
-
-  // When timeline resets to year 0, collapse back to intervention-only view
-  useEffect(() => {
-    if (playbackMode !== 'simulation' || !temporalResults) return
-    if (currentYearIndex === 0 && !isPlaying) {
-      playbackStartedRef.current = false
-      everAffectedRef.current = new Set()
-      lastSeenYearRef.current = new Map()
-      // Re-pin just interventions (trigger the auto-expand effect)
-      const interventionIds = storeInterventions.filter(i => i.indicator).map(i => i.indicator!)
-      if (interventionIds.length > 0 && rawData) {
-        const parentOf = new Map<string, string>()
-        for (const n of rawData.nodes) {
-          if (n.parent !== undefined) parentOf.set(String(n.id), String(n.parent))
+    // Find peak |percent_change| for each indicator across all years
+    const peakByIndicator = new Map<string, number>()
+    for (const yearEffects of Object.values(temporalResults.effects)) {
+      for (const [id, e] of Object.entries(yearEffects)) {
+        if (Math.abs(e.baseline) <= 0.01) continue
+        const abs = Math.abs(e.percent_change)
+        if (abs > (peakByIndicator.get(id) ?? 0)) {
+          peakByIndicator.set(id, abs)
         }
-        const pins = new Set<string>()
-        for (const n of rawData.nodes) {
-          if (n.layer <= 1) pins.add(String(n.id))
-        }
-        for (const id of interventionIds) {
-          pins.add(id)
-          let cur = parentOf.get(id)
-          while (cur) { pins.add(cur); cur = parentOf.get(cur) }
-        }
-        setPinnedPaths(pins)
       }
     }
-  }, [currentYearIndex, isPlaying, playbackMode, temporalResults, storeInterventions, rawData])
 
-  useEffect(() => {
-    if (playbackMode !== 'simulation' || !temporalResults?.effects || !rawData) return
-    if (storeInterventions.length === 0) return
-    // Don't expand nodes until playback has started at least once — keeps
-    // intervention-only view stable until TimelinePlayer begins advancing.
-    // Once started, scrubbing (isPlaying=false) still updates progressive pins.
-    if (!playbackStartedRef.current) return
+    // Sort by peak magnitude, take top N directly
+    const sorted = [...peakByIndicator.entries()]
+      .filter(([, peak]) => peak > 0.01)
+      .sort((a, b) => b[1] - a[1])
 
-    const { base_year } = temporalResults
-    const simYear = base_year + currentYearIndex
-    const yearKey = String(simYear)
-    const yearEffects = temporalResults.effects[yearKey]
+    return new Set(sorted.slice(0, targetVisibleEffects).map(([id]) => id))
+  }, [temporalResults, targetVisibleEffects])
 
-    if (!yearEffects) return
+  /** Build pins from a set of leaf IDs: root + ring1 + interventions + leaves + ancestors, then prune. */
+  const buildPins = (leafIds: Set<string>, rawDataRef: typeof rawData, interventions: typeof storeInterventions): Set<string> => {
+    if (!rawDataRef) return new Set()
 
-    // Get top-N for current year
-    const allEffects = Object.entries(yearEffects)
-      .filter(([, e]) => Math.abs(e.percent_change) > 0.01 && Math.abs(e.baseline) > 0.01)
-      .sort((a, b) => Math.abs(b[1].percent_change) - Math.abs(a[1].percent_change))
-
-    const keepCount = allEffects.length > 1 && effectFilterPct < 1
-      ? Math.max(1, Math.round(allEffects.length * effectFilterPct))
-      : allEffects.length
-
-    const currentYearTopIds = allEffects.slice(0, keepCount).map(([id]) => id)
-
-    // Update last-seen timestamps
-    for (const id of currentYearTopIds) {
-      lastSeenYearRef.current.set(id, simYear)
-    }
-
-    // Add to ever-affected set
-    for (const id of currentYearTopIds) {
-      everAffectedRef.current.add(id)
-    }
-
-    // Build active set: everAffected minus nodes that dropped off > HOLD_YEARS ago
-    // Then cap to keepCount so the graph matches the "N of X shown" count
-    const candidateIds: string[] = []
-    for (const id of everAffectedRef.current) {
-      const lastSeen = lastSeenYearRef.current.get(id) ?? simYear
-      if (simYear - lastSeen <= HOLD_YEARS) {
-        candidateIds.push(id)
-      }
-    }
-    // Sort by current year effect magnitude (strongest first), then cap
-    candidateIds.sort((a, b) => {
-      const ea = yearEffects[a]
-      const eb = yearEffects[b]
-      return Math.abs(eb?.percent_change ?? 0) - Math.abs(ea?.percent_change ?? 0)
-    })
-    const activeIds = new Set(candidateIds.slice(0, keepCount))
-
-    // Build parent lookup
     const parentOf = new Map<string, string>()
-    for (const n of rawData.nodes) {
+    for (const n of rawDataRef.nodes) {
       if (n.parent !== undefined) parentOf.set(String(n.id), String(n.parent))
     }
 
     const pins = new Set<string>()
 
     // Always pin root + ring 1
-    for (const n of rawData.nodes) {
+    for (const n of rawDataRef.nodes) {
       if (n.layer <= 1) pins.add(String(n.id))
     }
 
     // Pin interventions + ancestors
-    for (const intv of storeInterventions) {
+    for (const intv of interventions) {
       if (intv.indicator) {
         pins.add(intv.indicator)
         let cur = parentOf.get(intv.indicator)
@@ -1632,43 +1492,21 @@ function App() {
       }
     }
 
-    // Pin active affected + ancestors
-    for (const id of activeIds) {
+    // Pin leaf effects + ancestors
+    for (const id of leafIds) {
       pins.add(id)
       let cur = parentOf.get(id)
       while (cur) { pins.add(cur); cur = parentOf.get(cur) }
     }
 
-    // Bridge nodes from causal_paths
-    const causalPaths = temporalResults.causal_paths
-    if (causalPaths) {
-      for (const leafId of activeIds) {
-        const visited = new Set<string>()
-        let curId = leafId
-        let depth = 0
-        while (depth < 10) {
-          const entry = causalPaths[curId]
-          if (!entry || !entry.source || entry.hop === 0) break
-          if (visited.has(entry.source)) break
-          visited.add(entry.source)
-          pins.add(entry.source)
-          let ancestor = parentOf.get(entry.source)
-          while (ancestor) { pins.add(ancestor); ancestor = parentOf.get(ancestor) }
-          curId = entry.source
-          depth++
-        }
-      }
-    }
-
-    // Prune single-child intermediates
-    const layerOf = new Map(rawData.nodes.map(n => [String(n.id), n.layer]))
+    // Prune single-child intermediates (ring 2+)
+    const layerOf = new Map(rawDataRef.nodes.map(n => [String(n.id), n.layer]))
     const childrenOf = new Map<string, string[]>()
-    for (const n of rawData.nodes) {
+    for (const n of rawDataRef.nodes) {
       if (n.children && n.children.length > 0) {
         childrenOf.set(String(n.id), n.children.map(String))
       }
     }
-
     let pruned = true
     while (pruned) {
       pruned = false
@@ -1685,10 +1523,108 @@ function App() {
       }
     }
 
-    if (pins.size > 1) {
-      setPinnedPaths(pins)
+    return pins
+  }
+
+  // On simulation start: pin only interventions (no effects yet — progressive reveal handles them)
+  useEffect(() => {
+    if (!temporalResults || !rawData || storeInterventions.length === 0) return
+
+    everAffectedRef.current = new Set()
+    const pins = buildPins(new Set(), rawData, storeInterventions)
+    if (pins.size <= 1) return
+
+    setExpandedNodes(new Set())
+    setPinnedPaths(pins)
+  }, [temporalResults, rawData, storeInterventions])
+
+  // Track whether playback has started at least once for this simulation run
+  const playbackStartedRef = useRef(false)
+  useEffect(() => {
+    if (isPlaying && playbackMode === 'simulation') {
+      playbackStartedRef.current = true
     }
-  }, [playbackMode, currentYearIndex, temporalResults, rawData, storeInterventions, effectFilterPct, isPlaying])
+  }, [isPlaying, playbackMode])
+  // Reset when new results arrive
+  useEffect(() => {
+    playbackStartedRef.current = false
+  }, [temporalResults])
+
+  // When timeline resets to year 0, collapse back to intervention-only view
+  useEffect(() => {
+    if (playbackMode !== 'simulation' || !temporalResults || !rawData) return
+    if (currentYearIndex === 0 && !isPlaying) {
+      playbackStartedRef.current = false
+      everAffectedRef.current = new Set()
+      const pins = buildPins(new Set(), rawData, storeInterventions)
+      if (pins.size > 1) setPinnedPaths(pins)
+    }
+  }, [currentYearIndex, isPlaying, playbackMode, temporalResults, storeInterventions, rawData])
+
+  // When globalTopEffectIds changes (user moved slider), re-derive everAffected from scratch.
+  // Walk all years up to current to rebuild the revealed set, then update pins immediately.
+  const prevTopEffectIdsRef = useRef(globalTopEffectIds)
+  useEffect(() => {
+    if (prevTopEffectIdsRef.current === globalTopEffectIds) return
+    prevTopEffectIdsRef.current = globalTopEffectIds
+
+    if (playbackMode !== 'simulation' || !temporalResults?.effects || !rawData) return
+
+    // Rebuild everAffected: walk all years up to current, reveal nodes in new top set
+    const newEverAffected = new Set<string>()
+    const { base_year } = temporalResults
+    for (let yi = 1; yi <= currentYearIndex; yi++) {
+      const yearEffects = temporalResults.effects[String(base_year + yi)]
+      if (!yearEffects) continue
+      for (const id of globalTopEffectIds) {
+        if (newEverAffected.has(id)) continue
+        const eff = yearEffects[id]
+        if (eff && Math.abs(eff.percent_change) > 0.01) {
+          newEverAffected.add(id)
+        }
+      }
+    }
+    everAffectedRef.current = newEverAffected
+
+    const pins = buildPins(newEverAffected, rawData, storeInterventions)
+    if (pins.size > 1) setPinnedPaths(pins)
+  }, [globalTopEffectIds, playbackMode, temporalResults, rawData, storeInterventions, currentYearIndex])
+
+  /**
+   * Progressive pinning during simulation playback.
+   * Each year, check which globalTopEffectIds have become significant (|pct| > 0.01).
+   * Once revealed, a node stays permanently — no expiry, no hold years.
+   * Only globalTopEffectIds can be revealed (pre-computed top X across all years).
+   */
+  useEffect(() => {
+    if (playbackMode !== 'simulation' || !temporalResults?.effects || !rawData) return
+    if (storeInterventions.length === 0) return
+    if (!playbackStartedRef.current) return
+
+    const { base_year } = temporalResults
+    const simYear = base_year + currentYearIndex
+    const yearEffects = temporalResults.effects[String(simYear)]
+    if (!yearEffects) return
+
+    // Reveal: any globalTopEffect that has |pct| > 0.01 this year gets permanently added
+    let changed = false
+    for (const id of globalTopEffectIds) {
+      if (everAffectedRef.current.has(id)) continue
+      const eff = yearEffects[id]
+      if (eff && Math.abs(eff.percent_change) > 0.01) {
+        everAffectedRef.current.add(id)
+        changed = true
+      }
+    }
+
+    // Only rebuild pins when new nodes were revealed
+    if (changed || everAffectedRef.current.size > 0) {
+      const pins = buildPins(everAffectedRef.current, rawData, storeInterventions)
+      if (pins.size > 1) {
+        setPinnedPaths(pins)
+      }
+    }
+  }, [playbackMode, currentYearIndex, temporalResults, rawData, storeInterventions, globalTopEffectIds, isPlaying])
 
   // Clean up simulation visuals when panel closes
   // Panel open → simulation visuals active (fill/borders depending on playback state)
@@ -1698,7 +1634,6 @@ function App() {
       setPlaybackMode('historical')
       setPinnedPaths(new Set())
       everAffectedRef.current = new Set()
-      lastSeenYearRef.current = new Map()
       playbackStartedRef.current = false
       // Expand root so ring 1 (domains) is visible instead of just the QoL node
       const rootNode = allNodes.find(n => n.ring === 0)
@@ -1757,10 +1692,7 @@ function App() {
       .filter(([, e]) => Math.abs(e.percent_change) > 0.01)
       .sort((a, b) => Math.abs(b[1].percent_change) - Math.abs(a[1].percent_change))
 
-    const pctCount = allEffects.length > 1 && effectFilterPct < 1
-      ? Math.max(1, Math.round(allEffects.length * effectFilterPct))
-      : allEffects.length
-    const keepCount = Math.min(pctCount, LOCAL_VIEW_MAX_EFFECTS)
+    const keepCount = Math.min(targetVisibleEffects, LOCAL_VIEW_MAX_EFFECTS)
 
     const topIds = new Set(allEffects.slice(0, keepCount).map(([id]) => id))
 
@@ -1780,7 +1712,7 @@ function App() {
       nodeByIdMap,
       DOMAIN_COLORS
     )
-  }, [localViewSimMode, temporalResults, currentYearIndex, storeInterventions, nodeByIdMap, rawData, effectFilterPct])
+  }, [localViewSimMode, temporalResults, currentYearIndex, storeInterventions, nodeByIdMap, rawData, targetVisibleEffects])
 
   // Build simEffects map for local view coloring (nodeId → percent_change for current year)
   const simLocalEffects = useMemo(() => {
@@ -2384,7 +2316,7 @@ function App() {
         searchInputRef.current?.blur()
       }
 
-      // C to clear Local View targets + simulation results
+      // C to clear Local View targets + simulation results + country/region selection
       if (e.key === 'c' || e.key === 'C') {
         if (localViewTargets.length > 0) {
           e.preventDefault()
@@ -2394,11 +2326,19 @@ function App() {
           e.preventDefault()
           clearResults()
         }
+        if (selectedCountry) {
+          e.preventDefault()
+          clearCountry()
+        }
+        if (selectedRegion) {
+          e.preventDefault()
+          setSelectedRegion(null)
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [localViewTargets.length, clearLocalViewTargets, temporalResults, clearResults])
+  }, [localViewTargets.length, clearLocalViewTargets, temporalResults, clearResults, selectedCountry, clearCountry, selectedRegion, setSelectedRegion])
 
   // Fetch data once on mount
   const fetchData = useCallback(async () => {
@@ -3205,9 +3145,10 @@ function App() {
           .attr('class', 'ring-label')
           .attr('x', 0)
           .attr('text-anchor', 'middle')
-          .attr('font-size', 12)
-          .attr('font-weight', 'bold')
-          .attr('fill', '#888')
+          .attr('font-size', 10)
+          .attr('font-weight', '400')
+          .attr('fill', '#aaa')
+          .attr('fill-opacity', 0.6)
           .attr('y', d => -d.radius - 12)
           .text(d => d.label || ringConfigs[d.index]?.label || ''),
         update => update
@@ -4123,10 +4064,13 @@ function App() {
       const strokeOpacity = isAffectedDuringPlayback ? 0 : (simBorder ? simBorder.opacity : 1.0)
       const dashArray = (!simBorder && !isAffectedDuringPlayback && isNodeFloored(d.importance)) ? '2,2' : 'none'
 
-      // Ring 0 QoL outline: subtle RdYlGn tint matching the world map choropleth
-      if (d.ring === 0 && qolNodeScore != null) {
+      // Ring 0 QoL outline: RdYlGn tint — hidden during simulation (cyan pulse + glow handle it)
+      if (d.ring === 0 && qolNodeScore != null && playbackMode !== 'simulation') {
         strokeColor = d3.scaleSequential(d3.interpolateRdYlGn).domain([0.3, 0.95])(qolNodeScore)
         strokeWidth = Math.max(1.5, getSize(d) * 0.06)
+      } else if (d.ring === 0 && playbackMode === 'simulation') {
+        strokeColor = '#78909C'  // match fill — invisible border during sim
+        strokeWidth = 0.5
       }
 
       // Dots mode: deep-ring nodes set attrs directly, no transition
@@ -4206,7 +4150,8 @@ function App() {
       .attr('data-ring', d => d.ring)
       .attr('fill', d => getColor(d))
       .attr('stroke', d => {
-        // Ring 0 QoL outline: subtle RdYlGn tint
+        // Ring 0 QoL outline: hidden during sim, RdYlGn tint otherwise
+        if (d.ring === 0 && playbackMode === 'simulation') return '#78909C'
         if (d.ring === 0 && qolNodeScore != null) {
           return d3.scaleSequential(d3.interpolateRdYlGn).domain([0.3, 0.95])(qolNodeScore)
         }
@@ -4217,7 +4162,8 @@ function App() {
         return sb ? sb.color : isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E')
       })
       .attr('stroke-width', d => {
-        // Ring 0 QoL outline: subtle width
+        // Ring 0 QoL outline: hidden during sim
+        if (d.ring === 0 && playbackMode === 'simulation') return 0.5
         if (d.ring === 0 && qolNodeScore != null) {
           return Math.max(1.5, getSize(d) * 0.06)
         }
@@ -4696,15 +4642,23 @@ function App() {
               textEl.text(null)
               const lineHeight = pos.fontSize * 1.1
               pos.lines.forEach((line, i) => {
-                textEl.append('tspan')
+                const tspan = textEl.append('tspan')
                   .attr('x', pos.x)
                   .attr('dy', i === 0 ? 0 : lineHeight)
                   .text(line)
+                // Score line (second line on ring 0) — smaller and subdued
+                if (i === 1 && d.ring === 0) {
+                  tspan.attr('font-size', pos.fontSize * 0.7).attr('fill-opacity', 0.7)
+                }
               })
             } else {
               // Same line count — update text in place
               tspans.each(function(_d, i) {
-                d3.select(this).text(pos.lines[i])
+                const el = d3.select(this)
+                el.text(pos.lines[i])
+                if (i === 1 && d.ring === 0) {
+                  el.attr('font-size', pos.fontSize * 0.7).attr('fill-opacity', 0.7)
+                }
               })
             }
           }
@@ -5233,6 +5187,9 @@ function App() {
         onCountrySelect={(name) => storeSetCountry(name)}
         onCountryHover={(name) => setMapHoveredCountry(name)}
         selectedCountryIso3={selectedCountryIso3}
+        mapViewMode={mapViewMode}
+        onRegionSelect={(regionKey) => setSelectedRegion(regionKey as import('./constants/regions').RegionKey)}
+        selectedRegion={selectedRegion}
       />
 
       {/* Left Sidebar - Responsive flex container */}
@@ -5591,8 +5548,8 @@ function App() {
         />
       </div>
 
-      {/* Strata Tabs - Center top, available in all views when non-country specific */}
-      {!selectedCountry && (
+      {/* Strata Tabs - Center top, available in all views when non-country/region specific */}
+      {!selectedCountry && !selectedRegion && (
         <div
           style={{
             position: 'absolute',

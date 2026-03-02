@@ -11,7 +11,7 @@ from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
 
 from ..services.temporal_service import temporal_service
-from ..config import TEMPORAL_YEAR_MIN, TEMPORAL_YEAR_MAX, TEMPORAL_TARGETS, INCOME_STRATA
+from ..config import TEMPORAL_YEAR_MIN, TEMPORAL_YEAR_MAX, TEMPORAL_TARGETS, INCOME_STRATA, ENABLE_REGIONAL_VIEW
 
 router = APIRouter(prefix="/api/temporal", tags=["Temporal Data"])
 
@@ -113,6 +113,39 @@ async def get_unified_shap(
         )
 
     return data
+
+
+@router.get("/shap/region/{region}/{target}/timeline")
+async def get_regional_shap_timeline(
+    region: str,
+    target: str,
+    start_year: Optional[int] = Query(None, ge=TEMPORAL_YEAR_MIN, le=TEMPORAL_YEAR_MAX),
+    end_year: Optional[int] = Query(None, ge=TEMPORAL_YEAR_MIN, le=TEMPORAL_YEAR_MAX)
+):
+    """
+    Get regional SHAP importance for all years (preload for timeline animation).
+
+    - **region**: Region key (e.g., "sub_saharan_africa", "north_america")
+    - **target**: Target outcome (quality_of_life, health, etc.)
+    """
+    if not ENABLE_REGIONAL_VIEW:
+        raise HTTPException(status_code=403, detail="Regional views are disabled")
+
+    if target not in TEMPORAL_TARGETS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid target. Must be one of: {TEMPORAL_TARGETS}"
+        )
+
+    timeline = temporal_service.get_regional_shap_timeline(region, target, start_year, end_year)
+
+    if not timeline['years']:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No SHAP timeline data found for region {region}/{target}"
+        )
+
+    return timeline
 
 
 @router.get("/shap/{country}/{target}/timeline")

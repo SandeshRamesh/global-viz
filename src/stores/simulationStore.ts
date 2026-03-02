@@ -26,6 +26,7 @@ import {
   getShapImportance
 } from '../services/api';
 import type { ScenarioTemplate } from '../types/scenarioTemplate';
+import type { RegionKey } from '../constants/regions';
 import { debug } from '../utils/debug';
 import {
   DATA_YEAR_MAX,
@@ -79,13 +80,14 @@ function makeSimCacheKey(
   baseYear: number,
   horizon: number,
   viewType: 'country' | 'stratified' | 'unified' | 'regional',
-  stratum: IncomeStratum | 'unified'
+  stratum: IncomeStratum | 'unified',
+  region: RegionKey | null = null
 ): string {
   const intKey = interventions
     .map(i => `${i.indicator}:${i.change_percent}:${i.year ?? 0}`)
     .sort()
     .join('|')
-  return `${viewType}:${stratum}::${country ?? 'null'}::${intKey}::${baseYear}::${horizon}`
+  return `${viewType}:${stratum}:${region ?? ''}::${country ?? 'null'}::${intKey}::${baseYear}::${horizon}`
 }
 
 // ============================================
@@ -183,6 +185,10 @@ interface SimulationState {
   activeTemplate: ScenarioTemplate | null;
   templateModified: boolean;
 
+  // Regional views
+  selectedRegion: RegionKey | null;
+  mapViewMode: 'country' | 'regional';
+
   // Map layer
   mapForeground: boolean;
   mapHoveredCountry: string | null;
@@ -191,6 +197,10 @@ interface SimulationState {
 
   // Error handling
   error: string | null;
+
+  // Actions - Regional
+  setSelectedRegion: (region: RegionKey | null) => Promise<void>;
+  setMapViewMode: (mode: 'country' | 'regional') => void;
 
   // Actions - Map
   toggleMapForeground: () => void;
@@ -278,6 +288,8 @@ interface SimulationState {
 const MAX_INTERVENTIONS = 5;
 let countryLoadRequestId = 0;
 let countryLoadController: AbortController | null = null;
+let regionLoadRequestId = 0;
+let regionLoadController: AbortController | null = null;
 
 const isAbortError = (error: unknown): boolean => {
   return (
@@ -329,7 +341,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   simulationStartYear: 2020,
   simulationEndYear: 2029,
   effectFilterPct: 0.5,
-  targetVisibleEffects: 10,
+  targetVisibleEffects: 15,
   highlightedIndicator: null,
   savedScenarios: loadScenariosFromStorage(),
   templates: [],
@@ -340,11 +352,151 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   templateModified: false,
   error: null,
 
+  // Regional views
+  selectedRegion: null,
+  mapViewMode: 'country' as const,
+
   // Map layer
   mapForeground: false,
   mapHoveredCountry: null,
   qolScores: null,
   qolScoresLoading: false,
+
+  // Regional actions
+  setSelectedRegion: async (region) => {
+    const { selectedTarget } = get();
+    const requestId = ++regionLoadRequestId;
+
+    // Abort any in-flight country or region loads
+    if (countryLoadController) {
+      countryLoadController.abort();
+      countryLoadController = null;
+    }
+    if (regionLoadController) {
+      regionLoadController.abort();
+    }
+    const controller = new AbortController();
+    regionLoadController = controller;
+
+    if (region === null) {
+      set({
+        selectedRegion: null,
+        mapViewMode: 'country',
+        countryGraph: null,
+        countryLoading: false,
+        historicalTimeline: null,
+        temporalShapTimeline: null,
+        temporalResults: null,
+        playbackMode: 'historical',
+        currentYearIndex: 0,
+        isPlaying: false,
+      });
+      return;
+    }
+
+    set({
+      selectedRegion: region,
+      selectedCountry: null,
+      mapViewMode: 'regional',
+      countryLoading: true,
+      timelineLoading: true,
+      shapTimelineLoading: true,
+      error: null,
+      temporalResults: null,
+      historicalTimeline: null,
+      temporalShapTimeline: null,
+      countryGraph: null,
+      playbackMode: 'historical',
+      currentYearIndex: 0,
+      isPlaying: false,
+    });
+
+    try {
+      // Fetch regional graph and timeline in parallel
+      const [regionGraph, timeline] = await Promise.all([
+        simulationAPI.getRegionalGraph(region, controller.signal),
+        simulationAPI.getRegionalTimeline(region, undefined, undefined, controller.signal),
+      ]);
+
+      if (controller.signal.aborted || requestId !== regionLoadRequestId) return;
+
+      // Fetch regional SHAP timeline
+      let shapTimeline: TemporalShapTimeline;
+      try {
+        shapTimeline = await simulationAPI.getRegionalShapTimeline(
+          region,
+          selectedTarget,
+          undefined,
+          undefined,
+          controller.signal
+        );
+      } catch (error) {
+        if (isAbortError(error) || controller.signal.aborted || requestId !== regionLoadRequestId) {
+          return;
+        }
+        // Fall back to unified SHAP
+        const { cachedUnifiedShap } = get();
+        if (cachedUnifiedShap) {
+          shapTimeline = cachedUnifiedShap;
+        } else {
+          shapTimeline = await simulationAPI.getUnifiedShapTimeline(
+            selectedTarget,
+            undefined,
+            undefined,
+            controller.signal
+          );
+        }
+      }
+
+      if (controller.signal.aborted || requestId !== regionLoadRequestId) return;
+
+      // Filter SHAP timeline to years with actual data
+      const yearsWithData = shapTimeline.years.filter(year => {
+        const yearData = shapTimeline.shap_by_year[String(year)];
+        if (!yearData) return false;
+        return Object.values(yearData).some(v => {
+          const mean = typeof v === 'object' && 'mean' in v ? v.mean : v;
+          return mean !== 0 && mean !== null && mean !== undefined;
+        });
+      });
+
+      const effectiveYears = yearsWithData.length > 0 ? yearsWithData : timeline.years;
+      const effectiveTimeline: CountryTimeline = {
+        ...timeline,
+        years: effectiveYears,
+        start_year: effectiveYears[0] || timeline.start_year,
+        end_year: effectiveYears[effectiveYears.length - 1] || timeline.end_year,
+      };
+
+      set({
+        countryGraph: regionGraph,
+        countryLoading: false,
+        historicalTimeline: effectiveTimeline,
+        timelineLoading: false,
+        temporalShapTimeline: shapTimeline,
+        shapTimelineLoading: false,
+        currentYearIndex: effectiveTimeline.years.length - 1,
+      });
+    } catch (err) {
+      if (isAbortError(err) || controller.signal.aborted || requestId !== regionLoadRequestId) {
+        return;
+      }
+      set({
+        error: err instanceof Error ? err.message : 'Failed to load regional data',
+        countryLoading: false,
+        timelineLoading: false,
+        shapTimelineLoading: false,
+        countryGraph: null,
+        historicalTimeline: null,
+        temporalShapTimeline: null,
+      });
+    } finally {
+      if (regionLoadController === controller) {
+        regionLoadController = null;
+      }
+    }
+  },
+  setMapViewMode: (mode) => set({ mapViewMode: mode }),
 
   // Map actions
   toggleMapForeground: () => set((state) => ({ mapForeground: !state.mapForeground })),
@@ -394,8 +546,16 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     const controller = new AbortController();
     countryLoadController = controller;
 
+    // Abort any in-flight region load
+    if (regionLoadController) {
+      regionLoadController.abort();
+      regionLoadController = null;
+    }
+
     set({
       selectedCountry: name,
+      selectedRegion: null,
+      mapViewMode: 'country',
       countryLoading: true,
       timelineLoading: true,
       shapTimelineLoading: true,
@@ -840,13 +1000,14 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   // Simulation actions
   runTemporalSimulation: async (horizonYears?: number) => {
-    const { selectedCountry, selectedStratum, interventions, isSimulating, historicalTimeline, currentYearIndex, simulationStartYear, simulationEndYear } = get();
+    const { selectedCountry, selectedRegion, selectedStratum, interventions, isSimulating, historicalTimeline, currentYearIndex, simulationStartYear, simulationEndYear } = get();
 
     if (isSimulating) return;
 
-    // Derive view type from current graph view + country selection
-    const viewType: 'country' | 'stratified' | 'unified' =
-      selectedCountry ? 'country'
+    // Derive view type from current graph view + country/region selection
+    const viewType: 'country' | 'stratified' | 'unified' | 'regional' =
+      selectedRegion ? 'regional'
+        : selectedCountry ? 'country'
         : selectedStratum === 'unified' ? 'unified'
         : 'stratified';
 
@@ -884,7 +1045,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       advanced: 'United States',
     };
     let apiCountry: string | null = selectedCountry || 'United States';
-    if (viewType === 'unified') {
+    if (viewType === 'regional') {
+      apiCountry = null;
+    } else if (viewType === 'unified') {
       apiCountry = null;
     } else if (viewType === 'stratified') {
       apiCountry = STRATA_REPRESENTATIVE[selectedStratum] || 'India';
@@ -893,16 +1056,6 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     // Helper to apply results (shared between cache hit and API response)
     const applyResults = (results: TemporalResults) => {
       const nextRunToken = get().simulationRunToken + 1;
-      const TARGET_VISIBLE = get().targetVisibleEffects;
-      const yearKeys = Object.keys(results.effects).sort();
-      const finalYearEffects = yearKeys.length > 0
-        ? results.effects[yearKeys[yearKeys.length - 1]]
-        : {};
-      const nonZeroEffects = Object.values(finalYearEffects)
-        .filter(e => Math.abs(e.percent_change) > 0.01).length;
-      const autoFilterPct = nonZeroEffects > TARGET_VISIBLE
-        ? Math.min(1, Math.max(0.01, TARGET_VISIBLE / nonZeroEffects))
-        : 1;
 
       debug.log('simulation-store', `Simulation complete: ${results.horizon_years} years, base=${results.base_year}, effects keys=${Object.keys(results.effects).length}`);
       set({
@@ -914,7 +1067,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         currentYearIndex: 1,  // Skip base year (index 0), start at first intervention year
         playbackMode: 'simulation',
         isPlaying: false,
-        effectFilterPct: autoFilterPct,
+        // Note: targetVisibleEffects is NOT reset here — user's slider choice persists across re-runs
         highlightedIndicator: null,
         layoutReady: false,  // Will be set true by App.tsx after D3 render settles
         simulationRunToken: nextRunToken
@@ -928,7 +1081,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       effectiveBaseYear,
       effectiveHorizon,
       viewType,
-      selectedStratum
+      selectedStratum,
+      selectedRegion
     );
     const cached = simCache.get(cacheKey);
     if (cached) {
@@ -945,7 +1099,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         interventionsWithYear,
         effectiveHorizon,
         effectiveBaseYear,
-        viewType
+        viewType,
+        selectedRegion ?? undefined
       );
 
       // Store in cache
@@ -971,7 +1126,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     playbackMode: 'historical',
     highlightedIndicator: null,
     activeTemplate: null,
-    templateModified: false
+    templateModified: false,
+    selectedRegion: null,
+    mapViewMode: 'country',
   }),
 
   // Temporal playback actions

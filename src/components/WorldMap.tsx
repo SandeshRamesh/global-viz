@@ -1,8 +1,13 @@
 /**
- * WorldMap — Choropleth background layer showing QOL score by country.
+ * WorldMap — Choropleth background layer showing QOL score by country or region.
  *
  * Renders TopoJSON world geometry colored by QoL V1 (0-1 HDI-calibrated) values.
  * Sits behind the graph as a subtle background, toggleable to foreground via M key.
+ *
+ * Supports two view modes:
+ * - **Country**: each country colored by its own QoL score (default)
+ * - **Regional**: all countries in a region share one color (region-mean QoL),
+ *   with thicker inter-region boundaries and thinner intra-region borders.
  *
  * Smooth transitions: pre-interpolates all iso3→year scores on data load so
  * timeline scrubbing never flickers.  Years outside the data range are filled
@@ -14,6 +19,7 @@ import * as d3 from 'd3'
 import * as topojson from 'topojson-client'
 import type { Topology, GeometryCollection } from 'topojson-specification'
 import type { QolScoresByCountry, IncomeStratum, AllClassifications } from '../services/api'
+import { ISO3_TO_REGION, REGION_DISPLAY_NAMES, type RegionKey } from '../constants/regions'
 
 /**
  * ISO 3166-1 numeric → ISO 3166-1 alpha-3 mapping.
@@ -70,6 +76,13 @@ function normalizeId(id: string | number | undefined): string {
   return isNaN(n) ? String(id) : String(n)
 }
 
+/** Get region key for a TopoJSON feature. */
+function featureRegion(d: GeoJSON.Feature): RegionKey | undefined {
+  const numId = normalizeId(d.id)
+  const iso3 = NUMERIC_TO_ISO3[numId]
+  return iso3 ? ISO3_TO_REGION[iso3] as RegionKey | undefined : undefined
+}
+
 interface WorldMapProps {
   foreground: boolean
   qolScores: Record<string, QolScoresByCountry> | null
@@ -80,15 +93,14 @@ interface WorldMapProps {
   onCountrySelect?: (name: string) => void
   onCountryHover?: (name: string | null) => void
   selectedCountryIso3?: string | null
+  mapViewMode: 'country' | 'regional'
+  onRegionSelect?: (regionKey: string) => void
+  selectedRegion?: string | null
 }
 
 /**
  * Build Set<iso3> of countries belonging to the selected stratum.
  * Returns null when stratum is 'unified' (show all).
- *
- * Uses a stable membership rule: a country is included if it belongs to
- * the stratum in ANY year.  This prevents countries from flickering on/off
- * the map as their classification shifts between years during timeline playback.
  */
 function buildStratumIso3s(
   classifications: AllClassifications | null,
@@ -104,7 +116,7 @@ function buildStratumIso3s(
     for (const yearInfo of Object.values(byYear)) {
       if (yearInfo?.classification_3tier === targetLabel) {
         allowed.add(iso3)
-        break // found at least one year — include this country
+        break
       }
     }
   }
@@ -113,14 +125,6 @@ function buildStratumIso3s(
 
 /**
  * Pre-interpolate QoL scores for every iso3 across the full year range.
- *
- * For each country:
- *   - Known year values are kept as-is
- *   - Years between two known values are linearly interpolated
- *   - Years before the earliest known value use the earliest value (hold)
- *   - Years after the latest known value use the latest value (hold)
- *
- * Returns Map<iso3, Map<year, score>> covering YEAR_MIN..YEAR_MAX.
  */
 function buildInterpolatedScores(
   scores: Record<string, QolScoresByCountry>
@@ -131,7 +135,6 @@ function buildInterpolatedScores(
     const iso3 = data.iso3
     if (!iso3) continue
 
-    // Collect known (year, value) pairs sorted by year
     const known: Array<[number, number]> = []
     for (const [yStr, val] of Object.entries(data.by_year)) {
       if (val != null) known.push([Number(yStr), val])
@@ -145,16 +148,13 @@ function buildInterpolatedScores(
     const lastYear = known[known.length - 1][0]
     const lastVal = known[known.length - 1][1]
 
-    let ki = 0 // index into known[]
+    let ki = 0
     for (let y = YEAR_MIN; y <= YEAR_MAX; y++) {
       if (y <= firstYear) {
-        // Before or at first data point — hold first value
         yearMap.set(y, firstVal)
       } else if (y >= lastYear) {
-        // At or after last data point — hold last value
         yearMap.set(y, lastVal)
       } else {
-        // Advance ki so known[ki] <= y < known[ki+1]
         while (ki < known.length - 2 && known[ki + 1][0] <= y) ki++
         const [y0, v0] = known[ki]
         const [y1, v1] = known[ki + 1]
@@ -196,10 +196,36 @@ function buildYearMapFromInterpolated(
   return map
 }
 
+/**
+ * Build region→mean QoL map by averaging country scores within each region.
+ */
+function buildRegionalYearMap(
+  countryYearMap: Map<string, number>
+): Map<RegionKey, number> {
+  const sums = new Map<RegionKey, { total: number; count: number }>()
+  for (const [iso3, score] of countryYearMap) {
+    const region = ISO3_TO_REGION[iso3] as RegionKey | undefined
+    if (!region) continue
+    const entry = sums.get(region) ?? { total: 0, count: 0 }
+    entry.total += score
+    entry.count += 1
+    sums.set(region, entry)
+  }
+  const result = new Map<RegionKey, number>()
+  for (const [region, { total, count }] of sums) {
+    result.set(region, total / count)
+  }
+  return result
+}
+
 /** Transition duration for fill color changes (ms). */
 const COLOR_TRANSITION_MS = 400
 
-export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, classificationsCache, simAdjustments, onCountrySelect, onCountryHover, selectedCountryIso3 }: WorldMapProps) {
+export function WorldMap({
+  foreground, qolScores, currentYear, selectedStratum, classificationsCache,
+  simAdjustments, onCountrySelect, onCountryHover, selectedCountryIso3,
+  mapViewMode, onRegionSelect, selectedRegion,
+}: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const topoRef = useRef<Topology | null>(null)
@@ -208,17 +234,23 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
   const featuresRef = useRef<GeoJSON.Feature[]>([])
   const initializedRef = useRef(false)
   const prevYearRef = useRef<number | null>(null)
+  const hoveredRegionKeyRef = useRef<string | null>(null)
 
-  // Stable refs for callbacks (avoid re-bindining D3 event handlers on every render)
+  // Stable refs for callbacks
   const onCountrySelectRef = useRef(onCountrySelect)
   onCountrySelectRef.current = onCountrySelect
   const onCountryHoverRef = useRef(onCountryHover)
   onCountryHoverRef.current = onCountryHover
+  const onRegionSelectRef = useRef(onRegionSelect)
+  onRegionSelectRef.current = onRegionSelect
   const foregroundRef = useRef(foreground)
   foregroundRef.current = foreground
   const selectedCountryIso3Ref = useRef(selectedCountryIso3)
   selectedCountryIso3Ref.current = selectedCountryIso3
-
+  const mapViewModeRef = useRef(mapViewMode)
+  mapViewModeRef.current = mapViewMode
+  const selectedRegionRef = useRef(selectedRegion)
+  selectedRegionRef.current = selectedRegion
   // Build iso3→country name reverse map from qolScores
   const iso3ToName = useMemo(() => {
     const map = new Map<string, string>()
@@ -235,22 +267,28 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
     []
   )
 
-  // Pre-interpolate all scores once when data loads (O(countries * years), ~7k entries)
+  // Pre-interpolate all scores once when data loads
   const interpolated = useMemo(
     () => qolScores ? buildInterpolatedScores(qolScores) : new Map<string, Map<number, number>>(),
     [qolScores]
   )
 
-  // Build stratum filter (null = show all) — stable across all years
+  // Build stratum filter (null = show all)
   const stratumIso3s = useMemo(
     () => buildStratumIso3s(classificationsCache, selectedStratum),
     [classificationsCache, selectedStratum]
   )
 
-  // Build iso3→value map for current year from interpolated data
+  // Build iso3→value map for current year
   const yearMap = useMemo(
     () => buildYearMapFromInterpolated(interpolated, currentYear, stratumIso3s, simAdjustments),
     [interpolated, currentYear, stratumIso3s, simAdjustments]
+  )
+
+  // Build region→mean QoL for regional view mode
+  const regionalYearMap = useMemo(
+    () => mapViewMode === 'regional' ? buildRegionalYearMap(yearMap) : null,
+    [yearMap, mapViewMode]
   )
 
   /** Resolve fill color for a TopoJSON feature. */
@@ -258,41 +296,66 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
     const numId = normalizeId(d.id)
     const iso3 = NUMERIC_TO_ISO3[numId]
     if (!iso3) return '#1a1a2e'
+
+    if (mapViewMode === 'regional' && regionalYearMap) {
+      const region = ISO3_TO_REGION[iso3] as RegionKey | undefined
+      if (!region) return '#1a1a2e'
+      const val = regionalYearMap.get(region)
+      return val != null ? colorScale(val) : '#1a1a2e'
+    }
+
     const val = yearMap.get(iso3)
     return val != null ? colorScale(val) : '#1a1a2e'
-  }, [yearMap, colorScale])
+  }, [yearMap, regionalYearMap, colorScale, mapViewMode])
 
-  /** Apply per-path opacity + selection outline to all paths.
-   *  Uses refs so it always reads current state — safe to call from anywhere. */
+  /** Apply per-path opacity + selection/region outline to all paths. */
   const applySelectionStyle = useCallback(() => {
     const svg = svgRef.current
     if (!svg || !initializedRef.current) return
     const sel = selectedCountryIso3Ref.current
     const hasSelection = !!sel
     const isFg = foregroundRef.current
+    const isRegional = mapViewModeRef.current === 'regional'
+    const selRegion = selectedRegionRef.current
 
-    d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path')
+    d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
       .each(function (d) {
         const numId = normalizeId(d.id)
         const iso3 = NUMERIC_TO_ISO3[numId]
         const isSelected = iso3 && iso3 === sel
         const el = d3.select(this)
 
+        const region = iso3 ? ISO3_TO_REGION[iso3] : undefined
+        const isRegionSelected = isRegional && selRegion && region === selRegion
+
         let pathOpacity: number
         if (isFg) {
-          pathOpacity = hasSelection ? (isSelected ? 1 : 0.3) : 1
+          if (isRegional && selRegion) {
+            pathOpacity = isRegionSelected ? 1 : 0.3
+          } else {
+            pathOpacity = hasSelection ? (isSelected ? 1 : 0.3) : 1
+          }
         } else {
           pathOpacity = hasSelection ? (isSelected ? 0.45 : 0.03) : 0.07
         }
 
-        el.attr('stroke', isSelected ? '#00E5FF' : '#555')
-          .attr('stroke-width', isSelected ? 2 : 0.3)
+        // In regional mode, borders within a region are thin; between regions are thick
+        const defaultStroke = isRegional ? '#444' : '#555'
+        const defaultStrokeWidth = isRegional ? 0.15 : 0.3
+
+        el.attr('stroke', isSelected ? '#00E5FF' : (isRegionSelected ? '#00E5FF' : defaultStroke))
+          .attr('stroke-width', isSelected ? 2 : (isRegionSelected ? 0.8 : defaultStrokeWidth))
           .style('opacity', pathOpacity)
-          // In background, boost selected country to counteract container desaturation
           .style('filter', (!isFg && isSelected) ? 'saturate(7) brightness(1.15)' : 'none')
 
         if (isSelected) el.raise()
       })
+
+    // Update region boundary mesh stroke
+    d3.select(svg).selectAll<SVGPathElement, unknown>('path.region-boundary')
+      .attr('stroke', '#333')
+      .attr('stroke-width', isRegional ? 1.5 : 0)
+      .attr('stroke-opacity', isRegional && isFg ? 0.6 : 0)
   }, [])
 
   // Load TopoJSON once
@@ -329,12 +392,14 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
     pathGenRef.current = pathGen
 
     const sel = d3.select(svg)
-    sel.selectAll('path').remove()
+    sel.selectAll('*').remove()
 
-    sel.selectAll('path')
+    // Country paths
+    sel.selectAll('path.country')
       .data(featuresRef.current)
       .enter()
       .append('path')
+      .attr('class', 'country')
       .attr('d', d => pathGen(d) || '')
       .attr('fill', fillColor)
       .attr('stroke', '#555')
@@ -342,15 +407,20 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
       .style('cursor', 'pointer')
       .on('mouseover', function (_event: MouseEvent, d: GeoJSON.Feature) {
         if (!foregroundRef.current) return
+        // Regional hover is handled at SVG level (mousemove below) — skip per-path
+        if (mapViewModeRef.current === 'regional') return
+
+        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1.5).raise()
+
         const numId = normalizeId(d.id)
         const iso3 = NUMERIC_TO_ISO3[numId]
-        if (!iso3) return
-        const name = iso3ToName.get(iso3)
+        const name = iso3 ? iso3ToName.get(iso3) : undefined
         if (name) onCountryHoverRef.current?.(name)
-        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1.5).raise()
       })
       .on('mouseout', function (_event: MouseEvent, d: GeoJSON.Feature) {
         if (!foregroundRef.current) return
+        if (mapViewModeRef.current === 'regional') return
+
         onCountryHoverRef.current?.(null)
         const numId = normalizeId(d.id)
         const iso3 = NUMERIC_TO_ISO3[numId]
@@ -364,9 +434,35 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
         const numId = normalizeId(d.id)
         const iso3 = NUMERIC_TO_ISO3[numId]
         if (!iso3) return
-        const name = iso3ToName.get(iso3)
-        if (name) onCountrySelectRef.current?.(name)
+
+        if (mapViewModeRef.current === 'regional') {
+          const region = ISO3_TO_REGION[iso3]
+          if (region) onRegionSelectRef.current?.(region)
+        } else {
+          const name = iso3ToName.get(iso3)
+          if (name) onCountrySelectRef.current?.(name)
+        }
       })
+
+    // Region boundary mesh (rendered on top, no fill, just strokes)
+    const topo = topoRef.current
+    if (topo) {
+      const geom = topo.objects.countries as GeometryCollection
+      const regionMesh = topojson.mesh(topo, geom, (a, b) => {
+        const rA = featureRegion(a as unknown as GeoJSON.Feature)
+        const rB = featureRegion(b as unknown as GeoJSON.Feature)
+        return a !== b && rA !== rB
+      })
+      sel.append('path')
+        .attr('class', 'region-boundary')
+        .datum(regionMesh)
+        .attr('d', pathGen)
+        .attr('fill', 'none')
+        .attr('stroke', '#333')
+        .attr('stroke-width', 0)
+        .attr('stroke-opacity', 0)
+        .style('pointer-events', 'none')
+    }
 
     initializedRef.current = true
     applySelectionStyle()
@@ -384,10 +480,10 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
     return () => ro.disconnect()
   }, [renderMap])
 
-  // Re-apply selection style when selection or foreground changes
+  // Re-apply selection style when selection, foreground, or view mode changes
   useEffect(() => {
     applySelectionStyle()
-  }, [selectedCountryIso3, foreground, applySelectionStyle])
+  }, [selectedCountryIso3, selectedRegion, foreground, mapViewMode, applySelectionStyle])
 
   // Smooth color transition when year/sim data changes
   useEffect(() => {
@@ -397,19 +493,124 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
     const isFirstPaint = prevYearRef.current === null
     prevYearRef.current = currentYear
 
-    const paths = d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path')
+    const paths = d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
 
     if (isFirstPaint) {
-      // No transition on initial paint
       paths.attr('fill', fillColor)
     } else {
-      // Smooth color transition during timeline scrubbing
       paths
         .transition()
         .duration(COLOR_TRANSITION_MS)
         .attr('fill', fillColor)
     }
   }, [fillColor, currentYear])
+
+  // Region label tooltip + regional hover highlight (SVG-level to avoid per-path flicker)
+  const hoveredRegionRef = useRef<string | null>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (mapViewMode !== 'regional' || !foreground) {
+      // Clear any lingering hover state when leaving regional mode
+      if (hoveredRegionKeyRef.current) {
+        hoveredRegionKeyRef.current = null
+        applySelectionStyle()
+      }
+      return
+    }
+
+    const svg = svgRef.current
+    if (!svg) return
+
+    const handleMove = (e: MouseEvent) => {
+      const rect = svg.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+      const proj = projectionRef.current
+      if (!proj) return
+
+      const inverted = proj.invert?.([x, y])
+      if (!inverted) {
+        // Mouse over ocean/outside map
+        if (hoveredRegionKeyRef.current) {
+          hoveredRegionKeyRef.current = null
+          hoveredRegionRef.current = null
+          applySelectionStyle()
+          onCountryHoverRef.current?.(null)
+        }
+        if (tooltipRef.current) tooltipRef.current.style.opacity = '0'
+        return
+      }
+
+      // Hit-test: find which feature the mouse is over
+      let foundRegion: string | null = null
+      let foundName: string | undefined
+      for (const feat of featuresRef.current) {
+        if (pathGenRef.current && d3.geoContains(feat, inverted)) {
+          const numId = normalizeId(feat.id)
+          const iso3 = NUMERIC_TO_ISO3[numId]
+          if (iso3) {
+            foundRegion = ISO3_TO_REGION[iso3] ?? null
+            foundName = iso3ToName.get(iso3)
+          }
+          break
+        }
+      }
+
+      // Update hover name for sidebar
+      if (foundName) {
+        onCountryHoverRef.current?.(foundName)
+      } else if (hoveredRegionKeyRef.current) {
+        onCountryHoverRef.current?.(null)
+      }
+
+      // Tooltip
+      hoveredRegionRef.current = foundRegion
+      if (tooltipRef.current && foundRegion) {
+        const displayName = REGION_DISPLAY_NAMES[foundRegion as RegionKey] ?? foundRegion
+        tooltipRef.current.textContent = displayName
+        tooltipRef.current.style.opacity = '1'
+        tooltipRef.current.style.left = `${e.clientX - rect.left + 12}px`
+        tooltipRef.current.style.top = `${e.clientY - rect.top - 8}px`
+      } else if (tooltipRef.current) {
+        tooltipRef.current.style.opacity = '0'
+      }
+
+      // Region highlight: only update when region changes
+      if (foundRegion !== hoveredRegionKeyRef.current) {
+        hoveredRegionKeyRef.current = foundRegion
+        if (foundRegion) {
+          d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
+            .each(function (fd) {
+              const fIso3 = NUMERIC_TO_ISO3[normalizeId(fd.id)]
+              const fRegion = fIso3 ? ISO3_TO_REGION[fIso3] : undefined
+              const inHovered = fRegion === foundRegion
+              d3.select(this)
+                .style('opacity', inHovered ? 1 : 0.35)
+                .attr('stroke', inHovered ? '#fff' : '#444')
+                .attr('stroke-width', inHovered ? 0.6 : 0.15)
+            })
+        } else {
+          applySelectionStyle()
+        }
+      }
+    }
+
+    const handleLeave = () => {
+      hoveredRegionKeyRef.current = null
+      hoveredRegionRef.current = null
+      applySelectionStyle()
+      onCountryHoverRef.current?.(null)
+      if (tooltipRef.current) tooltipRef.current.style.opacity = '0'
+    }
+
+    svg.addEventListener('mousemove', handleMove)
+    svg.addEventListener('mouseleave', handleLeave)
+    return () => {
+      svg.removeEventListener('mousemove', handleMove)
+      svg.removeEventListener('mouseleave', handleLeave)
+    }
+  }, [mapViewMode, foreground, iso3ToName, applySelectionStyle])
 
   return (
     <div
@@ -429,6 +630,27 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
       }}
     >
       <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* Region tooltip (regional mode only) */}
+      {mapViewMode === 'regional' && foreground && (
+        <div
+          ref={tooltipRef}
+          style={{
+            position: 'absolute',
+            pointerEvents: 'none',
+            background: 'rgba(0,0,0,0.75)',
+            color: '#fff',
+            padding: '3px 8px',
+            borderRadius: 4,
+            fontSize: 11,
+            fontWeight: 500,
+            opacity: 0,
+            transition: 'opacity 0.1s ease',
+            whiteSpace: 'nowrap',
+            zIndex: 70,
+          }}
+        />
+      )}
     </div>
   )
 }

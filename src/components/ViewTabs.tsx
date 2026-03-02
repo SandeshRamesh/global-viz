@@ -7,6 +7,8 @@ import { useState, useEffect, useRef } from 'react'
 import type { ViewMode } from '../types'
 import { useSimulationStore } from '../stores/simulationStore'
 
+type MapViewMode = 'country' | 'regional'
+
 interface ViewTabsProps {
   activeView: ViewMode
   onViewChange: (view: ViewMode) => void
@@ -35,6 +37,8 @@ export function ViewTabs({
   const playbackFinishedToken = useSimulationStore(s => s.playbackFinishedToken)
   const mapForeground = useSimulationStore(s => s.mapForeground)
   const toggleMapForeground = useSimulationStore(s => s.toggleMapForeground)
+  const mapViewMode = useSimulationStore(s => s.mapViewMode) as MapViewMode
+  const setMapViewMode = useSimulationStore(s => s.setMapViewMode)
   const prevFinishedTokenRef = useRef(playbackFinishedToken)
 
   // Glow the share button when simulation playback reaches the final year
@@ -66,7 +70,7 @@ export function ViewTabs({
         gap: 6
       }}
     >
-      {/* Row 1: View mode tabs */}
+      {/* Row 1: View mode tabs (graph views) / Map mode toggle (when map foreground) */}
       <div
         style={{
           display: 'flex',
@@ -77,88 +81,130 @@ export function ViewTabs({
           overflow: 'hidden'
         }}
       >
-        {/* Global tab */}
-        <button
-          onClick={() => onViewChange('global')}
-          style={{
-            padding: '8px 16px',
-            fontSize: 13,
-            fontWeight: activeView === 'global' ? 600 : 400,
-            cursor: 'pointer',
-            border: 'none',
-            background: activeView === 'global' ? '#3B82F6' : 'white',
-            color: activeView === 'global' ? 'white' : '#555',
-            transition: 'all 0.15s ease'
-          }}
-          title="Global View - Explore the hierarchy (G)"
-        >
-          Global
-        </button>
-
-        {/* Split tab */}
-        <button
-          onClick={() => onViewChange('split')}
-          disabled={!hasTargets && activeView !== 'split'}
-          style={{
-            padding: '8px 16px',
-            fontSize: 13,
-            fontWeight: activeView === 'split' ? 600 : 400,
-            cursor: !hasTargets && activeView !== 'split' ? 'not-allowed' : 'pointer',
-            border: 'none',
-            borderLeft: '1px solid #ddd',
-            background: activeView === 'split' ? '#3B82F6' : 'white',
-            color: activeView === 'split' ? 'white' : !hasTargets ? '#aaa' : '#555',
-            opacity: !hasTargets && activeView !== 'split' ? 0.6 : 1,
-            transition: 'all 0.15s ease'
-          }}
-          title={!hasTargets
-            ? "Double-click a node to enable split view"
-            : "Split View - See both views side by side (S)"
-          }
-        >
-          Split
-        </button>
-
-        {/* Local tab */}
-        <button
-          onClick={() => onViewChange('local')}
-          disabled={!hasTargets && activeView !== 'local'}
-          style={{
-            padding: '8px 16px',
-            fontSize: 13,
-            fontWeight: activeView === 'local' ? 600 : 400,
-            cursor: !hasTargets && activeView !== 'local' ? 'not-allowed' : 'pointer',
-            border: 'none',
-            borderLeft: '1px solid #ddd',
-            background: activeView === 'local' ? '#3B82F6' : 'white',
-            color: activeView === 'local' ? 'white' : !hasTargets ? '#aaa' : '#555',
-            opacity: !hasTargets && activeView !== 'local' ? 0.6 : 1,
-            transition: 'all 0.15s ease',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6
-          }}
-          title={!hasTargets
-            ? "Double-click a node to view its causal pathways"
-            : `Local View - ${localTargetCount} target${localTargetCount !== 1 ? 's' : ''} (L)`
-          }
-        >
-          Local
-          {hasTargets && (
-            <span
+        {mapForeground ? (
+          /* Map mode toggle: Country / Regional */
+          <>
+            <button
+              onClick={() => setMapViewMode('country')}
               style={{
-                background: activeView === 'local' ? 'rgba(255,255,255,0.3)' : '#3B82F6',
-                color: 'white',
-                fontSize: 11,
-                padding: '1px 6px',
-                borderRadius: 10,
-                fontWeight: 600
+                padding: '8px 16px',
+                fontSize: 13,
+                fontWeight: mapViewMode === 'country' ? 600 : 400,
+                cursor: 'pointer',
+                border: 'none',
+                background: mapViewMode === 'country' ? '#3B82F6' : 'white',
+                color: mapViewMode === 'country' ? 'white' : '#555',
+                transition: 'all 0.15s ease'
               }}
+              title="Country view — each country colored by its QoL score"
             >
-              {localTargetCount}
-            </span>
-          )}
-        </button>
+              Country
+            </button>
+            <button
+              onClick={() => setMapViewMode('regional')}
+              style={{
+                padding: '8px 16px',
+                fontSize: 13,
+                fontWeight: mapViewMode === 'regional' ? 600 : 400,
+                cursor: 'pointer',
+                border: 'none',
+                borderLeft: '1px solid #ddd',
+                background: mapViewMode === 'regional' ? '#3B82F6' : 'white',
+                color: mapViewMode === 'regional' ? 'white' : '#555',
+                transition: 'all 0.15s ease'
+              }}
+              title="Regional view — countries colored by region-mean QoL"
+            >
+              Regional
+            </button>
+          </>
+        ) : (
+          /* Standard graph view tabs */
+          <>
+            {/* Global tab */}
+            <button
+              onClick={() => onViewChange('global')}
+              style={{
+                padding: '8px 16px',
+                fontSize: 13,
+                fontWeight: activeView === 'global' ? 600 : 400,
+                cursor: 'pointer',
+                border: 'none',
+                background: activeView === 'global' ? '#3B82F6' : 'white',
+                color: activeView === 'global' ? 'white' : '#555',
+                transition: 'all 0.15s ease'
+              }}
+              title="Global View - Explore the hierarchy (G)"
+            >
+              Global
+            </button>
+
+            {/* Split tab */}
+            <button
+              onClick={() => onViewChange('split')}
+              disabled={!hasTargets && activeView !== 'split'}
+              style={{
+                padding: '8px 16px',
+                fontSize: 13,
+                fontWeight: activeView === 'split' ? 600 : 400,
+                cursor: !hasTargets && activeView !== 'split' ? 'not-allowed' : 'pointer',
+                border: 'none',
+                borderLeft: '1px solid #ddd',
+                background: activeView === 'split' ? '#3B82F6' : 'white',
+                color: activeView === 'split' ? 'white' : !hasTargets ? '#aaa' : '#555',
+                opacity: !hasTargets && activeView !== 'split' ? 0.6 : 1,
+                transition: 'all 0.15s ease'
+              }}
+              title={!hasTargets
+                ? "Double-click a node to enable split view"
+                : "Split View - See both views side by side (S)"
+              }
+            >
+              Split
+            </button>
+
+            {/* Local tab */}
+            <button
+              onClick={() => onViewChange('local')}
+              disabled={!hasTargets && activeView !== 'local'}
+              style={{
+                padding: '8px 16px',
+                fontSize: 13,
+                fontWeight: activeView === 'local' ? 600 : 400,
+                cursor: !hasTargets && activeView !== 'local' ? 'not-allowed' : 'pointer',
+                border: 'none',
+                borderLeft: '1px solid #ddd',
+                background: activeView === 'local' ? '#3B82F6' : 'white',
+                color: activeView === 'local' ? 'white' : !hasTargets ? '#aaa' : '#555',
+                opacity: !hasTargets && activeView !== 'local' ? 0.6 : 1,
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+              title={!hasTargets
+                ? "Double-click a node to view its causal pathways"
+                : `Local View - ${localTargetCount} target${localTargetCount !== 1 ? 's' : ''} (L)`
+              }
+            >
+              Local
+              {hasTargets && (
+                <span
+                  style={{
+                    background: activeView === 'local' ? 'rgba(255,255,255,0.3)' : '#3B82F6',
+                    color: 'white',
+                    fontSize: 11,
+                    padding: '1px 6px',
+                    borderRadius: 10,
+                    fontWeight: 600
+                  }}
+                >
+                  {localTargetCount}
+                </span>
+              )}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Row 2: Clear and Reset buttons in shared bubble */}

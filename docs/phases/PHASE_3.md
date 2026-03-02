@@ -1,10 +1,12 @@
-# Phase 3: Academic Rigor - Path 3
+# Phase 3: Academic Rigor - Path 3 ✅ COMPLETE (as Simulation Polish)
 
-**Timeline:** Weeks 7-8
+**Timeline:** Week 9 | **Completed:** 2026-02-19
 
-**Objective:** Add transparency and reproducibility for researchers
+**Original Objective:** Add transparency and reproducibility for researchers
 
 **Target Users:** Path 3 (Validator) - skeptical journalists, fact-checkers, academic reviewers
+
+> **Note:** This was the original design spec. In practice, Phase 3 became "Simulation Polish" — selective branch expansion, border gating, pruning, and ring compression. Export suite shipped in Phase 6. Methodology page and sensitivity analysis are in the backlog. See `docs/plans/roadmap.md` Phase 3 for what was delivered.
 
 ---
 

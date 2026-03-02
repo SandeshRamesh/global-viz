@@ -85,7 +85,7 @@ TEMPORAL_TARGETS = _discover_temporal_targets([
 ])
 
 AVAILABLE_COUNTRY_GRAPH_COUNT = _discover_country_graph_count()
-ENABLE_REGIONAL_VIEW = os.getenv("ENABLE_REGIONAL_VIEW", "false").lower() == "true"
+ENABLE_REGIONAL_VIEW = os.getenv("ENABLE_REGIONAL_VIEW", "true").lower() == "true"
 
 # API settings
 API_VERSION = "3.1.0"

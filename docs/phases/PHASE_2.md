@@ -1,10 +1,12 @@
-# Phase 2: Practitioner Features - Path 4
+# Phase 2: Practitioner Features - Path 4 ✅ COMPLETE
 
-**Timeline:** Weeks 5-6
+**Timeline:** Weeks 5-8 | **Completed:** 2026-02-18
 
 **Objective:** Enable policy practitioners to run scenarios quickly
 
 **Target Users:** Path 4 (Practitioner) - government officials, policy advisors, city planners
+
+> **Note:** This was the original design spec. Actual implementation evolved significantly — country selector, simulation, temporal analysis, income stratification, timeline player, and V3.1 API integration all shipped. See `docs/plans/roadmap.md` Phase 2 for what was delivered.
 
 ---
 

@@ -117,17 +117,17 @@ viz/
 
 ## Current Work: Pre-Launch → Launch
 
-Phase 2 complete 2026-02-18. Phase 3 sim polish complete 2026-02-19. Phase 4 sim UX complete 2026-02-20.
+Phase 2 complete 2026-02-18. Phase 3 sim polish complete 2026-02-19. Phase 4 sim UX complete 2026-02-20. Phase 5 pre-launch complete 2026-03-01. Map integration complete 2026-03-02.
 
-### Pre-Launch (remaining)
+### Completed Pre-Launch
 
 2. ~~**Pre-built scenario library**~~ — **DONE** (2026-02-20)
 3. ~~**Export suite**~~ — **DONE** (2026-03-01): PNG screenshot, CSV results, shareable URL with encoded state
+4. ~~**2D + Globe map integration**~~ — **DONE** (2026-03-02): Choropleth world map with QoL heatmap, M-key toggle (hold/tap), dynamic QoL root node encoding (size, outline, interpolated score), smooth crossfade transitions
 
 ### Launch Features (current)
 
-4. **2D + Globe map integration** — choropleth world map + 3D globe showing country-level simulation results geographically
-5. **Regional views** — aggregate results by region (Sub-Saharan Africa, SE Asia, etc.)
+5. **Regional views** — aggregate results by region (Sub-Saharan Africa, SE Asia, etc.). Backend already supports `view_type: "regional"` in simulation endpoints (feature-flagged via `ENABLE_REGIONAL_VIEW`). Precomputed data exists: regional baselines, graphs, SHAP, stats across 11 regions. Frontend needs: region selector UI, regional graph rendering, regional simulation integration.
 6. **3D global graph view** — radial viz rendered in 3D with depth, rotation, fly-through
 
 ### Post-Launch Polish
@@ -144,6 +144,21 @@ Phase 2 complete 2026-02-18. Phase 3 sim polish complete 2026-02-19. Phase 4 sim
 13. **Public-facing API** — documented REST API with auth, rate limits, usage docs
 
 ## Completed Features
+
+### Phase 6: Map Integration (2026-03-02)
+
+- WorldMap choropleth with QoL heatmap (RdYlGn scale, country-level shading)
+- M-key toggle: tap toggles, hold (≥250ms) peeks and reverts on release
+- Smooth crossfade transitions (opacity-based, no z-index flash)
+- Dynamic QoL root node: size encodes level (0.5-1.0), grey fill with RdYlGn outline
+- QoL score interpolation across all years (1990-2024) — linear between known points, hold at edges
+- QoL x/10 label below root node (70% size, 70% opacity)
+- Ring 0 cyan pulse during simulation timeline playback
+- Ref-based QoL node positioning (eliminates React re-renders during zoom/pan)
+- Animated reset: collapse to root → 1s delay → expand ring 1
+- Progressive pinning capped to keepCount (top N by magnitude)
+- Subtler ring labels (10px, normal weight, 60% opacity)
+- Export suite: PNG screenshot, CSV results, shareable URL with encoded state
 
 ### Phase 5: Pre-Launch Polish (Week 10, 2026-02-20)
 
