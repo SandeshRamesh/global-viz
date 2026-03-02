@@ -326,6 +326,7 @@ function App() {
   const [temporalEdgesLoading, setTemporalEdgesLoading] = useState(false)
   const [temporalEdgesCacheKey, setTemporalEdgesCacheKey] = useState<string | null>(null)  // Track cache key (triggers re-render)
   const temporalEdgesCountryRef = useRef<string | null>(null)  // Track which country/stratum the cache is for
+  const temporalEdgesLoadIdRef = useRef(0)  // Guard loading state against overlapping aborted runs
 
   // Country-specific data from simulation store
   const {
@@ -415,14 +416,30 @@ function App() {
     if (playbackMode === 'simulation' && temporalResults) {
       return temporalResults.base_year + currentYearIndex
     }
-    if (selectedStratum !== 'unified' && stratifiedShapTimeline?.years?.[currentYearIndex] !== undefined) {
+    // Stratified timeline only applies when no country/region scope is active.
+    if (
+      !selectedCountry
+      && !selectedRegion
+      && selectedStratum !== 'unified'
+      && stratifiedShapTimeline?.years?.[currentYearIndex] !== undefined
+    ) {
       return stratifiedShapTimeline.years[currentYearIndex]
     }
     // Use historicalTimeline (filtered/effective years) first since currentYearIndex
     // indexes into it, not the full unfiltered temporalShapTimeline
     return historicalTimeline?.years?.[currentYearIndex]
       ?? temporalShapTimeline?.years?.[currentYearIndex] ?? 2020
-  }, [playbackMode, temporalResults, currentYearIndex, selectedStratum, stratifiedShapTimeline, temporalShapTimeline, historicalTimeline])
+  }, [
+    playbackMode,
+    temporalResults,
+    currentYearIndex,
+    selectedCountry,
+    selectedRegion,
+    selectedStratum,
+    stratifiedShapTimeline,
+    temporalShapTimeline,
+    historicalTimeline
+  ])
 
   // Apply simulation QoL delta to selected country on the map during simulation playback.
   const mapSimAdjustments = useMemo(() => {
@@ -567,6 +584,8 @@ function App() {
   // This pre-fetches all years' edges so timeline scrubbing is instant
   // Works for country-specific, stratified, regional, AND unified views
   useEffect(() => {
+    const loadId = ++temporalEdgesLoadIdRef.current
+
     // Only load when in local/split view
     if (viewMode === 'global') {
       setTemporalEdgesLoading(false)
@@ -601,7 +620,6 @@ function App() {
           years = timeline?.years ?? []
           if (years.length === 0) {
             debug.log('cache', `No timeline years for region ${selectedRegion}, skipping edge load`)
-            setTemporalEdgesLoading(false)
             return
           }
         } else {
@@ -661,8 +679,10 @@ function App() {
           debug.log('error', 'Failed to load temporal edges:', err)
         }
       } finally {
-        // Always clear loading — the abort cleanup starts a new run which sets it true again
-        setTemporalEdgesLoading(false)
+        // Only the latest run can clear loading; prevents aborted prior runs from racing.
+        if (temporalEdgesLoadIdRef.current === loadId) {
+          setTemporalEdgesLoading(false)
+        }
       }
     }
 
@@ -670,7 +690,7 @@ function App() {
     return () => controller.abort()
     // timelineLoading in deps: when a region loads, the effect first runs while timeline is still
     // loading (empty years → early return), then re-runs when timelineLoading becomes false
-  }, [selectedCountry, selectedRegion, selectedStratum, viewMode, timelineLoading])
+  }, [selectedCountry, selectedRegion, selectedStratum, viewMode, timelineLoading, historicalTimeline])
 
   // Handle window resize
   useEffect(() => {
@@ -746,7 +766,7 @@ function App() {
   }, [rawData])
 
   // Effective edges for Local View: uses year-specific edges when in local view with timeline
-  // Works for country-specific, stratified, AND unified views
+  // Works for country-specific, stratified, regional, AND unified views
   const effectiveEdges = useMemo(() => {
     if (!rawData) return []
 
@@ -783,7 +803,19 @@ function App() {
 
     // No country/region selected or no cached edges: use static unified model edges
     return rawData.edges
-  }, [rawData, selectedCountry, selectedRegion, selectedStratum, countryGraph, viewMode, temporalShapTimeline, currentYearIndex, temporalEdgesLoading, temporalEdgesCacheKey])
+  }, [
+    rawData,
+    selectedCountry,
+    selectedRegion,
+    selectedStratum,
+    countryGraph,
+    viewMode,
+    temporalShapTimeline,
+    historicalTimeline,
+    currentYearIndex,
+    temporalEdgesLoading,
+    temporalEdgesCacheKey
+  ])
 
   /**
    * Pre-compute aggregated SHAP for ALL years on timeline load.
@@ -797,8 +829,8 @@ function App() {
     const cache = new Map<number, Map<string, number>>()
 
     // Choose the right timeline based on stratum selection
-    // When stratum != 'unified' and no country selected, use stratified timeline
-    const effectiveTimeline = (selectedStratum !== 'unified' && !selectedCountry && stratifiedShapTimeline)
+    // When stratum != 'unified' with no country/region selected, use stratified timeline.
+    const effectiveTimeline = (selectedStratum !== 'unified' && !selectedCountry && !selectedRegion && stratifiedShapTimeline)
       ? stratifiedShapTimeline
       : temporalShapTimeline
 
@@ -865,7 +897,7 @@ function App() {
 
     debug.log('cache', `Pre-computed SHAP for ${cache.size} years (stratum: ${selectedStratum})`)
     return cache
-  }, [temporalShapTimeline, stratifiedShapTimeline, selectedStratum, selectedCountry, rawData])
+  }, [temporalShapTimeline, stratifiedShapTimeline, selectedStratum, selectedCountry, selectedRegion, rawData])
 
   /**
    * Pre-compute full CI data (mean, std, ci_lower, ci_upper) for each year in the timeline.
@@ -888,7 +920,7 @@ function App() {
   const precomputedCICache = useMemo((): Map<number, Map<string, NodeCIData>> => {
     const cache = new Map<number, Map<string, NodeCIData>>()
 
-    const effectiveTimeline = (selectedStratum !== 'unified' && !selectedCountry && stratifiedShapTimeline)
+    const effectiveTimeline = (selectedStratum !== 'unified' && !selectedCountry && !selectedRegion && stratifiedShapTimeline)
       ? stratifiedShapTimeline
       : temporalShapTimeline
 
@@ -987,7 +1019,7 @@ function App() {
     }
 
     return cache
-  }, [temporalShapTimeline, stratifiedShapTimeline, selectedStratum, selectedCountry, rawData])
+  }, [temporalShapTimeline, stratifiedShapTimeline, selectedStratum, selectedCountry, selectedRegion, rawData])
 
   /**
    * Compute effective nodes with country-specific SHAP importance values.
