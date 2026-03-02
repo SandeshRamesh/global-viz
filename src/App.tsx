@@ -26,6 +26,7 @@ import { simulationAPI, type CountryGraphEdge } from './services/api'
 import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData } from './utils/causalEdges'
 import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
 import { SIM_MS_PER_YEAR } from './constants/time'
+import { REGION_DISPLAY_NAMES, REGION_TO_ISO3S } from './constants/regions'
 import {
   computeRadialLayout,
   detectOverlaps,
@@ -457,10 +458,15 @@ function App() {
     return base
   }, [playbackMode, temporalResults, selectedCountry, classificationsCache, mapCurrentYear, currentYearIndex])
 
-  // Component-level QoL score for tooltip/JSX (mirrors D3 render cycle computation)
-  const qolNodeScoreForTooltip = useMemo(() => {
+  // Scope filter for regional QoL aggregation.
+  const selectedRegionIso3s = useMemo(() => {
+    if (!selectedRegion) return null
+    return new Set(REGION_TO_ISO3S[selectedRegion] || [])
+  }, [selectedRegion])
+
+  // Compute historical QoL for active scope at a specific year.
+  const getHistoricalScopeQol = useCallback((year: number): number | null => {
     if (!qolScores) return null
-    const year = mapCurrentYear
 
     if (selectedCountry) {
       const countryData = qolScores[selectedCountry]
@@ -471,10 +477,11 @@ function App() {
     const scores: number[] = []
     for (const [countryName, countryData] of Object.entries(qolScores)) {
       if (!countryData?.by_year) continue
+      if (selectedRegionIso3s && !selectedRegionIso3s.has(countryData.iso3)) continue
       const val = interpolateQol(countryData.by_year, year)
       if (val == null) continue
 
-      if (selectedStratum !== 'unified' && classificationsCache) {
+      if (!selectedRegionIso3s && selectedStratum !== 'unified' && classificationsCache) {
         const yearStr = String(year)
         const cc = classificationsCache.classifications[countryName] as { by_year?: Record<string, { classification_3tier?: string }> } | undefined
         const tier = cc?.by_year?.[yearStr]?.classification_3tier?.toLowerCase()
@@ -483,7 +490,18 @@ function App() {
       scores.push(val)
     }
     return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
-  }, [qolScores, mapCurrentYear, selectedCountry, selectedStratum, classificationsCache])
+  }, [qolScores, selectedCountry, selectedRegionIso3s, selectedStratum, classificationsCache])
+
+  // Component-level QoL score for tooltip/JSX (mirrors D3 render cycle computation).
+  // In simulation playback, prefer the simulated QoL timeline so text updates live.
+  const qolNodeScoreForTooltip = useMemo(() => {
+    if (playbackMode === 'simulation' && temporalResults?.qol_timeline) {
+      const simYear = String(temporalResults.base_year + currentYearIndex)
+      const simQol = temporalResults.qol_timeline[simYear]
+      if (simQol) return simQol.simulated
+    }
+    return getHistoricalScopeQol(mapCurrentYear)
+  }, [playbackMode, temporalResults, currentYearIndex, mapCurrentYear, getHistoricalScopeQol])
 
   // Load all classifications once at startup (cached for other features)
   useEffect(() => {
@@ -2875,38 +2893,9 @@ function App() {
       storeInterventions.map(i => i.indicator).filter(Boolean)
     )
 
-    // QoL score for ring 0 outline: country-specific, stratum mean, or global mean
-    // Uses interpolation to fill gaps (matching WorldMap choropleth behavior)
-    const qolNodeScore = (() => {
-      if (!qolScores) return null
-      const year = mapCurrentYear
-
-      // Country selected → use that country's interpolated score
-      if (selectedCountry) {
-        const countryData = qolScores[selectedCountry]
-        if (!countryData?.by_year) return null
-        return interpolateQol(countryData.by_year, year)
-      }
-
-      // Unified or stratified → compute mean QoL across relevant countries
-      const scores: number[] = []
-      for (const [countryName, countryData] of Object.entries(qolScores)) {
-        if (!countryData?.by_year) continue
-        const val = interpolateQol(countryData.by_year, year)
-        if (val == null) continue
-
-        // Stratum filter: only include countries in the selected income stratum
-        if (selectedStratum !== 'unified' && classificationsCache) {
-          const yearStr = String(year)
-          const cc = classificationsCache.classifications[countryName] as { by_year?: Record<string, { classification_3tier?: string }> } | undefined
-          const tier = cc?.by_year?.[yearStr]?.classification_3tier?.toLowerCase()
-          if (tier !== selectedStratum) continue
-        }
-
-        scores.push(val)
-      }
-      return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
-    })()
+    // QoL score for ring 0 outline/text (country, regional, stratum, or global scope).
+    // In simulation playback this value comes from temporalResults.qol_timeline (simulated).
+    const qolNodeScore = qolNodeScoreForTooltip
 
     /**
      * Get node fill color — blends toward green/red when simulation-affected.
@@ -4834,7 +4823,7 @@ function App() {
       layoutReadyTimerRef.current = null
     }
 
-  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, storeInterventions])
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, qolNodeScoreForTooltip, storeInterventions])
 
   // Fetch data once on mount
   useEffect(() => {
@@ -5795,11 +5784,15 @@ function App() {
             {/* Node name */}
             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{displayNode.label}</div>
 
-            {/* QoL score for ring 0 (country, stratum mean, or global mean) */}
+            {/* QoL score for ring 0 (country, region mean, stratum mean, or global mean) */}
             {displayNode.ring === 0 && qolNodeScoreForTooltip != null && (() => {
               const label = selectedCountry
                 ? selectedCountry
-                : selectedStratum !== 'unified' ? `${selectedStratum} mean` : 'global mean'
+                : selectedRegion
+                  ? `${REGION_DISPLAY_NAMES[selectedRegion] ?? selectedRegion} mean`
+                  : selectedStratum !== 'unified'
+                    ? `${selectedStratum} mean`
+                    : 'global mean'
               return (
                 <div style={{ fontSize: 12, color: '#333', marginBottom: 6, fontWeight: 500 }}>
                   QoL: {(qolNodeScoreForTooltip * 10).toFixed(1)}/10 ({label}, {mapCurrentYear})
