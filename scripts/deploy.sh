@@ -9,7 +9,10 @@ cd /home/sandesh/argon_primary/atlas
 echo "Pulling latest from live branch..."
 git fetch origin live
 git checkout live
-git pull origin live
+git reset --hard origin/live
+
+echo "Verifying critical files..."
+test -f public/data/world-110m.json || { echo "ERROR: world-110m.json missing"; exit 1; }
 
 echo "Installing dependencies..."
 npm ci
