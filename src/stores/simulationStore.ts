@@ -185,6 +185,7 @@ interface SimulationState {
 
   // Map layer
   mapForeground: boolean;
+  mapHoveredCountry: string | null;
   qolScores: Record<string, QolScoresByCountry> | null;
   qolScoresLoading: boolean;
 
@@ -193,6 +194,7 @@ interface SimulationState {
 
   // Actions - Map
   toggleMapForeground: () => void;
+  setMapHoveredCountry: (name: string | null) => void;
   loadQolScores: () => Promise<void>;
 
   // Actions - Panel
@@ -340,11 +342,13 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
   // Map layer
   mapForeground: false,
+  mapHoveredCountry: null,
   qolScores: null,
   qolScoresLoading: false,
 
   // Map actions
   toggleMapForeground: () => set((state) => ({ mapForeground: !state.mapForeground })),
+  setMapHoveredCountry: (name) => set({ mapHoveredCountry: name }),
   loadQolScores: async () => {
     if (get().qolScores || get().qolScoresLoading) return;
     set({ qolScoresLoading: true });

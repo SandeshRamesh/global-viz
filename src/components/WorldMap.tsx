@@ -77,6 +77,9 @@ interface WorldMapProps {
   selectedStratum: IncomeStratum | 'unified'
   classificationsCache: AllClassifications | null
   simAdjustments?: Record<string, number>
+  onCountrySelect?: (name: string) => void
+  onCountryHover?: (name: string | null) => void
+  selectedCountryIso3?: string | null
 }
 
 /**
@@ -196,7 +199,7 @@ function buildYearMapFromInterpolated(
 /** Transition duration for fill color changes (ms). */
 const COLOR_TRANSITION_MS = 400
 
-export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, classificationsCache, simAdjustments }: WorldMapProps) {
+export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, classificationsCache, simAdjustments, onCountrySelect, onCountryHover, selectedCountryIso3 }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const topoRef = useRef<Topology | null>(null)
@@ -205,6 +208,26 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
   const featuresRef = useRef<GeoJSON.Feature[]>([])
   const initializedRef = useRef(false)
   const prevYearRef = useRef<number | null>(null)
+
+  // Stable refs for callbacks (avoid re-bindining D3 event handlers on every render)
+  const onCountrySelectRef = useRef(onCountrySelect)
+  onCountrySelectRef.current = onCountrySelect
+  const onCountryHoverRef = useRef(onCountryHover)
+  onCountryHoverRef.current = onCountryHover
+  const foregroundRef = useRef(foreground)
+  foregroundRef.current = foreground
+  const selectedCountryIso3Ref = useRef(selectedCountryIso3)
+  selectedCountryIso3Ref.current = selectedCountryIso3
+
+  // Build iso3→country name reverse map from qolScores
+  const iso3ToName = useMemo(() => {
+    const map = new Map<string, string>()
+    if (!qolScores) return map
+    for (const [countryKey, data] of Object.entries(qolScores)) {
+      if (data.iso3) map.set(data.iso3, countryKey)
+    }
+    return map
+  }, [qolScores])
 
   // Color scale: QoL V1 (HDI-calibrated) — green for high, red for low
   const colorScale = useMemo(
@@ -238,6 +261,39 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
     const val = yearMap.get(iso3)
     return val != null ? colorScale(val) : '#1a1a2e'
   }, [yearMap, colorScale])
+
+  /** Apply per-path opacity + selection outline to all paths.
+   *  Uses refs so it always reads current state — safe to call from anywhere. */
+  const applySelectionStyle = useCallback(() => {
+    const svg = svgRef.current
+    if (!svg || !initializedRef.current) return
+    const sel = selectedCountryIso3Ref.current
+    const hasSelection = !!sel
+    const isFg = foregroundRef.current
+
+    d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path')
+      .each(function (d) {
+        const numId = normalizeId(d.id)
+        const iso3 = NUMERIC_TO_ISO3[numId]
+        const isSelected = iso3 && iso3 === sel
+        const el = d3.select(this)
+
+        let pathOpacity: number
+        if (isFg) {
+          pathOpacity = hasSelection ? (isSelected ? 1 : 0.3) : 1
+        } else {
+          pathOpacity = hasSelection ? (isSelected ? 0.45 : 0.03) : 0.07
+        }
+
+        el.attr('stroke', isSelected ? '#00E5FF' : '#555')
+          .attr('stroke-width', isSelected ? 2 : 0.3)
+          .style('opacity', pathOpacity)
+          // In background, boost selected country to counteract container desaturation
+          .style('filter', (!isFg && isSelected) ? 'saturate(7) brightness(1.15)' : 'none')
+
+        if (isSelected) el.raise()
+      })
+  }, [])
 
   // Load TopoJSON once
   useEffect(() => {
@@ -283,9 +339,38 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
       .attr('fill', fillColor)
       .attr('stroke', '#555')
       .attr('stroke-width', 0.3)
+      .style('cursor', 'pointer')
+      .on('mouseover', function (_event: MouseEvent, d: GeoJSON.Feature) {
+        if (!foregroundRef.current) return
+        const numId = normalizeId(d.id)
+        const iso3 = NUMERIC_TO_ISO3[numId]
+        if (!iso3) return
+        const name = iso3ToName.get(iso3)
+        if (name) onCountryHoverRef.current?.(name)
+        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 1.5).raise()
+      })
+      .on('mouseout', function (_event: MouseEvent, d: GeoJSON.Feature) {
+        if (!foregroundRef.current) return
+        onCountryHoverRef.current?.(null)
+        const numId = normalizeId(d.id)
+        const iso3 = NUMERIC_TO_ISO3[numId]
+        const isSelected = iso3 && iso3 === selectedCountryIso3Ref.current
+        d3.select(this)
+          .attr('stroke', isSelected ? '#00E5FF' : '#555')
+          .attr('stroke-width', isSelected ? 2 : 0.3)
+      })
+      .on('click', function (_event: MouseEvent, d: GeoJSON.Feature) {
+        if (!foregroundRef.current) return
+        const numId = normalizeId(d.id)
+        const iso3 = NUMERIC_TO_ISO3[numId]
+        if (!iso3) return
+        const name = iso3ToName.get(iso3)
+        if (name) onCountrySelectRef.current?.(name)
+      })
 
     initializedRef.current = true
-  }, [fillColor])
+    applySelectionStyle()
+  }, [fillColor, iso3ToName, applySelectionStyle])
 
   // Render on mount and resize
   useEffect(() => {
@@ -298,6 +383,11 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
     ro.observe(container)
     return () => ro.disconnect()
   }, [renderMap])
+
+  // Re-apply selection style when selection or foreground changes
+  useEffect(() => {
+    applySelectionStyle()
+  }, [selectedCountryIso3, foreground, applySelectionStyle])
 
   // Smooth color transition when year/sim data changes
   useEffect(() => {
@@ -330,11 +420,11 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
         left: 0,
         width: '100%',
         height: '100%',
-        zIndex: 0,
-        pointerEvents: 'none',
-        opacity: foreground ? 1.0 : 0.07,
+        zIndex: foreground ? 50 : 0,
+        pointerEvents: foreground ? 'auto' : 'none',
+        opacity: 1,
         filter: foreground ? 'none' : 'saturate(0.15) brightness(0.9)',
-        transition: 'opacity 0.3s ease, filter 0.3s ease'
+        transition: 'filter 0.3s ease'
       }}
     >
       <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />

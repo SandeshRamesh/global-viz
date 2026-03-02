@@ -276,6 +276,7 @@ function App() {
   const [splitRatio, setSplitRatio] = useState(0.67) // 0-1, percentage for left pane (2/3 global, 1/3 local)
   const [drillDownHistory, setDrillDownHistory] = useState<{ prevTargets: string[]; prevBeta: number } | null>(null)
   const isDraggingRef = useRef(false)
+  const mKeyRef = useRef<{ down: boolean; time: number; origForeground: boolean }>({ down: false, time: 0, origForeground: false })
   const localViewResetRef = useRef<(() => void) | null>(null)  // Store LocalView's reset function
   const urlStateRestoredRef = useRef(false)  // Track if URL state has been restored
   const pendingExpandedNodesRef = useRef<string[] | null>(null)  // Expanded nodes from URL, applied after SHAP cache ready
@@ -319,9 +320,19 @@ function App() {
     mapForeground,
     qolScores,
     loadQolScores,
-    classificationsCache
+    classificationsCache,
+    setCountry: storeSetCountry,
+    setMapHoveredCountry
   } = useSimulationStore()
   const isPanelOpen = useIsPanelOpen()
+
+  // Derive selected country's iso3 for map outline
+  const selectedCountryIso3 = useMemo(() => {
+    if (!selectedCountry || !classificationsCache) return null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (classificationsCache.classifications as any)?.[selectedCountry]
+    return data?.iso3 as string | null ?? null
+  }, [selectedCountry, classificationsCache])
 
   // Sync highlighted indicator from results table → graph highlight (single node, no expansion)
   useEffect(() => {
@@ -1923,6 +1934,7 @@ function App() {
   }, [localViewNodeRoles])
 
   // Reset view: handles both Global and Local views based on current viewMode
+  // Collapses to QoL root, then after a delay expands ring 1 with animation
   const resetView = useCallback(() => {
     // Reset country selection to unified model
     clearCountry()
@@ -1938,15 +1950,31 @@ function App() {
 
       const svg = d3.select(svgRef.current)
 
-      // Always collapse all expanded nodes and clear pinned paths
+      // Phase 1: collapse to just the QoL root node
       setExpandedNodes(new Set())
       setPinnedPaths(new Set())
       currentTransformRef.current = null
 
-      // Zoom to show root and ring 1 (outcomes)
-      const rootAndOutcomes = allNodes.filter(n => n.ring <= 1)
-      const initialTransform = calculateInitialTransform(rootAndOutcomes.length > 0 ? rootAndOutcomes : allNodes.filter(n => n.ring === 0))
-      svg.transition().duration(300).call(zoomRef.current.transform, initialTransform)
+      // Zoom to fit just the root node
+      const rootNodes = allNodes.filter(n => n.ring === 0)
+      const rootTransform = calculateInitialTransform(rootNodes)
+      svg.transition().duration(300).call(zoomRef.current.transform, rootTransform)
+
+      // Phase 2: after delay, expand root to reveal ring 1 and zoom to fit
+      const rootNode = allNodes.find(n => n.ring === 0)
+      if (rootNode) {
+        setTimeout(() => {
+          setExpandedNodes(new Set([rootNode.id]))
+          // Zoom to fit ring 0 + ring 1 after expansion settles
+          setTimeout(() => {
+            if (!zoomRef.current || !svgRef.current) return
+            const svgEl = d3.select(svgRef.current)
+            const ring01 = allNodes.filter(n => n.ring <= 1)
+            const fitTransform = calculateInitialTransform(ring01.length > 0 ? ring01 : rootNodes)
+            svgEl.transition().duration(400).call(zoomRef.current!.transform, fitTransform)
+          }, 350)
+        }, 1500)
+      }
     }
   }, [allNodes, calculateInitialTransform, viewMode, clearCountry])
 
@@ -2054,12 +2082,42 @@ function App() {
         }
       } else if (e.key === 'm' || e.key === 'M') {
         e.preventDefault()
-        useSimulationStore.getState().toggleMapForeground()
+        if (mKeyRef.current.down) return // already held, ignore repeat
+        const store = useSimulationStore.getState()
+        mKeyRef.current = { down: true, time: Date.now(), origForeground: store.mapForeground }
+        store.toggleMapForeground()
+        if (store.mapForeground) {
+          // Went to foreground → will clear hover on release if held
+        }
+      }
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'm' || e.key === 'M') {
+        const ref = mKeyRef.current
+        if (!ref.down) return
+        const held = Date.now() - ref.time
+        ref.down = false
+        // Hold threshold: if held ≥ 250ms, revert to original state
+        if (held >= 250) {
+          const store = useSimulationStore.getState()
+          if (store.mapForeground !== ref.origForeground) {
+            store.toggleMapForeground()
+          }
+          // Clear hover when reverting from foreground
+          if (ref.origForeground === false) {
+            store.setMapHoveredCountry(null)
+          }
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
   }, [resetView, localViewTargets.length, localViewSimMode])
 
   // All nodes for search (derived from rawData, not just visible nodes)
@@ -2739,6 +2797,36 @@ function App() {
       storeInterventions.map(i => i.indicator).filter(Boolean)
     )
 
+    // QoL score for ring 0 outline: country-specific, stratum mean, or global mean
+    const qolNodeScore = (() => {
+      if (!qolScores) return null
+      const yearStr = String(mapCurrentYear)
+
+      // Country selected → use that country's score
+      if (selectedCountry) {
+        const countryData = qolScores[selectedCountry]
+        return countryData?.by_year?.[yearStr] ?? null
+      }
+
+      // Unified or stratified → compute mean QoL across relevant countries
+      const scores: number[] = []
+      for (const [countryName, countryData] of Object.entries(qolScores)) {
+        if (!countryData?.by_year) continue
+        const val = countryData.by_year[yearStr]
+        if (val == null) continue
+
+        // Stratum filter: only include countries in the selected income stratum
+        if (selectedStratum !== 'unified' && classificationsCache) {
+          const cc = classificationsCache.classifications[countryName] as { by_year?: Record<string, { classification_3tier?: string }> } | undefined
+          const tier = cc?.by_year?.[yearStr]?.classification_3tier?.toLowerCase()
+          if (tier !== selectedStratum) continue
+        }
+
+        scores.push(val)
+      }
+      return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
+    })()
+
     /**
      * Get node fill color — blends toward green/red when simulation-affected.
      * Intensity: clamp(|percent_change| / 50, 0, 0.5) — subtle, max 50% blend.
@@ -2746,7 +2834,7 @@ function App() {
      * Bridge nodes (in causal_paths but not in aggregateEffects) get no tint.
      */
     const getColor = (n: ExpandableNode): string => {
-      if (n.ring === 0) return '#78909C'
+      if (n.ring === 0) return '#78909C' // fill always grey; outline carries QoL color
       const domainColor = DOMAIN_COLORS[n.semanticPath.domain] || '#9E9E9E'
 
       // Only tint in global view when simulation results exist
@@ -2776,9 +2864,10 @@ function App() {
     }
 
     const getSize = (n: ExpandableNode): number => {
-      // Ring 0 (QoL) always has fixed size - root of the hierarchy
+      // Ring 0 (QoL): size encodes relative QoL level (0.5–1.0), max in unified mode
       if (n.ring === 0) {
-        return vLayout.getNodeRadius(1.0)  // Always max size for root
+        const sizeImp = qolNodeScore != null ? 0.5 + qolNodeScore * 0.5 : 1.0
+        return vLayout.getNodeRadius(sizeImp)
       }
 
       const nodeId = String(n.id)
@@ -3910,18 +3999,24 @@ function App() {
       const effLookup = simEffectLookup.get(d.id)
       const isAffectedDuringPlayback = simPlaybackActive && effLookup?.isLeaf && Math.abs(effLookup.pct) >= 0.01
       const simBorder = getSimBorder(d)
-      const strokeColor = isAffectedDuringPlayback
+      let strokeColor = isAffectedDuringPlayback
         ? getColor(d)  // match fill = invisible border
         : simBorder
           ? simBorder.color
           : isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E')
-      const strokeWidth = isAffectedDuringPlayback
+      let strokeWidth = isAffectedDuringPlayback
         ? 0.5
         : simBorder
           ? simBorder.width
           : isNodeFloored(d.importance) ? Math.min(1, getSize(d) * 0.5) : getBorderWidth(d)
       const strokeOpacity = isAffectedDuringPlayback ? 0 : (simBorder ? simBorder.opacity : 1.0)
       const dashArray = (!simBorder && !isAffectedDuringPlayback && isNodeFloored(d.importance)) ? '2,2' : 'none'
+
+      // Ring 0 QoL outline: subtle RdYlGn tint matching the world map choropleth
+      if (d.ring === 0 && qolNodeScore != null) {
+        strokeColor = d3.scaleSequential(d3.interpolateRdYlGn).domain([0.3, 0.95])(qolNodeScore)
+        strokeWidth = Math.max(1.5, getSize(d) * 0.06)
+      }
 
       // Dots mode: deep-ring nodes set attrs directly, no transition
       if (dotsMode && d.ring >= DEEP_RING_THRESHOLD) {
@@ -3973,6 +4068,21 @@ function App() {
           .attr('stroke-opacity', strokeOpacity)
           .attr('stroke-dasharray', dashArray)
       }
+
+      // Ring 0 simulation glow: green/red drop-shadow proportional to QoL delta
+      if (d.ring === 0 && temporalResults?.qol_timeline) {
+        const simYear = String(temporalResults.base_year + currentYearIndex)
+        const qolDelta = temporalResults.qol_timeline[simYear]
+        if (qolDelta) {
+          const glowColor = qolDelta.delta >= 0 ? '#39FF14' : '#FF1744'
+          const intensity = Math.min(12, Math.abs(qolDelta.delta) * 200)
+          nodeEl.style('filter', `drop-shadow(0 0 ${intensity}px ${glowColor})`)
+        } else {
+          nodeEl.style('filter', null)
+        }
+      } else if (d.ring === 0) {
+        nodeEl.style('filter', null)
+      }
       // Note: opacity is always 1 since uncovered nodes are filtered out by effectiveNodes
     })
 
@@ -3985,6 +4095,10 @@ function App() {
       .attr('data-ring', d => d.ring)
       .attr('fill', d => getColor(d))
       .attr('stroke', d => {
+        // Ring 0 QoL outline: subtle RdYlGn tint
+        if (d.ring === 0 && qolNodeScore != null) {
+          return d3.scaleSequential(d3.interpolateRdYlGn).domain([0.3, 0.95])(qolNodeScore)
+        }
         const eLookup = simEffectLookup.get(d.id)
         const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
         if (affectedDuringPlayback) return getColor(d)
@@ -3992,6 +4106,10 @@ function App() {
         return sb ? sb.color : isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E')
       })
       .attr('stroke-width', d => {
+        // Ring 0 QoL outline: subtle width
+        if (d.ring === 0 && qolNodeScore != null) {
+          return Math.max(1.5, getSize(d) * 0.06)
+        }
         const eLookup = simEffectLookup.get(d.id)
         const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
         if (affectedDuringPlayback) return 0.5
@@ -4299,7 +4417,7 @@ function App() {
       // Ring 0 always uses importance=1.0, others use temporal SHAP (with cache fallback)
       const nodeId = String(d.id)
       const importance = d.ring === 0
-        ? 1.0
+        ? (qolNodeScore != null ? 0.5 + qolNodeScore * 0.5 : 1.0)
         : (timelineImportance.get(nodeId) ?? lastValidShapRef.current.get(nodeId) ?? 0.01)
       const label = d.label || ''
 
@@ -4307,8 +4425,8 @@ function App() {
       let fontSize: number
       const isSimAffected = simEffectLookup.has(d.id) || interventionNodeIds.has(d.id)
       if (d.ring === 0) {
-        // Ring 0 (QoL): Fixed max size
-        fontSize = vLayout.getFontSize(1.0, d.ring)
+        // Ring 0 (QoL): size tracks QoL score when country selected
+        fontSize = vLayout.getFontSize(importance, d.ring)
       } else if (d.ring === 1) {
         // Ring 1 (Outcomes): Narrower range (4-8px scaled by viewport)
         const baseMax = vLayout.getFontSize(1, 1)  // Get viewport-scaled maximum
@@ -4338,8 +4456,10 @@ function App() {
         const basePadding = Math.max(4, nodeSize * 0.2)
         const offset = nodeSize + fontSize * 0.6 + basePadding
 
-        // Always single line for Ring 0-1 (QoL and Outcomes)
-        const lines = [label]
+        // Ring 0: add QoL score as second line when country selected
+        const lines = d.ring === 0 && qolNodeScore != null
+          ? [label, `${(qolNodeScore * 10).toFixed(1)}/10`]
+          : [label]
 
         labelPositions.set(d.id, { x: d.x, y: d.y + offset, anchor: 'middle', rotation: 0, fontSize, lines })
       } else {
@@ -4969,6 +5089,9 @@ function App() {
         selectedStratum={selectedStratum}
         classificationsCache={classificationsCache}
         simAdjustments={mapSimAdjustments}
+        onCountrySelect={(name) => storeSetCountry(name)}
+        onCountryHover={(name) => setMapHoveredCountry(name)}
+        selectedCountryIso3={selectedCountryIso3}
       />
 
       {/* Left Sidebar - Responsive flex container */}
@@ -5357,7 +5480,8 @@ function App() {
           left: 0,
           opacity: mapForeground ? 0.12 : 1,
           transition: 'opacity 0.3s ease',
-          background: mapForeground ? 'transparent' : undefined
+          background: mapForeground ? 'transparent' : undefined,
+          pointerEvents: mapForeground ? 'none' : 'auto'
         }}
       >
         {/* Global View */}
@@ -5506,6 +5630,57 @@ function App() {
 
             {/* Node name */}
             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{displayNode.label}</div>
+
+            {/* QoL score for ring 0 (country, stratum mean, or global mean) */}
+            {displayNode.ring === 0 && qolScores && (() => {
+              // Reuse the precomputed qolNodeScore (already handles country / stratum / unified)
+              // Access it via closure — qolNodeScore is computed above in the render cycle
+              const yearStr = String(mapCurrentYear)
+              let score: number | null = null
+              let label = ''
+              if (selectedCountry) {
+                const cd = qolScores[selectedCountry]
+                score = cd?.by_year?.[yearStr] ?? null
+                label = selectedCountry
+              } else {
+                // Compute inline for tooltip (matches qolNodeScore logic)
+                const scores: number[] = []
+                for (const [countryName, cd] of Object.entries(qolScores)) {
+                  if (!cd?.by_year) continue
+                  const val = cd.by_year[yearStr]
+                  if (val == null) continue
+                  if (selectedStratum !== 'unified' && classificationsCache) {
+                    const cc = classificationsCache.classifications[countryName] as { by_year?: Record<string, { classification_3tier?: string }> } | undefined
+                    const tier = cc?.by_year?.[yearStr]?.classification_3tier?.toLowerCase()
+                    if (tier !== selectedStratum) continue
+                  }
+                  scores.push(val)
+                }
+                score = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
+                label = selectedStratum !== 'unified' ? `${selectedStratum} mean` : 'global mean'
+              }
+              if (score == null) return null
+              return (
+                <div style={{ fontSize: 12, color: '#333', marginBottom: 6, fontWeight: 500 }}>
+                  QoL: {(score * 10).toFixed(1)}/10 ({label}, {mapCurrentYear})
+                </div>
+              )
+            })()}
+
+            {/* QoL sim delta for ring 0 during simulation */}
+            {displayNode.ring === 0 && temporalResults?.qol_timeline && (() => {
+              const simYear = String(temporalResults.base_year + currentYearIndex)
+              const qd = temporalResults.qol_timeline[simYear]
+              if (!qd) return null
+              const color = qd.delta >= 0 ? '#39FF14' : '#FF1744'
+              const sign = qd.delta >= 0 ? '+' : ''
+              return (
+                <div style={{ fontSize: 11, padding: '4px 8px', background: '#1a1a2e', borderRadius: 4, borderLeft: `3px solid ${color}`, marginBottom: 6 }}>
+                  <div style={{ color, fontWeight: 600 }}>{(qd.simulated * 10).toFixed(1)}/10 ({sign}{(qd.delta * 10).toFixed(2)})</div>
+                  <div style={{ color: '#aaa', fontSize: 10 }}>from {(qd.baseline * 10).toFixed(1)}/10</div>
+                </div>
+              )
+            })()}
 
             {/* Badge row: ring + domain */}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
