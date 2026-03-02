@@ -67,47 +67,61 @@ const RING_LABELS = [
  * Loading spinner with delay to avoid flash for fast loads.
  * Positioned at specified x, y coordinates (follows QoL node).
  */
-function LoadingSpinner({ show, delay = 200, x, y }: { show: boolean; delay?: number; x?: number; y?: number }) {
+function LoadingSpinner({ show, delay = 200, posRef, elRef }: {
+  show: boolean
+  delay?: number
+  posRef: React.RefObject<{ x: number; y: number } | null>
+  elRef: React.RefObject<HTMLDivElement | null>
+}) {
   const [visible, setVisible] = useState(false)
   const timeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (show) {
-      // Delay showing spinner to avoid flash for fast loads
       timeoutRef.current = window.setTimeout(() => {
         setVisible(true)
       }, delay)
     } else {
-      // Hide immediately when loading completes
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
       }
       setVisible(false)
     }
-
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [show, delay])
 
+  // Sync initial position on mount/visibility change
+  const callbackRef = useCallback((node: HTMLDivElement | null) => {
+    (elRef as { current: HTMLDivElement | null }).current = node
+    if (node && posRef.current) {
+      node.style.left = `${posRef.current.x}px`
+      node.style.top = `${posRef.current.y}px`
+    }
+  }, [elRef, posRef])
+
   if (!visible) return null
 
-  // Use provided position or default to center
-  const positionStyle = (x !== undefined && y !== undefined)
-    ? { position: 'absolute' as const, left: x, top: y, transform: 'translate(-50%, -50%)' }
-    : { position: 'absolute' as const, top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+  const pos = posRef.current
+  const hasPos = pos != null
 
   return (
-    <div style={{
-      ...positionStyle,
-      zIndex: 100,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
+    <div
+      ref={callbackRef}
+      style={{
+        position: 'absolute',
+        left: hasPos ? pos.x : '50%',
+        top: hasPos ? pos.y : '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 100,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        willChange: 'left, top'
+      }}
+    >
       <div style={{
         width: 28,
         height: 28,
@@ -227,6 +241,27 @@ function getDefaultDescription(node: RawNodeV21): string {
   }
 }
 
+/** Interpolate QoL score for a year: linear between known points, hold at edges. */
+function interpolateQol(byYear: Record<string, number>, year: number): number | null {
+  const known: Array<[number, number]> = []
+  for (const [yStr, val] of Object.entries(byYear)) {
+    if (val != null) known.push([Number(yStr), val])
+  }
+  if (known.length === 0) return null
+  known.sort((a, b) => a[0] - b[0])
+
+  if (year <= known[0][0]) return known[0][1]
+  if (year >= known[known.length - 1][0]) return known[known.length - 1][1]
+
+  let ki = 0
+  while (ki < known.length - 2 && known[ki + 1][0] <= year) ki++
+  const [y0, v0] = known[ki]
+  const [y1, v1] = known[ki + 1]
+  if (y1 === y0) return v0
+  const t = (year - y0) / (y1 - y0)
+  return v0 + t * (v1 - v0)
+}
+
 function App() {
   const svgRef = useRef<SVGSVGElement>(null)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
@@ -245,7 +280,8 @@ function App() {
     overlaps: number
   } | null>(null)
   const [domainCounts, setDomainCounts] = useState<Record<string, number>>({})
-  const [qolNodePosition, setQolNodePosition] = useState<{ x: number; y: number } | null>(null)  // QoL node screen position for loading spinner
+  const qolNodePositionRef = useRef<{ x: number; y: number } | null>(null)  // QoL node screen position for loading spinner
+  const spinnerElRef = useRef<HTMLDivElement | null>(null)  // Direct DOM ref for spinner positioning
   const [hoveredNode, setHoveredNode] = useState<ExpandableNode | null>(null)
   const [simulateBtnHovered, setSimulateBtnHovered] = useState(false)
   const [dataQualityOpen, setDataQualityOpen] = useState(false)
@@ -393,6 +429,34 @@ function App() {
 
     return { [iso3]: qolYear.delta }
   }, [playbackMode, temporalResults, selectedCountry, classificationsCache, mapCurrentYear])
+
+  // Component-level QoL score for tooltip/JSX (mirrors D3 render cycle computation)
+  const qolNodeScoreForTooltip = useMemo(() => {
+    if (!qolScores) return null
+    const year = mapCurrentYear
+
+    if (selectedCountry) {
+      const countryData = qolScores[selectedCountry]
+      if (!countryData?.by_year) return null
+      return interpolateQol(countryData.by_year, year)
+    }
+
+    const scores: number[] = []
+    for (const [countryName, countryData] of Object.entries(qolScores)) {
+      if (!countryData?.by_year) continue
+      const val = interpolateQol(countryData.by_year, year)
+      if (val == null) continue
+
+      if (selectedStratum !== 'unified' && classificationsCache) {
+        const yearStr = String(year)
+        const cc = classificationsCache.classifications[countryName] as { by_year?: Record<string, { classification_3tier?: string }> } | undefined
+        const tier = cc?.by_year?.[yearStr]?.classification_3tier?.toLowerCase()
+        if (tier !== selectedStratum) continue
+      }
+      scores.push(val)
+    }
+    return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
+  }, [qolScores, mapCurrentYear, selectedCountry, selectedStratum, classificationsCache])
 
   // Load all classifications once at startup (cached for other features)
   useEffect(() => {
@@ -1530,13 +1594,21 @@ function App() {
     }
 
     // Build active set: everAffected minus nodes that dropped off > HOLD_YEARS ago
-    const activeIds = new Set<string>()
+    // Then cap to keepCount so the graph matches the "N of X shown" count
+    const candidateIds: string[] = []
     for (const id of everAffectedRef.current) {
       const lastSeen = lastSeenYearRef.current.get(id) ?? simYear
       if (simYear - lastSeen <= HOLD_YEARS) {
-        activeIds.add(id)
+        candidateIds.push(id)
       }
     }
+    // Sort by current year effect magnitude (strongest first), then cap
+    candidateIds.sort((a, b) => {
+      const ea = yearEffects[a]
+      const eb = yearEffects[b]
+      return Math.abs(eb?.percent_change ?? 0) - Math.abs(ea?.percent_change ?? 0)
+    })
+    const activeIds = new Set(candidateIds.slice(0, keepCount))
 
     // Build parent lookup
     const parentOf = new Map<string, string>()
@@ -2637,11 +2709,13 @@ function App() {
       return 'zoom-xl'
     }
 
-    // Helper to update QoL node screen position from transform
+    // Helper to update QoL node screen position from transform (direct DOM, no React re-render)
     const updateQolPosition = (transform: d3.ZoomTransform) => {
-      // QoL node is at (0, 0) in data coordinates
-      // Screen position = transform translation
-      setQolNodePosition({ x: transform.x, y: transform.y })
+      qolNodePositionRef.current = { x: transform.x, y: transform.y }
+      if (spinnerElRef.current) {
+        spinnerElRef.current.style.left = `${transform.x}px`
+        spinnerElRef.current.style.top = `${transform.y}px`
+      }
     }
 
     // Setup zoom behavior (only once)
@@ -2798,25 +2872,28 @@ function App() {
     )
 
     // QoL score for ring 0 outline: country-specific, stratum mean, or global mean
+    // Uses interpolation to fill gaps (matching WorldMap choropleth behavior)
     const qolNodeScore = (() => {
       if (!qolScores) return null
-      const yearStr = String(mapCurrentYear)
+      const year = mapCurrentYear
 
-      // Country selected → use that country's score
+      // Country selected → use that country's interpolated score
       if (selectedCountry) {
         const countryData = qolScores[selectedCountry]
-        return countryData?.by_year?.[yearStr] ?? null
+        if (!countryData?.by_year) return null
+        return interpolateQol(countryData.by_year, year)
       }
 
       // Unified or stratified → compute mean QoL across relevant countries
       const scores: number[] = []
       for (const [countryName, countryData] of Object.entries(qolScores)) {
         if (!countryData?.by_year) continue
-        const val = countryData.by_year[yearStr]
+        const val = interpolateQol(countryData.by_year, year)
         if (val == null) continue
 
         // Stratum filter: only include countries in the selected income stratum
         if (selectedStratum !== 'unified' && classificationsCache) {
+          const yearStr = String(year)
           const cc = classificationsCache.classifications[countryName] as { by_year?: Record<string, { classification_3tier?: string }> } | undefined
           const tier = cc?.by_year?.[yearStr]?.classification_3tier?.toLowerCase()
           if (tier !== selectedStratum) continue
@@ -3776,6 +3853,40 @@ function App() {
         .attr('cy', d => d.y)
         .attr('r', d => getSize(d) + 1.5)
         .attr('opacity', 1)
+
+      // Ring 0 (QoL) cyan pulse — synced to edge ripple arrival at the root
+      // Gives visual continuity: pulse passes through QoL node, doesn't die there
+      const qolNode = simPlaybackActive ? visibleNodes.filter(n => n.ring === 0) : []
+      const qolPulseSelection = simGlowLayer
+        .selectAll<SVGCircleElement, ExpandableNode>('circle.glow-sim-qol')
+        .data(qolNode, d => d.id)
+
+      qolPulseSelection.exit()
+        .transition().duration(300).attr('opacity', 0).remove()
+
+      qolPulseSelection.each(function(d) {
+        d3.select(this).attr('cx', d.x).attr('cy', d.y).attr('r', getSize(d) + 4)
+      })
+
+      qolPulseSelection.enter()
+        .append('circle')
+        .attr('class', 'glow-sim-qol')
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 4)
+        .attr('fill', 'none')
+        .attr('stroke', '#00E5FF')
+        .attr('stroke-width', 2)
+        .attr('opacity', 0)
+        .style('filter', 'blur(2px)')
+        .style('pointer-events', 'none')
+        .style('animation', () => {
+          // Time the flash to arrive when the edge ripple reaches ring 0 (last hop)
+          const hop = hopFromIntervention.get(qolNode[0]?.id ?? '') ?? simMaxHop
+          const delay = hop * 120
+          return `qol-cyan-flash ${SIM_MS_PER_YEAR}ms ease-out ${delay}ms infinite`
+        })
+        .attr('opacity', 0.8)
     }
 
     // === EDGES with enter/update/exit ===
@@ -4526,8 +4637,8 @@ function App() {
         g.attr('class', `graph-container ${zoomClass}`)
         // Update label visibility based on actual font sizes
         updateLabelVisibility(event.transform.k)
-        // Update QoL node position for loading spinner
-        setQolNodePosition({ x: event.transform.x, y: event.transform.y })
+        // Update QoL node position for loading spinner (direct DOM, no re-render)
+        updateQolPosition(event.transform)
       })
     }
 
@@ -4568,6 +4679,36 @@ function App() {
 
         // Update data-fontsize for visibility calculations
         textEl.attr('data-fontsize', pos.fontSize)
+
+        // Update text content for ring 0 (QoL score changes with year/country/stratum)
+        if (d.ring === 0) {
+          const tspans = textEl.selectAll('tspan')
+          if (pos.lines.length === 1 && tspans.empty()) {
+            // Single line — update text directly
+            textEl.text(pos.lines[0])
+          } else if (pos.lines.length === 1 && !tspans.empty()) {
+            // Had multi-line, now single — remove tspans, set text
+            tspans.remove()
+            textEl.text(pos.lines[0])
+          } else if (pos.lines.length > 1) {
+            if (tspans.size() !== pos.lines.length) {
+              // Line count changed — rebuild tspans
+              textEl.text(null)
+              const lineHeight = pos.fontSize * 1.1
+              pos.lines.forEach((line, i) => {
+                textEl.append('tspan')
+                  .attr('x', pos.x)
+                  .attr('dy', i === 0 ? 0 : lineHeight)
+                  .text(line)
+              })
+            } else {
+              // Same line count — update text in place
+              tspans.each(function(_d, i) {
+                d3.select(this).text(pos.lines[i])
+              })
+            }
+          }
+        }
 
         const newTransform = pos.rotation !== 0 ? `rotate(${pos.rotation}, ${pos.x}, ${pos.y})` : null
 
@@ -5415,8 +5556,8 @@ function App() {
       <LoadingSpinner
         show={loading || shapTimelineLoading || countryLoading}
         delay={200}
-        x={qolNodePosition?.x}
-        y={qolNodePosition?.y}
+        posRef={qolNodePositionRef}
+        elRef={spinnerElRef}
       />
 
       {/* Error State */}
@@ -5478,10 +5619,10 @@ function App() {
           position: 'absolute',
           top: 0,
           left: 0,
-          opacity: mapForeground ? 0.12 : 1,
-          transition: 'opacity 0.3s ease',
-          background: mapForeground ? 'transparent' : undefined,
-          pointerEvents: mapForeground ? 'none' : 'auto'
+          opacity: mapForeground ? 0.08 : 1,
+          transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+          pointerEvents: mapForeground ? 'none' : 'auto',
+          willChange: 'opacity'
         }}
       >
         {/* Global View */}
@@ -5498,7 +5639,8 @@ function App() {
             ref={svgRef}
             style={{
               width: '100%',
-              height: '100%'
+              height: '100%',
+              willChange: 'transform'
             }}
           />
         </div>
@@ -5632,37 +5774,13 @@ function App() {
             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{displayNode.label}</div>
 
             {/* QoL score for ring 0 (country, stratum mean, or global mean) */}
-            {displayNode.ring === 0 && qolScores && (() => {
-              // Reuse the precomputed qolNodeScore (already handles country / stratum / unified)
-              // Access it via closure — qolNodeScore is computed above in the render cycle
-              const yearStr = String(mapCurrentYear)
-              let score: number | null = null
-              let label = ''
-              if (selectedCountry) {
-                const cd = qolScores[selectedCountry]
-                score = cd?.by_year?.[yearStr] ?? null
-                label = selectedCountry
-              } else {
-                // Compute inline for tooltip (matches qolNodeScore logic)
-                const scores: number[] = []
-                for (const [countryName, cd] of Object.entries(qolScores)) {
-                  if (!cd?.by_year) continue
-                  const val = cd.by_year[yearStr]
-                  if (val == null) continue
-                  if (selectedStratum !== 'unified' && classificationsCache) {
-                    const cc = classificationsCache.classifications[countryName] as { by_year?: Record<string, { classification_3tier?: string }> } | undefined
-                    const tier = cc?.by_year?.[yearStr]?.classification_3tier?.toLowerCase()
-                    if (tier !== selectedStratum) continue
-                  }
-                  scores.push(val)
-                }
-                score = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
-                label = selectedStratum !== 'unified' ? `${selectedStratum} mean` : 'global mean'
-              }
-              if (score == null) return null
+            {displayNode.ring === 0 && qolNodeScoreForTooltip != null && (() => {
+              const label = selectedCountry
+                ? selectedCountry
+                : selectedStratum !== 'unified' ? `${selectedStratum} mean` : 'global mean'
               return (
                 <div style={{ fontSize: 12, color: '#333', marginBottom: 6, fontWeight: 500 }}>
-                  QoL: {(score * 10).toFixed(1)}/10 ({label}, {mapCurrentYear})
+                  QoL: {(qolNodeScoreForTooltip * 10).toFixed(1)}/10 ({label}, {mapCurrentYear})
                 </div>
               )
             })()}

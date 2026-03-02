@@ -422,9 +422,10 @@ export function WorldMap({ foreground, qolScores, currentYear, selectedStratum, 
         height: '100%',
         zIndex: foreground ? 50 : 0,
         pointerEvents: foreground ? 'auto' : 'none',
-        opacity: 1,
+        opacity: foreground ? 1 : 0.45,
         filter: foreground ? 'none' : 'saturate(0.15) brightness(0.9)',
-        transition: 'filter 0.3s ease'
+        transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), filter 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        willChange: 'opacity, filter'
       }}
     >
       <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
