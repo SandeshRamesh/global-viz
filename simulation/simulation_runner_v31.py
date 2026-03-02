@@ -14,9 +14,14 @@ from pathlib import Path
 from typing import Dict, List, Optional, Literal
 import pandas as pd
 
-from .graph_loader_v31 import load_temporal_graph, build_adjacency_v31, get_available_countries
+from .graph_loader_v31 import (
+    load_temporal_graph,
+    build_adjacency_v31,
+    get_available_countries,
+)
 from .income_classifier import get_country_classification, get_stratum_for_country
 from .regional_spillovers import compute_regional_spillover, get_region_info
+from .region_mapping import get_region_for_country
 from .propagation_v31 import (
     propagate_intervention_v31,
     propagate_intervention_ensemble,
@@ -25,14 +30,101 @@ from .propagation_v31 import (
     get_top_effects,
     get_top_percent_effects
 )
+from .qol_definition import compute_qol, load_indicator_metadata
 
 # Project paths
 DATA_ROOT = Path(__file__).parent.parent / "data"
 PANEL_PATH = DATA_ROOT / "raw" / "v21_panel_data_for_v3.parquet"
 BASELINE_DIR = DATA_ROOT / "v31" / "baselines"
+METADATA_DIR = DATA_ROOT / "v31" / "metadata"
+
+# Module-level QoL computation cache
+_qol_metadata: Optional[Dict] = None
+_qol_norm_stats: Optional[Dict] = None
+_qol_calibration: Optional[Dict] = None
+_qol_direction_overrides: Optional[Dict] = None
+
+
+def _get_qol_assets() -> tuple:
+    """Load and cache QoL computation assets (metadata, norm_stats, calibration, direction_overrides)."""
+    global _qol_metadata, _qol_norm_stats, _qol_calibration, _qol_direction_overrides
+
+    if _qol_metadata is None:
+        _qol_metadata = load_indicator_metadata(
+            DATA_ROOT / "raw" / "v21_nodes.csv",
+            METADATA_DIR / "indicator_properties.json",
+        )
+    if _qol_norm_stats is None:
+        norm_path = METADATA_DIR / "qol_normalization_stats_v1.json"
+        if norm_path.exists():
+            with open(norm_path) as f:
+                _qol_norm_stats = json.load(f)
+        else:
+            _qol_norm_stats = {}
+    if _qol_calibration is None:
+        cal_path = METADATA_DIR / "qol_calibration_v1.json"
+        if cal_path.exists():
+            with open(cal_path) as f:
+                _qol_calibration = json.load(f).get("calibration", {})
+        else:
+            _qol_calibration = {}
+    if _qol_direction_overrides is None:
+        dir_path = METADATA_DIR / "qol_direction_overrides_v1.json"
+        if dir_path.exists():
+            with open(dir_path) as f:
+                _qol_direction_overrides = json.load(f)
+        else:
+            _qol_direction_overrides = {}
+
+    return _qol_metadata, _qol_norm_stats, _qol_calibration, _qol_direction_overrides
+
+
+def _get_norm_stats_for_year(norm_stats_asset: Dict, year: Optional[int]) -> Dict:
+    """Resolve per-year normalization stats with global fallback."""
+    if not norm_stats_asset:
+        return {}
+
+    # Backward compatibility: flat indicator->stats mapping
+    if "by_year" not in norm_stats_asset:
+        return norm_stats_asset
+
+    if year is not None:
+        year_stats = norm_stats_asset.get("by_year", {}).get(str(year))
+        if year_stats:
+            return year_stats
+
+    return norm_stats_asset.get("global", {})
+
+
+def _compute_qol_delta(
+    baseline_values: Dict[str, float],
+    simulated_values: Dict[str, float],
+    year: Optional[int] = None,
+) -> Optional[Dict[str, float]]:
+    """Compute QoL for baseline and simulated indicator sets, return delta."""
+    meta, norm_stats_asset, calibration, dir_overrides = _get_qol_assets()
+    norm_stats = _get_norm_stats_for_year(norm_stats_asset, year)
+    if not norm_stats or not calibration or not calibration.get("breakpoints"):
+        return None
+
+    base_qol = compute_qol(baseline_values, meta, norm_stats, calibration, dir_overrides)
+    if base_qol is None:
+        return None
+
+    sim_qol = compute_qol(simulated_values, meta, norm_stats, calibration, dir_overrides)
+    if sim_qol is None:
+        return None
+
+    return {
+        "baseline": round(base_qol["calibrated"], 4),
+        "simulated": round(sim_qol["calibrated"], 4),
+        "delta": round(sim_qol["calibrated"] - base_qol["calibrated"], 4),
+        "n_indicators": base_qol["n_indicators"],
+        "n_domains": base_qol["n_domains"],
+    }
 
 # Type definitions
-ViewType = Literal['country', 'stratified', 'unified']
+ViewType = Literal['country', 'stratified', 'unified', 'regional']
 SimulationMode = Literal['percentage', 'absolute']
 
 
@@ -172,7 +264,7 @@ def load_precomputed_baseline(
 
 
 def run_simulation_v31(
-    country: str,
+    country: Optional[str],
     interventions: List[dict],
     year: int,
     view_type: ViewType = 'country',
@@ -183,16 +275,18 @@ def run_simulation_v31(
     include_spillovers: bool = True,
     top_n_effects: int = 20,
     panel_path: Optional[Path] = None,
-    baseline_dir: Optional[Path] = None
+    baseline_dir: Optional[Path] = None,
+    region: Optional[str] = None,
+    debug: bool = False,
 ) -> dict:
     """
     Run instant simulation with V3.1 year-specific graph.
 
     Args:
-        country: Country name
+        country: Country name (optional for unified/regional requests)
         interventions: List of {indicator: str, change_percent: float}
         year: Year for graph and baseline (1990-2024)
-        view_type: 'country', 'stratified', or 'unified'
+        view_type: 'country', 'stratified', 'unified', or 'regional'
         mode: 'percentage' (fast, no baselines) or 'absolute' (real values)
         p_value_threshold: Filter edges by p-value
         use_nonlinear: Use marginal_effects when available
@@ -201,6 +295,8 @@ def run_simulation_v31(
         top_n_effects: Number of top effects to return
         panel_path: Override panel data path (for absolute mode legacy)
         baseline_dir: Override baseline JSON directory (for absolute mode)
+        region: Region key for regional view (optional if derivable from country)
+        debug: Include extra debug fields in metadata
 
     Returns:
         Dict with:
@@ -215,25 +311,49 @@ def run_simulation_v31(
         - ensemble (if n_ensemble_runs > 0)
     """
     try:
+        warnings: List[str] = []
+        region_used = region or (get_region_for_country(country) if country else None)
+
+        # Validate scope requirements
+        if view_type in ('country', 'stratified') and not country:
+            return {
+                'status': 'error',
+                'message': f"country is required for view_type='{view_type}'"
+            }
+        if view_type == 'regional' and not (region_used or country):
+            return {
+                'status': 'error',
+                'message': "region or country is required for view_type='regional'"
+            }
+
         # Load graph (always needed)
         graph = load_temporal_graph(
             country=country,
             year=year,
             view_type=view_type,
-            p_value_threshold=p_value_threshold
+            p_value_threshold=p_value_threshold,
+            region=region_used,
         )
 
         if graph is None:
+            scope_label = region_used if view_type == 'regional' else (country or 'global')
             return {
                 'status': 'error',
-                'message': f"No graph available for '{country}' in year {year}"
+                'message': f"No graph available for '{scope_label}' in year {year}"
             }
 
         # Build adjacency
         adjacency = build_adjacency_v31(graph)
+        view_used = graph.get('view_used', view_type)
+        year_used = int(graph.get('year_used', year))
+        region_used = graph.get('region_used') or region_used
+        scope_used = view_used
+
+        if graph.get('warnings'):
+            warnings.extend(graph.get('warnings') or [])
 
         # Get income classification
-        income_class = get_country_classification(country, year) or {}
+        income_class = get_country_classification(country, year_used) if country else None
 
         # =====================================================================
         # PERCENTAGE MODE - Fast path, no baseline loading
@@ -277,9 +397,11 @@ def run_simulation_v31(
                 'status': 'success',
                 'mode': 'percentage',
                 'country': country,
-                'base_year': year,
+                'base_year': year_used,
                 'view_type': view_type,
-                'view_used': graph.get('view_used', view_type),
+                'view_used': view_used,
+                'scope_used': scope_used,
+                'region_used': region_used,
                 'income_classification': income_class,
                 'interventions': intervention_details,
                 'effects': {
@@ -296,25 +418,54 @@ def run_simulation_v31(
                     'p_value_threshold': p_value_threshold,
                     'use_nonlinear': use_nonlinear,
                     'timestamp': datetime.now().isoformat()
-                }
+                },
+                'warnings': warnings or None,
             }
 
         # =====================================================================
         # ABSOLUTE MODE - Uses baseline values for real-world units
         # =====================================================================
-        # Try pre-computed JSON baseline first (fast), fall back to parquet (slow)
-        baseline = load_precomputed_baseline(country, year, baseline_dir)
-        year_used = year
+        # Try pre-computed JSON baseline first by scope (fast), fall back when possible.
+        baseline_scope = None
+        baseline = {}
         percentiles = {}
 
-        if not baseline:
-            # Fall back to parquet loading
-            baseline, year_used, percentiles = load_baseline_values(country, year, panel_path)
+        if view_used == 'country':
+            baseline_scope = country
+            baseline = load_precomputed_baseline(country, year_used, baseline_dir) if country else {}
+            if not baseline and country:
+                # Fall back to parquet loading for country scope
+                baseline, loaded_year, percentiles = load_baseline_values(country, year_used, panel_path)
+                if loaded_year is not None:
+                    year_used = int(loaded_year)
+        elif view_used == 'stratified':
+            stratum = get_stratum_for_country(country, year_used) if country else None
+            if not stratum:
+                return {
+                    'status': 'error',
+                    'message': f"Cannot determine stratum for '{country}' in year {year_used}"
+                }
+            baseline_scope = f"stratified/{stratum}"
+            baseline = load_precomputed_baseline(baseline_scope, year_used, baseline_dir)
+        elif view_used == 'regional':
+            if not region_used:
+                return {
+                    'status': 'error',
+                    'message': "Cannot determine region for regional simulation baseline"
+                }
+            baseline_scope = f"regional/{region_used}"
+            baseline = load_precomputed_baseline(baseline_scope, year_used, baseline_dir)
+        else:  # unified
+            baseline_scope = "unified"
+            baseline = load_precomputed_baseline(baseline_scope, year_used, baseline_dir)
 
         if not baseline:
             return {
                 'status': 'error',
-                'message': f"No baseline data for country '{country}' in year {year}. Run precompute_baselines.py first."
+                'message': (
+                    f"No baseline data for '{baseline_scope}' in year {year_used}. "
+                    "Run regional/strata/unified baseline precompute jobs."
+                )
             }
 
         # Convert interventions to absolute deltas
@@ -362,8 +513,8 @@ def run_simulation_v31(
                 indicator_percentiles=percentiles if use_nonlinear else None,
                 n_runs=n_ensemble_runs,
                 use_nonlinear=use_nonlinear,
-                year=year,
-                country=country
+                year=year_used,
+                country=country if view_used == 'country' else None,
             )
             is_ensemble = True
         else:
@@ -374,8 +525,8 @@ def run_simulation_v31(
                 baseline_values=baseline,
                 indicator_percentiles=percentiles if use_nonlinear else None,
                 use_nonlinear=use_nonlinear,
-                year=year,
-                country=country,
+                year=year_used,
+                country=country if view_used == 'country' else None,
             )
             is_ensemble = False
 
@@ -390,7 +541,9 @@ def run_simulation_v31(
             'country': country,
             'base_year': year_used or year,
             'view_type': view_type,
-            'view_used': graph.get('view_used', view_type),
+            'view_used': view_used,
+            'scope_used': scope_used,
+            'region_used': region_used,
             'income_classification': income_class,
             'interventions': intervention_details,
             'effects': {
@@ -404,11 +557,20 @@ def run_simulation_v31(
             'metadata': {
                 'n_edges_original': graph.get('n_edges_original', 0),
                 'n_edges_filtered': graph.get('n_edges_filtered', 0),
-                'p_value_threshold': p_value_threshold,
-                'use_nonlinear': use_nonlinear,
-                'timestamp': datetime.now().isoformat()
-            }
+                    'p_value_threshold': p_value_threshold,
+                    'use_nonlinear': use_nonlinear,
+                    'timestamp': datetime.now().isoformat()
+            },
+            'warnings': warnings or None,
         }
+
+        # Compute QoL delta
+        try:
+            qol = _compute_qol_delta(baseline, result['values'], year_used or year)
+            if qol is not None:
+                response['qol'] = qol
+        except Exception:
+            pass  # QoL is non-critical; don't fail the simulation
 
         # Add ensemble stats if applicable
         if is_ensemble:
@@ -425,8 +587,8 @@ def run_simulation_v31(
                 if ind in result.get('std', {}):
                     top_effects[ind]['std'] = result['std'][ind]
 
-        # Compute regional spillovers if enabled
-        if include_spillovers:
+        # Compute regional spillovers if enabled (country scope only)
+        if include_spillovers and country and view_used == 'country':
             # Get absolute changes for spillover computation
             abs_effects = {ind: eff.get('absolute_change', 0) for ind, eff in effects.items()}
             spillovers = compute_regional_spillover(country, abs_effects)
@@ -436,6 +598,15 @@ def run_simulation_v31(
                 'global': spillovers.get('global', {}),
                 'region_info': get_region_info(country),
                 'is_global_power': spillovers.get('metadata', {}).get('is_global_power', False)
+            }
+
+        if debug:
+            response.setdefault('metadata', {})['debug'] = {
+                'requested_region': region,
+                'resolved_region': region_used,
+                'year_requested': year,
+                'year_used': year_used,
+                'baseline_scope': baseline_scope,
             }
 
         return response

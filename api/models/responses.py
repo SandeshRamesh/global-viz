@@ -180,6 +180,15 @@ class EffectDetailV31(BaseModel):
     std: Optional[float] = Field(None, description="Standard deviation (if ensemble)")
 
 
+class QoLDelta(BaseModel):
+    """QoL summary for baseline vs simulated state."""
+    baseline: float = Field(..., description="Baseline QoL score")
+    simulated: float = Field(..., description="Simulated QoL score")
+    delta: float = Field(..., description="Simulated - baseline QoL score")
+    n_indicators: int = Field(..., description="Number of indicators used in QoL computation")
+    n_domains: int = Field(..., description="Number of domains used in QoL computation")
+
+
 class SimulationResponseV31(BaseModel):
     """
     Response for POST /api/simulate/v31.
@@ -193,6 +202,8 @@ class SimulationResponseV31(BaseModel):
     base_year: int = Field(..., description="Year used for graph and baseline")
     view_type: str = Field(..., description="Requested view type")
     view_used: str = Field(..., description="Actual view used (may differ due to fallback)")
+    scope_used: str = Field(..., description="Effective simulation scope used")
+    region_used: Optional[str] = Field(None, description="Resolved region key for regional scope")
     income_classification: Optional[IncomeClassification] = Field(
         None, description="Country's income classification for this year"
     )
@@ -208,6 +219,12 @@ class SimulationResponseV31(BaseModel):
     )
     ensemble: Optional[EnsembleStats] = Field(
         None, description="Ensemble statistics (if n_ensemble_runs > 0)"
+    )
+    qol: Optional[QoLDelta] = Field(
+        None, description="QoL baseline/simulated/delta summary for this simulation"
+    )
+    warnings: Optional[List[str]] = Field(
+        None, description="Adaptive-year and fallback warnings"
     )
     metadata: Dict[str, Any] = Field(
         ..., description="Additional metadata (n_edges, p_value_threshold, etc.)"
@@ -232,6 +249,8 @@ class TemporalSimulationResponseV31(BaseModel):
     base_year: int = Field(..., description="Starting year")
     horizon_years: int = Field(..., description="Years projected forward")
     view_type: str = Field(..., description="Requested view type")
+    scope_used: str = Field(..., description="Effective simulation scope used")
+    region_used: Optional[str] = Field(None, description="Resolved region key for regional scope")
     income_classification_evolution: Optional[Dict[int, IncomeClassification]] = Field(
         None, description="Income classification at each year"
     )
@@ -260,6 +279,10 @@ class TemporalSimulationResponseV31(BaseModel):
     simulation_stress_score: Optional[float] = Field(
         None,
         description="Fraction of effects hitting saturation or ±2σ clamp (0=relaxed, 1=all clamped)"
+    )
+    qol_timeline: Optional[Dict[int, QoLDelta]] = Field(
+        None,
+        description="QoL baseline/simulated/delta by year for temporal simulations"
     )
     warnings: Optional[List[str]] = Field(
         None, description="Warnings about graph fallbacks, missing data, risk flags, etc."

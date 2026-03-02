@@ -246,12 +246,19 @@ export function CountrySelector() {
     currentYearIndex
   } = useSimulationStore()
 
+  const mapHoveredCountry = useSimulationStore(s => s.mapHoveredCountry)
+  const mapForeground = useSimulationStore(s => s.mapForeground)
+
   const [searchTerm, setSearchTerm] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const listboxId = 'country-selector-listbox'
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mapHoverCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const firstMapHoverRef = useRef(true)
+  const mapSelectLockRef = useRef(false) // Suppress hover-open after map click
 
   // Load countries and classifications on mount (with failure guard to prevent infinite retry)
   useEffect(() => {
@@ -260,6 +267,78 @@ export function CountrySelector() {
     }
     loadAllClassifications()
   }, [countries.length, countriesLoading, countriesLoadFailed, loadCountries, loadAllClassifications])
+
+  // Reset flags when map foreground toggles
+  useEffect(() => {
+    if (mapForeground) {
+      firstMapHoverRef.current = true
+      mapSelectLockRef.current = false
+    } else {
+      // Map went to background — close dropdown, clear lock
+      setIsFocused(false)
+      mapSelectLockRef.current = false
+    }
+  }, [mapForeground])
+
+  // React to map hover: auto-open dropdown and scroll to hovered country
+  useEffect(() => {
+    // After a map click selection, suppress hover from reopening the dropdown
+    if (mapSelectLockRef.current) return
+
+    if (mapHoveredCountry) {
+      if (mapHoverCloseRef.current) {
+        clearTimeout(mapHoverCloseRef.current)
+        mapHoverCloseRef.current = null
+      }
+      setIsFocused(true)
+      const scrollSmooth = firstMapHoverRef.current
+      if (scrollSmooth) firstMapHoverRef.current = false
+      // Scroll hovered country to center of the dropdown
+      requestAnimationFrame(() => {
+        const listEl = listRef.current
+        if (!listEl) return
+        const items = listEl.querySelectorAll<HTMLElement>('.country-option')
+        for (const item of items) {
+          if (item.textContent?.includes(mapHoveredCountry)) {
+            const targetTop = item.offsetTop - listEl.offsetTop - (listEl.clientHeight / 2) + (item.offsetHeight / 2)
+            listEl.scrollTo({ top: targetTop, behavior: scrollSmooth ? 'smooth' : 'instant' })
+            break
+          }
+        }
+      })
+    } else {
+      // Close after delay (same pattern as mouse leave)
+      if (mapHoverCloseRef.current) clearTimeout(mapHoverCloseRef.current)
+      mapHoverCloseRef.current = setTimeout(() => {
+        setIsFocused(false)
+      }, 900)
+    }
+  }, [mapHoveredCountry])
+
+  // When a country is selected while map is foregrounded, lock out hover-open
+  useEffect(() => {
+    if (selectedCountry && mapForeground) {
+      mapSelectLockRef.current = true
+      setIsFocused(false)
+      if (mapHoverCloseRef.current) {
+        clearTimeout(mapHoverCloseRef.current)
+        mapHoverCloseRef.current = null
+      }
+    }
+  }, [selectedCountry, mapForeground])
+
+  // When country is cleared, unlock so hover works again
+  useEffect(() => {
+    if (!selectedCountry) {
+      mapSelectLockRef.current = false
+    }
+  }, [selectedCountry])
+
+  useEffect(() => {
+    return () => {
+      if (mapHoverCloseRef.current) clearTimeout(mapHoverCloseRef.current)
+    }
+  }, [])
 
   // Get current year for classification lookup
   const currentYear = historicalTimeline?.years?.[currentYearIndex] || 2020
@@ -425,7 +504,9 @@ export function CountrySelector() {
   }
 
   // Render country row in dropdown
-  const renderCountryRow = (country: CountryWithMeta) => (
+  const renderCountryRow = (country: CountryWithMeta) => {
+    const isMapHovered = mapHoveredCountry === country.name
+    return (
     <div
       key={country.name}
       className="country-option"
@@ -446,10 +527,11 @@ export function CountrySelector() {
         transition: 'background 0.1s ease',
         display: 'flex',
         alignItems: 'center',
-        gap: 8
+        gap: 8,
+        background: isMapHovered ? '#e3f2fd' : 'white'
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'white' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = isMapHovered ? '#bbdefb' : '#f5f5f5' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = isMapHovered ? '#e3f2fd' : 'white' }}
     >
       {/* Flag */}
       <span style={{ fontSize: 16 }}>{country.flag}</span>
@@ -473,6 +555,7 @@ export function CountrySelector() {
       </div>
     </div>
   )
+  }
 
   // Determine header content
   const renderHeader = () => {
@@ -631,7 +714,7 @@ export function CountrySelector() {
           }}
         >
           {/* Country list */}
-          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 280 }}>
+          <div ref={listRef} style={{ flex: 1, overflowY: 'auto', maxHeight: 280 }}>
             {filteredCountries.length === 0 ? (
               <div style={{ padding: 16, textAlign: 'center', color: '#888', fontSize: 13 }}>
                 No countries found

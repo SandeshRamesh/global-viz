@@ -82,6 +82,14 @@
   100% { stroke-opacity: 0.05; stroke-width: 0.3; }
 }
 
+/* QoL node cyan pass-through pulse — brief bright flash when sim ripple arrives */
+@keyframes qol-cyan-flash {
+  0%, 100% { opacity: 0; stroke-width: 1.5; }
+  12% { opacity: 0.9; stroke-width: 3.5; }
+  35% { opacity: 0.5; stroke-width: 2.5; }
+  60% { opacity: 0.15; stroke-width: 1.5; }
+}
+
 /* Node flash when sim pulse arrives — green for positive, red for negative */
 @keyframes sim-node-flash-pos {
   0%, 100% { filter: drop-shadow(0 0 0px transparent); }

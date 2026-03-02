@@ -4,7 +4,7 @@ Request Models
 Pydantic schemas for API request validation.
 """
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional
 
 
@@ -41,7 +41,7 @@ class InterventionInput(BaseModel):
 
 from typing import Literal
 
-ViewType = Literal['country', 'stratified', 'unified']
+ViewType = Literal['country', 'stratified', 'unified', 'regional']
 SimulationMode = Literal['percentage', 'absolute']
 
 
@@ -56,6 +56,7 @@ class SimulationRequestV31(BaseModel):
     - Regional spillover effects
     """
     country: Optional[str] = Field(None, description="Country name (e.g., 'Australia'), or null for unified")
+    region: Optional[str] = Field(None, description="Region key for regional view (e.g., 'sub_saharan_africa')")
     interventions: List[InterventionInput] = Field(
         ...,
         description="List of interventions to apply",
@@ -74,7 +75,7 @@ class SimulationRequestV31(BaseModel):
     )
     view_type: ViewType = Field(
         'country',
-        description="Graph view type: 'country' (specific), 'stratified' (income group), 'unified' (global)"
+        description="Graph view type: 'country' (specific), 'stratified' (income group), 'unified' (global), 'regional' (region aggregate)"
     )
     p_value_threshold: float = Field(
         0.05,
@@ -102,6 +103,18 @@ class SimulationRequestV31(BaseModel):
         ge=1,
         le=500
     )
+    debug: bool = Field(
+        False,
+        description="Return debug diagnostics in metadata"
+    )
+
+    @model_validator(mode="after")
+    def _validate_scope_requirements(self):
+        if self.view_type in ("country", "stratified") and not self.country:
+            raise ValueError(f"country is required for view_type='{self.view_type}'")
+        if self.view_type == "regional" and not (self.region or self.country):
+            raise ValueError("region or country is required for view_type='regional'")
+        return self
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -116,7 +129,8 @@ class SimulationRequestV31(BaseModel):
                 "p_value_threshold": 0.05,
                 "use_nonlinear": True,
                 "n_ensemble_runs": 0,
-                "include_spillovers": True
+                "include_spillovers": True,
+                "debug": False,
             }
         }
     )
@@ -130,6 +144,7 @@ class TemporalSimulationRequestV31(BaseModel):
     for each year (evolving relationships over time).
     """
     country: Optional[str] = Field(None, description="Country name (e.g., 'Australia'), or null for unified")
+    region: Optional[str] = Field(None, description="Region key for regional view (e.g., 'sub_saharan_africa')")
     interventions: List[InterventionInput] = Field(
         ...,
         description="List of interventions to apply",
@@ -150,7 +165,7 @@ class TemporalSimulationRequestV31(BaseModel):
     )
     view_type: ViewType = Field(
         'country',
-        description="Graph view type: 'country', 'stratified', or 'unified'"
+        description="Graph view type: 'country', 'stratified', 'unified', or 'regional'"
     )
     p_value_threshold: float = Field(
         0.05,
@@ -186,6 +201,14 @@ class TemporalSimulationRequestV31(BaseModel):
         False,
         description="Return debug trace (saturation, clamp, graph fallback details)"
     )
+
+    @model_validator(mode="after")
+    def _validate_scope_requirements(self):
+        if self.view_type in ("country", "stratified") and not self.country:
+            raise ValueError(f"country is required for view_type='{self.view_type}'")
+        if self.view_type == "regional" and not (self.region or self.country):
+            raise ValueError("region or country is required for view_type='regional'")
+        return self
 
     model_config = ConfigDict(
         json_schema_extra={

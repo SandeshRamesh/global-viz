@@ -20,7 +20,7 @@ if _VIZ_ROOT not in sys.path:
     sys.path.insert(0, _VIZ_ROOT)
 
 # V3.1 type aliases
-ViewType = Literal['country', 'stratified', 'unified']
+ViewType = Literal['country', 'stratified', 'unified', 'regional']
 SimulationMode = Literal['percentage', 'absolute']
 
 
@@ -47,26 +47,29 @@ class SimulationService:
 
     def run_instant_simulation_v31(
         self,
-        country: str,
+        country: Optional[str],
         interventions: List[Dict[str, Any]],
         year: int,
         mode: SimulationMode = 'percentage',
         view_type: ViewType = 'country',
+        region: Optional[str] = None,
         p_value_threshold: float = 0.05,
         use_nonlinear: bool = True,
         n_ensemble_runs: int = 0,
         include_spillovers: bool = True,
-        top_n_effects: int = 20
+        top_n_effects: int = 20,
+        debug: bool = False,
     ) -> Dict[str, Any]:
         """
         Run V3.1 instant simulation with year-specific graph.
 
         Args:
-            country: Country name (e.g., 'Australia')
+            country: Country name (optional for unified/regional)
             interventions: List of {"indicator": str, "change_percent": float}
             year: Year for graph and baseline (1990-2024)
             mode: 'percentage' (fast, no baselines) or 'absolute' (real values)
-            view_type: 'country', 'stratified', or 'unified'
+            view_type: 'country', 'stratified', 'unified', or 'regional'
+            region: Region key when using regional view
             p_value_threshold: Filter edges by p-value
             use_nonlinear: Use marginal effects when available
             n_ensemble_runs: 0 = point estimate, >0 = bootstrap ensemble
@@ -88,7 +91,9 @@ class SimulationService:
             use_nonlinear=use_nonlinear,
             n_ensemble_runs=n_ensemble_runs,
             include_spillovers=include_spillovers,
-            top_n_effects=top_n_effects
+            top_n_effects=top_n_effects,
+            region=region,
+            debug=debug,
         )
 
         # Check for simulation errors
@@ -99,11 +104,12 @@ class SimulationService:
 
     def run_temporal_simulation_v31(
         self,
-        country: str,
+        country: Optional[str],
         interventions: List[Dict[str, Any]],
         base_year: int,
         horizon_years: int = 10,
         view_type: ViewType = 'country',
+        region: Optional[str] = None,
         p_value_threshold: float = 0.05,
         use_nonlinear: bool = True,
         use_dynamic_graphs: bool = True,
@@ -124,6 +130,7 @@ class SimulationService:
             base_year: Starting year (1990-2024)
             horizon_years: Years to project forward (1-30)
             view_type: Graph view type
+            region: Region key when using regional view
             p_value_threshold: Edge significance filter
             use_nonlinear: Use marginal effects when available
             use_dynamic_graphs: Load year-specific graph for each year
@@ -151,12 +158,14 @@ class SimulationService:
             base_year=base_year,
             horizon_years=horizon_years,
             view_type=view_type,
+            region=region,
             p_value_threshold=p_value_threshold,
             use_nonlinear=use_nonlinear,
             use_dynamic_graphs=use_dynamic_graphs,
             n_ensemble_runs=n_ensemble_runs,
             include_spillovers=include_spillovers,
-            top_n_effects=top_n_effects
+            top_n_effects=top_n_effects,
+            debug=debug,
         )
 
         # Check for simulation errors

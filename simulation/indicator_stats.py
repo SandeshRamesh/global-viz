@@ -26,6 +26,7 @@ DATA_ROOT = Path(__file__).parent.parent / "data"
 PANEL_PATH = DATA_ROOT / "raw" / "v21_panel_data_for_v3.parquet"
 STATS_CACHE_PATH = DATA_ROOT / "v31" / "indicator_stats.json"
 COUNTRY_STATS_CACHE_DIR = DATA_ROOT / "v31" / "country_indicator_stats"
+BASELINE_CACHE_DIR = DATA_ROOT / "v31" / "baselines"
 
 # Module-level caches
 _stats_cache: Optional[Dict[int, Dict[str, Dict[str, float]]]] = None
@@ -158,6 +159,53 @@ def compute_country_temporal_stats(
     return result
 
 
+def compute_country_temporal_stats_from_baselines(
+    country: str,
+    baseline_dir: Optional[Path] = None,
+) -> Dict[str, Dict[str, float]]:
+    """
+    Compute per-indicator temporal stats from cached yearly baseline JSON files.
+
+    This fallback avoids parquet runtime dependencies and preserves calibration
+    for absolute-mode propagation when panel loading is unavailable.
+    """
+    base_dir = baseline_dir or BASELINE_CACHE_DIR
+    country_dir = base_dir / country
+    if not country_dir.exists():
+        return {}
+
+    series_by_indicator: Dict[str, list] = {}
+    for year_file in sorted(country_dir.glob("*.json")):
+        try:
+            with open(year_file) as f:
+                payload = json.load(f)
+            values = payload.get("values", {})
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        if not isinstance(values, dict):
+            continue
+        for indicator, value in values.items():
+            if value is None:
+                continue
+            try:
+                series_by_indicator.setdefault(str(indicator), []).append(float(value))
+            except (TypeError, ValueError):
+                continue
+
+    result: Dict[str, Dict[str, float]] = {}
+    for indicator, values in series_by_indicator.items():
+        if not values:
+            continue
+        arr = np.array(values, dtype=float)
+        result[indicator] = {
+            "mean": float(np.mean(arr)),
+            "std": float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0,
+            "count": int(len(arr)),
+        }
+    return result
+
+
 def save_country_stats_cache(
     country: str,
     stats: Dict[str, Dict[str, float]],
@@ -205,8 +253,14 @@ def get_country_indicator_stats(
     # Try file cache
     stats = load_country_stats_cache(country)
     if stats is None:
-        # Compute from panel data
-        stats = compute_country_temporal_stats(country, panel_path)
+        # Compute from panel data; fallback to baseline JSON cache if parquet
+        # dependencies are unavailable in lightweight runtime environments.
+        try:
+            stats = compute_country_temporal_stats(country, panel_path)
+        except Exception:
+            stats = {}
+        if not stats:
+            stats = compute_country_temporal_stats_from_baselines(country)
         if stats:
             save_country_stats_cache(country, stats)
 
@@ -340,6 +394,113 @@ def get_stratum_indicator_stats(
             save_stratum_stats_cache(stratum, stats)
 
     _stratum_stats_cache[stratum] = stats
+    return stats
+
+
+REGIONAL_STATS_CACHE_DIR = DATA_ROOT / "v31" / "regional_indicator_stats"
+_regional_stats_cache: Dict[str, Dict[str, Dict[str, float]]] = {}
+
+
+def compute_regional_temporal_stats(
+    region: str,
+    panel_path: Optional[Path] = None
+) -> Dict[str, Dict[str, float]]:
+    """
+    Compute per-indicator temporal stats for a region.
+
+    Uses median of country-level temporal std across member countries,
+    mirroring stratum-level aggregation but with region membership.
+    """
+    from .region_mapping import get_countries_in_region
+
+    countries = get_countries_in_region(region)
+    if not countries:
+        return {}
+
+    min_countries_per_indicator = 2 if len(countries) <= 2 else 3
+
+    per_country_stats: Dict[str, list] = {}
+    per_country_means: Dict[str, list] = {}
+
+    for country in countries:
+        c_stats = load_country_stats_cache(country)
+        if c_stats is None:
+            try:
+                c_stats = get_country_indicator_stats(country, panel_path=panel_path)
+            except Exception:
+                # In lightweight runtime environments parquet engines may be absent.
+                # Skip this country instead of failing the entire region.
+                c_stats = {}
+        if not c_stats:
+            continue
+        for ind, stat in c_stats.items():
+            std_val = float(stat.get('std', 0.0) or 0.0)
+            mean_val = stat.get('mean')
+            if std_val > 0:
+                per_country_stats.setdefault(ind, []).append(std_val)
+            if mean_val is not None:
+                per_country_means.setdefault(ind, []).append(float(mean_val))
+
+    result: Dict[str, Dict[str, float]] = {}
+    for ind, stds in per_country_stats.items():
+        if len(stds) < min_countries_per_indicator:
+            continue
+        means = per_country_means.get(ind, [])
+        result[ind] = {
+            'mean': float(np.median(means)) if means else 0.0,
+            'std': float(np.median(stds)),
+            'count': len(stds),
+        }
+
+    return result
+
+
+def save_regional_stats_cache(
+    region: str,
+    stats: Dict[str, Dict[str, float]],
+    cache_dir: Optional[Path] = None
+) -> None:
+    """Save per-region temporal stats cache."""
+    base_dir = cache_dir or REGIONAL_STATS_CACHE_DIR
+    base_dir.mkdir(parents=True, exist_ok=True)
+    path = base_dir / f"{region}.json"
+    with open(path, 'w') as f:
+        json.dump(stats, f)
+
+
+def load_regional_stats_cache(
+    region: str,
+    cache_dir: Optional[Path] = None
+) -> Optional[Dict[str, Dict[str, float]]]:
+    """Load per-region temporal stats cache."""
+    base_dir = cache_dir or REGIONAL_STATS_CACHE_DIR
+    path = base_dir / f"{region}.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def get_regional_indicator_stats(
+    region: str,
+    panel_path: Optional[Path] = None
+) -> Dict[str, Dict[str, float]]:
+    """
+    Get per-indicator temporal std for a region with file+memory caching.
+    """
+    global _regional_stats_cache
+
+    if region in _regional_stats_cache:
+        return _regional_stats_cache[region]
+
+    stats = load_regional_stats_cache(region)
+    if stats is None:
+        print(f"Computing temporal stats for region '{region}' (first time)...")
+        stats = compute_regional_temporal_stats(region, panel_path)
+        if stats:
+            save_regional_stats_cache(region, stats)
+
+    _regional_stats_cache[region] = stats
     return stats
 
 

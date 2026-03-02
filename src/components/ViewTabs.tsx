@@ -33,6 +33,8 @@ export function ViewTabs({
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle')
   const [shareNudge, setShareNudge] = useState(false)
   const playbackFinishedToken = useSimulationStore(s => s.playbackFinishedToken)
+  const mapForeground = useSimulationStore(s => s.mapForeground)
+  const toggleMapForeground = useSimulationStore(s => s.toggleMapForeground)
   const prevFinishedTokenRef = useRef(playbackFinishedToken)
 
   // Glow the share button when simulation playback reaches the final year
@@ -222,7 +224,60 @@ export function ViewTabs({
         </button>
       </div>
 
-      {/* Row 3: Share button */}
+      {/* Row 3: Map layer toggle */}
+      <div
+        style={{
+          display: 'flex',
+          background: 'white',
+          borderRadius: 6,
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          border: '1px solid #ddd',
+          overflow: 'hidden'
+        }}
+      >
+        <button
+          onClick={() => toggleMapForeground()}
+          style={{
+            padding: '6px 12px',
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: 'pointer',
+            border: 'none',
+            borderRadius: 5,
+            background: mapForeground ? '#3B82F6' : 'white',
+            color: mapForeground ? 'white' : '#555',
+            transition: 'all 0.15s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5
+          }}
+          title={mapForeground ? 'Send map to background (M)' : 'Bring map forward (M)'}
+          onMouseEnter={(e) => {
+            if (!mapForeground) e.currentTarget.style.background = '#f5f5f5'
+          }}
+          onMouseLeave={(e) => {
+            if (!mapForeground) e.currentTarget.style.background = 'white'
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+            <line x1="8" y1="2" x2="8" y2="18" />
+            <line x1="16" y1="6" x2="16" y2="22" />
+          </svg>
+          Map (M)
+        </button>
+      </div>
+
+      {/* Row 4: Share button */}
       <div
         className={shareNudge ? 'share-btn-wrap share-nudge-active' : 'share-btn-wrap'}
         style={{

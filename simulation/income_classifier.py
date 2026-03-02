@@ -110,13 +110,13 @@ def get_stratum_for_country(country: str, year: int) -> Optional[Stratum]:
     if classification is None:
         return None
 
-    group_3tier = classification.get('group_3tier', '').lower()
+    group_3tier = (classification.get('group_3tier') or '').lower()
 
     if group_3tier in ['developing', 'emerging', 'advanced']:
         return group_3tier
 
     # Map from 4-tier if 3-tier not available
-    group_4tier = classification.get('group_4tier', '').lower()
+    group_4tier = (classification.get('group_4tier') or '').lower()
     tier_mapping = {
         'low income': 'developing',
         'lower middle income': 'developing',

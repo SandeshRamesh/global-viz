@@ -44,27 +44,63 @@ V21_GRAPH_PATH = Path(os.getenv(
 # Income strata for stratified views
 INCOME_STRATA = ["developing", "emerging", "advanced"]
 
+
+def _discover_temporal_targets(default_targets: list[str]) -> list[str]:
+    """
+    Discover available temporal SHAP targets from filesystem.
+
+    Prefer unified target folders. Fallback to first country with target folders.
+    """
+    unified_dir = V31_TEMPORAL_SHAP_DIR / "unified"
+    if unified_dir.exists():
+        targets = sorted([d.name for d in unified_dir.iterdir() if d.is_dir()])
+        if targets:
+            return targets
+
+    countries_dir = V31_TEMPORAL_SHAP_DIR / "countries"
+    if countries_dir.exists():
+        for country_dir in sorted(countries_dir.iterdir()):
+            if not country_dir.is_dir():
+                continue
+            targets = sorted([d.name for d in country_dir.iterdir() if d.is_dir()])
+            if targets:
+                return targets
+
+    return default_targets
+
+
+def _discover_country_graph_count() -> int:
+    countries_dir = V31_TEMPORAL_GRAPHS_DIR / "countries"
+    if not countries_dir.exists():
+        return 0
+    return len([d for d in countries_dir.iterdir() if d.is_dir()])
+
+
 # Temporal data settings
 TEMPORAL_YEAR_MIN = 1990
 TEMPORAL_YEAR_MAX = 2024
-TEMPORAL_TARGETS = [
+TEMPORAL_TARGETS = _discover_temporal_targets([
     "quality_of_life", "health", "education", "economic", "governance",
     "environment", "demographics", "security", "development"
-]
+])
+
+AVAILABLE_COUNTRY_GRAPH_COUNT = _discover_country_graph_count()
+ENABLE_REGIONAL_VIEW = os.getenv("ENABLE_REGIONAL_VIEW", "false").lower() == "true"
 
 # API settings
 API_VERSION = "3.1.0"
 API_TITLE = "Global Causal Discovery API"
-API_DESCRIPTION = """
+API_DESCRIPTION = f"""
 ## V3.1 Policy Intervention Simulator
 
 Country-specific causal simulation for policy analysis.
 
 ### Features
-- **203 country-specific causal graphs** with 7,368 edges each
+- **{AVAILABLE_COUNTRY_GRAPH_COUNT} country-specific causal graph directories**
 - **Instant simulation**: Propagate interventions through causal network
 - **Temporal simulation**: Project effects over 1-20 year horizons with lag effects
 - **2,583 development indicators** across economic, social, and governance domains
+- **Available temporal targets**: {', '.join(TEMPORAL_TARGETS)}
 
 ### Rate Limits
 - 100 requests/minute per IP
