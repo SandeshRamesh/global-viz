@@ -4567,8 +4567,11 @@ function App() {
         const offset = nodeSize + fontSize * 0.6 + basePadding
 
         // Ring 0: add QoL score as second line when country selected
+        const scoreText = qolNodeScore != null
+          ? `${(qolNodeScore * 10).toFixed(playbackMode === 'simulation' ? 3 : 1)}/10`
+          : null
         const lines = d.ring === 0 && qolNodeScore != null
-          ? [label, `${(qolNodeScore * 10).toFixed(1)}/10`]
+          ? [label, scoreText!]
           : [label]
 
         labelPositions.set(d.id, { x: d.x, y: d.y + offset, anchor: 'middle', rotation: 0, fontSize, lines })
@@ -5786,6 +5789,7 @@ function App() {
 
             {/* QoL score for ring 0 (country, region mean, stratum mean, or global mean) */}
             {displayNode.ring === 0 && qolNodeScoreForTooltip != null && (() => {
+              const decimals = playbackMode === 'simulation' ? 3 : 1
               const label = selectedCountry
                 ? selectedCountry
                 : selectedRegion
@@ -5795,7 +5799,7 @@ function App() {
                     : 'global mean'
               return (
                 <div style={{ fontSize: 12, color: '#333', marginBottom: 6, fontWeight: 500 }}>
-                  QoL: {(qolNodeScoreForTooltip * 10).toFixed(1)}/10 ({label}, {mapCurrentYear})
+                  QoL: {(qolNodeScoreForTooltip * 10).toFixed(decimals)}/10 ({label}, {mapCurrentYear})
                 </div>
               )
             })()}
