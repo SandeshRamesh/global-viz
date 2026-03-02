@@ -123,12 +123,13 @@ function LoadingSpinner({ show, delay = 200, posRef, elRef }: {
       }}
     >
       <div style={{
-        width: 28,
-        height: 28,
-        border: '2.5px solid rgba(120, 144, 156, 0.2)',
-        borderTopColor: '#78909C',
+        width: 32,
+        height: 32,
+        border: '3px solid rgba(0, 229, 255, 0.15)',
+        borderTopColor: '#00E5FF',
         borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite'
+        animation: 'spin 0.8s linear infinite',
+        filter: 'drop-shadow(0 0 4px rgba(0, 229, 255, 0.4))'
       }} />
     </div>
   )
@@ -340,6 +341,7 @@ function App() {
     currentYearIndex,
     loadUnifiedTimeline,
     shapTimelineLoading,
+    timelineLoading,
     countryLoading,
     selectedStratum,
     setStratum,
@@ -5511,8 +5513,8 @@ function App() {
 
       {/* Minimal loading spinner - centered on QoL node, with delay to avoid flash */}
       <LoadingSpinner
-        show={loading || shapTimelineLoading || countryLoading}
-        delay={200}
+        show={loading || shapTimelineLoading || timelineLoading || countryLoading}
+        delay={100}
         posRef={qolNodePositionRef}
         elRef={spinnerElRef}
       />
