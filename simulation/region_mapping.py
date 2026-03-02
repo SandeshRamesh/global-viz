@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_ROOT = VIZ_ROOT / "data"
 TEMPORAL_COUNTRIES_DIR = DATA_ROOT / "v31" / "temporal_graphs" / "countries"
 SPILLOVERS_FILE = DATA_ROOT / "v31" / "regional_spillovers.json"
-WB_REGIONAL_GROUPS_FILE = PROJECT_ROOT / "v3.1" / "data" / "metadata" / "regional_groups.json"
+WB_REGIONAL_GROUPS_FILE = DATA_ROOT / "v31" / "metadata" / "regional_groups.json"
 
 # Supported 11-region hybrid keys (order matches regional_spillovers.json)
 REGION_KEYS_11 = (
