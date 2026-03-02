@@ -38,3 +38,4 @@ _archive/
 # Python
 __pycache__/
 *.pyc
+precomputed_data.tar.gz
