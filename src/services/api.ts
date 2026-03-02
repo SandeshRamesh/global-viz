@@ -573,8 +573,9 @@ export const simulationAPI = {
    * Get regional graph data (edges, baseline, SHAP importance)
    * GET /api/graph/region/{region}
    */
-  getRegionalGraph: async (region: string, signal?: AbortSignal): Promise<CountryGraph> => {
-    const res = await fetchWithPerf(`${API_BASE}/api/graph/region/${encodeURIComponent(region)}`, { signal });
+  getRegionalGraph: async (region: string, signal?: AbortSignal, year?: number): Promise<CountryGraph> => {
+    const params = year !== undefined ? `?year=${year}` : '';
+    const res = await fetchWithPerf(`${API_BASE}/api/graph/region/${encodeURIComponent(region)}${params}`, { signal });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`Graph not found for region: ${region}`);

@@ -27,6 +27,7 @@ interface TimelinePlayerProps {
 export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: TimelinePlayerProps) {
   const {
     selectedCountry,
+    selectedRegion,
     isSimulating,
     historicalTimeline,
     timelineLoading,
@@ -51,12 +52,12 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
   const wasPlayingBeforeDrag = useRef(false)
   const waitingForLayoutRef = useRef(false)
 
-  // Reset to docked when country changes
+  // Reset to docked when country/region changes
   useEffect(() => {
     setPlayerState('docked')
     setPendingPlay(false)
     waitingForLayoutRef.current = false
-  }, [selectedCountry])
+  }, [selectedCountry, selectedRegion])
 
   // Auto-expand only on true simulation runs (store token increments in applyResults)
   const prevRunTokenRef = useRef(simulationRunToken)
@@ -103,7 +104,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
   // Simulation: SIM_MS_PER_YEAR (shared constant, also drives pulse cycle)
   const MS_PER_YEAR = playbackMode === 'simulation'
     ? SIM_MS_PER_YEAR
-    : (selectedCountry ? 700 : 300)
+    : ((selectedCountry || selectedRegion) ? 700 : 300)
 
   // Handle pending play after expansion animation completes
   useEffect(() => {
@@ -399,7 +400,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
   const statusText = isSimulating
     ? 'Calculating...'
     : playbackMode === 'historical'
-      ? (selectedCountry ? 'Historical Data' : '')
+      ? ((selectedCountry || selectedRegion) ? 'Historical Data' : '')
       : 'Simulation'
 
   // Loading state - show in docked position (SHAP loading or edges loading in local view)

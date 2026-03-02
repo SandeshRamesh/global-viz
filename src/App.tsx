@@ -418,8 +418,11 @@ function App() {
     if (selectedStratum !== 'unified' && stratifiedShapTimeline?.years?.[currentYearIndex] !== undefined) {
       return stratifiedShapTimeline.years[currentYearIndex]
     }
-    return temporalShapTimeline?.years?.[currentYearIndex] ?? 2020
-  }, [playbackMode, temporalResults, currentYearIndex, selectedStratum, stratifiedShapTimeline, temporalShapTimeline])
+    // Use historicalTimeline (filtered/effective years) first since currentYearIndex
+    // indexes into it, not the full unfiltered temporalShapTimeline
+    return historicalTimeline?.years?.[currentYearIndex]
+      ?? temporalShapTimeline?.years?.[currentYearIndex] ?? 2020
+  }, [playbackMode, temporalResults, currentYearIndex, selectedStratum, stratifiedShapTimeline, temporalShapTimeline, historicalTimeline])
 
   // Apply simulation QoL delta to selected country on the map during simulation playback.
   const mapSimAdjustments = useMemo(() => {
@@ -562,19 +565,23 @@ function App() {
 
   // Load temporal graphs for Local View timeline playback
   // This pre-fetches all years' edges so timeline scrubbing is instant
-  // Works for country-specific, stratified, AND unified views
+  // Works for country-specific, stratified, regional, AND unified views
   useEffect(() => {
     // Only load when in local/split view
     if (viewMode === 'global') {
+      setTemporalEdgesLoading(false)
       return
     }
 
-    // Determine cache key: country > stratum > 'unified'
-    const cacheKey = selectedCountry || (selectedStratum !== 'unified' ? selectedStratum : 'unified')
+    // Determine cache key: region > country > stratum > 'unified'
+    const cacheKey = selectedRegion
+      ? `region:${selectedRegion}`
+      : selectedCountry || (selectedStratum !== 'unified' ? selectedStratum : 'unified')
 
     // Check if cache is already populated for this key
     if (temporalEdgesCountryRef.current === cacheKey && temporalEdgesCacheRef.current.size > 0) {
       debug.log('cache', `Temporal edges cache already populated for ${cacheKey}`)
+      setTemporalEdgesLoading(false)
       return
     }
 
@@ -586,9 +593,24 @@ function App() {
 
       try {
         // Get available years based on selection type
-        const yearsData = await simulationAPI.getCountryGraphYears(selectedCountry || 'unified')
-        if (controller.signal.aborted) return
-        debug.log('cache', `Loading temporal edges for ${cacheKey}: ${yearsData.total} years`)
+        // For regions, use the historicalTimeline years (already loaded by setSelectedRegion)
+        let years: number[]
+        if (selectedRegion) {
+          // Use timeline years from the store (populated by setSelectedRegion)
+          const timeline = useSimulationStore.getState().historicalTimeline
+          years = timeline?.years ?? []
+          if (years.length === 0) {
+            debug.log('cache', `No timeline years for region ${selectedRegion}, skipping edge load`)
+            setTemporalEdgesLoading(false)
+            return
+          }
+        } else {
+          const yearsData = await simulationAPI.getCountryGraphYears(selectedCountry || 'unified')
+          if (controller.signal.aborted) return
+          years = yearsData.years
+        }
+
+        debug.log('cache', `Loading temporal edges for ${cacheKey}: ${years.length} years`)
 
         // Clear cache and set new key
         temporalEdgesCacheRef.current = new Map()
@@ -597,13 +619,16 @@ function App() {
 
         // Fetch graphs for all years in parallel (batched to avoid overwhelming the API)
         const BATCH_SIZE = 10
-        for (let i = 0; i < yearsData.years.length; i += BATCH_SIZE) {
+        for (let i = 0; i < years.length; i += BATCH_SIZE) {
           if (controller.signal.aborted) return
-          const batch = yearsData.years.slice(i, i + BATCH_SIZE)
+          const batch = years.slice(i, i + BATCH_SIZE)
           const results = await Promise.all(
             batch.map(year => {
               // Choose the right API based on selection
-              if (selectedCountry) {
+              if (selectedRegion) {
+                return simulationAPI.getRegionalGraph(selectedRegion, controller.signal, year)
+                  .then(g => ({ edges: g.edges }))
+              } else if (selectedCountry) {
                 return simulationAPI.getCountryTemporalGraph(selectedCountry, year, controller.signal)
               } else if (selectedStratum !== 'unified') {
                 return simulationAPI.getStratifiedGraph(selectedStratum, year, controller.signal)
@@ -636,15 +661,16 @@ function App() {
           debug.log('error', 'Failed to load temporal edges:', err)
         }
       } finally {
-        if (!controller.signal.aborted) {
-          setTemporalEdgesLoading(false)
-        }
+        // Always clear loading — the abort cleanup starts a new run which sets it true again
+        setTemporalEdgesLoading(false)
       }
     }
 
     loadTemporalEdges()
     return () => controller.abort()
-  }, [selectedCountry, selectedStratum, viewMode])
+    // timelineLoading in deps: when a region loads, the effect first runs while timeline is still
+    // loading (empty years → early return), then re-runs when timelineLoading becomes false
+  }, [selectedCountry, selectedRegion, selectedStratum, viewMode, timelineLoading])
 
   // Handle window resize
   useEffect(() => {
@@ -727,13 +753,17 @@ function App() {
     // Get hierarchical edges from unified model (always needed)
     const hierarchicalEdges = rawData.edges.filter(e => e.relationship === 'hierarchical')
 
-    // Determine current year from timeline
-    const currentYear = temporalShapTimeline?.years?.[currentYearIndex]
+    // Determine current year from the effective timeline (historicalTimeline has filtered years
+    // matching currentYearIndex, while temporalShapTimeline may have extra zero-data years)
+    const currentYear = historicalTimeline?.years?.[currentYearIndex]
+      ?? temporalShapTimeline?.years?.[currentYearIndex]
 
     // Check if we're in local/split view with temporal edges available
     if ((viewMode === 'local' || viewMode === 'split') && currentYear && !temporalEdgesLoading) {
-      // Cache key matches the loading logic: country > stratum > unified
-      const cacheKey = selectedCountry || (selectedStratum !== 'unified' ? selectedStratum : 'unified')
+      // Cache key matches the loading logic: region > country > stratum > unified
+      const cacheKey = selectedRegion
+        ? `region:${selectedRegion}`
+        : selectedCountry || (selectedStratum !== 'unified' ? selectedStratum : 'unified')
       const cachedEdges = temporalEdgesCacheRef.current.get(currentYear)
 
       // Use cached edges if available and cache key matches
@@ -745,15 +775,15 @@ function App() {
       }
     }
 
-    // If a country is selected, use static countryGraph edges as fallback
-    if (selectedCountry && countryGraph?.edges) {
+    // If a country or region is selected, use static countryGraph edges as fallback
+    if ((selectedCountry || selectedRegion) && countryGraph?.edges) {
       const countryCausalEdges = countryGraphToRawEdges(countryGraph.edges, true)
       return [...hierarchicalEdges, ...countryCausalEdges]
     }
 
-    // No country selected or no cached edges: use static unified model edges
+    // No country/region selected or no cached edges: use static unified model edges
     return rawData.edges
-  }, [rawData, selectedCountry, selectedStratum, countryGraph, viewMode, temporalShapTimeline, currentYearIndex, temporalEdgesLoading, temporalEdgesCacheKey])
+  }, [rawData, selectedCountry, selectedRegion, selectedStratum, countryGraph, viewMode, temporalShapTimeline, currentYearIndex, temporalEdgesLoading, temporalEdgesCacheKey])
 
   /**
    * Pre-compute aggregated SHAP for ALL years on timeline load.
@@ -5498,8 +5528,9 @@ function App() {
         isOpen={dataQualityOpen}
         onClose={() => setDataQualityOpen(false)}
         edges={(() => {
-          // Get current year from timeline
-          const year = temporalShapTimeline?.years?.[currentYearIndex]
+          // Get current year from the effective timeline (historicalTimeline has filtered years)
+          const year = historicalTimeline?.years?.[currentYearIndex]
+            ?? temporalShapTimeline?.years?.[currentYearIndex]
           if (year && temporalEdgesCacheRef.current.has(year)) {
             return temporalEdgesCacheRef.current.get(year)
           }
