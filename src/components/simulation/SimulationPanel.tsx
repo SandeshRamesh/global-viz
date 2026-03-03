@@ -206,6 +206,7 @@ export function SimulationPanel() {
           Simulation
         </span>
         <button
+          className="touch-target-44"
           onClick={closePanel}
           title="Close (Esc)"
           aria-label="Close simulation panel"
@@ -215,7 +216,7 @@ export function SimulationPanel() {
             color: '#767676',
             fontSize: 18,
             cursor: 'pointer',
-            padding: '0 4px',
+            padding: '4px 8px',
             lineHeight: 1
           }}
           onMouseEnter={(e) => e.currentTarget.style.color = '#666'}
@@ -255,12 +256,6 @@ export function SimulationPanel() {
 
       </div>
 
-      <style>{`
-        button:focus-visible {
-          outline: 2px solid #3B82F6;
-          outline-offset: 2px;
-        }
-      `}</style>
     </div>
   )
 }

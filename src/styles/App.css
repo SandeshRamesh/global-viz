@@ -41,6 +41,41 @@
   top: 0;
 }
 
+/* Global focus indicator for keyboard navigation */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible,
+[role="option"]:focus-visible,
+[role="slider"]:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
+
+/* SVG nodes that receive keyboard focus */
+circle.node:focus-visible {
+  outline: none;
+  stroke: #3B82F6;
+  stroke-width: 3;
+}
+
+/* ─── Touch targets: 44x44px minimum (WCAG 2.1 AA) ─── */
+/* Enlarge small buttons via invisible ::before hit area */
+.touch-target-44 {
+  position: relative;
+}
+.touch-target-44::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+}
+
 /*
  * Label visibility is now controlled by JavaScript (dynamic based on font size and zoom)
  * See updateLabelVisibility() in App.tsx

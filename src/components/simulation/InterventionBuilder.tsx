@@ -90,7 +90,8 @@ const styles = {
     cursor: 'pointer',
     fontSize: 14,
     lineHeight: 1,
-    transition: 'background 0.2s'
+    transition: 'background 0.2s',
+    position: 'relative' as const
   },
   select: {
     width: '100%',
@@ -101,8 +102,7 @@ const styles = {
     color: '#333',
     fontSize: 12,
     marginBottom: 8,
-    cursor: 'pointer',
-    outline: 'none'
+    cursor: 'pointer'
   },
   sliderContainer: {
     marginBottom: 4
@@ -130,7 +130,6 @@ const styles = {
     WebkitAppearance: 'none' as const,
     background: '#e0e0e0',
     borderRadius: 2,
-    outline: 'none',
     cursor: 'pointer'
   },
   addButton: {
@@ -190,6 +189,7 @@ function YearInput({ value, onCommit }: { value: number; onCommit: (year: number
     <input
       type="text"
       inputMode="numeric"
+      name="intervention-year"
       aria-label="Intervention year"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
@@ -592,6 +592,7 @@ export function InterventionBuilder() {
                 onCommit={(year) => commitYearChange(index, year)}
               />
               <button
+                className="touch-target-44"
                 style={styles.removeBtn}
                 onClick={() => removeIntervention(index)}
                 title="Remove intervention"
@@ -605,6 +606,8 @@ export function InterventionBuilder() {
           {/* Indicator selector with domain color */}
           <div className="indicator-select-wrapper">
             <select
+              id={`intervention-${index}-indicator`}
+              name={`intervention-${index}-indicator`}
               className="indicator-select"
               value={intervention.indicator}
               onChange={(e) => handleIndicatorChange(index, e.target.value)}
@@ -719,6 +722,8 @@ export function InterventionBuilder() {
               </span>
             </div>
             <input
+              id={`intervention-${index}-change`}
+              name={`intervention-${index}-change`}
               type="range"
               min={MIN_CHANGE}
               max={MAX_CHANGE}

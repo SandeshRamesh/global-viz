@@ -152,6 +152,8 @@ export function SimulationRunner() {
                 }}
               />
               <input
+                id="sim-start-year"
+                name="sim-start-year"
                 type="range"
                 min={SIMULATION_YEAR_MIN}
                 max={SIMULATION_YEAR_MAX}
@@ -172,6 +174,8 @@ export function SimulationRunner() {
                 aria-valuetext={`Start year ${simulationStartYear}`}
               />
               <input
+                id="sim-end-year"
+                name="sim-end-year"
                 type="range"
                 min={SIMULATION_YEAR_MIN}
                 max={SIMULATION_YEAR_MAX}
@@ -204,6 +208,8 @@ export function SimulationRunner() {
           <span className="effects-count-value">{targetVisibleEffects}</span>
         </div>
         <input
+          id="effects-count"
+          name="effects-count"
           type="range"
           min={3}
           max={50}
@@ -237,8 +243,11 @@ export function SimulationRunner() {
             <div className="scenario-save-row">
               <input
                 type="text"
+                id="scenario-name"
+                name="scenario-name"
                 className="scenario-name-input"
                 placeholder="Scenario name..."
+                aria-label="Scenario name"
                 value={scenarioName}
                 onChange={(e) => setScenarioName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setShowSaveInput(false); }}
@@ -338,7 +347,7 @@ export function SimulationRunner() {
         }
 
         .status-label {
-          color: #888;
+          color: #767676;
         }
 
         .status-value {
@@ -525,7 +534,7 @@ export function SimulationRunner() {
 
         .sim-timeline-bound {
           font-size: 10px;
-          color: #888;
+          color: #767676;
           font-family: 'JetBrains Mono', monospace;
           min-width: 28px;
           text-align: center;
@@ -570,7 +579,7 @@ export function SimulationRunner() {
           appearance: none;
           background: transparent;
           pointer-events: none;
-          outline: none;
+          /* outline handled by :focus-visible */
           margin: 0;
           padding: 0;
           z-index: 2;
@@ -663,7 +672,7 @@ export function SimulationRunner() {
           appearance: none;
           background: #dde1f0;
           border-radius: 2px;
-          outline: none;
+          /* outline handled by :focus-visible */
         }
 
         .effects-count-slider::-webkit-slider-thumb {
@@ -720,7 +729,7 @@ export function SimulationRunner() {
           border: 1px solid #ddd;
           border-radius: 4px;
           font-size: 11px;
-          outline: none;
+          /* outline handled by :focus-visible */
         }
 
         .scenario-name-input:focus {
@@ -754,7 +763,7 @@ export function SimulationRunner() {
         }
 
         .scenario-btn.cancel {
-          color: #999;
+          color: #767676;
           padding: 4px 6px;
           font-size: 14px;
           line-height: 1;
@@ -819,7 +828,7 @@ export function SimulationRunner() {
 
         .scenario-item-meta {
           font-size: 10px;
-          color: #888;
+          color: #767676;
         }
 
         .scenario-delete-btn {
@@ -1035,10 +1044,12 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
 
       {/* Filter slider — always visible when results exist */}
       <div className="effect-filter-row">
-        <label className="effect-filter-label">
+        <label className="effect-filter-label" htmlFor="effect-filter">
           Show: top {affectedCount} of {totalNonZero}
         </label>
         <input
+          id="effect-filter"
+          name="effect-filter"
           type="range"
           min={3}
           max={50}
@@ -1057,13 +1068,16 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
       {/* Expanded table */}
       {isExpanded && (
         <div className="dropdown-table-wrapper" id={tableId}>
-          <table className="dropdown-table">
+          <table className="dropdown-table" aria-label="Simulation results">
+            <caption className="sr-only">
+              Simulation effects showing {affectedCount} of {totalNonZero} affected indicators
+            </caption>
             <thead>
               <tr>
-                <th>Indicator</th>
-                <th>Baseline</th>
-                <th>Final</th>
-                <th>Change</th>
+                <th scope="col">Indicator</th>
+                <th scope="col">Baseline</th>
+                <th scope="col">Final</th>
+                <th scope="col">Change</th>
               </tr>
             </thead>
             <tbody>
@@ -1071,6 +1085,15 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
                 <tr
                   key={row.id}
                   onClick={() => handleRowClick(row.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleRowClick(row.id)
+                    }
+                  }}
+                  tabIndex={0}
+                  role="row"
+                  aria-selected={highlightedIndicator === row.id}
                   className={highlightedIndicator === row.id ? 'dt-row-active' : ''}
                   style={{ cursor: 'pointer' }}
                 >
@@ -1111,7 +1134,7 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
 
         .dropdown-chevron {
           font-size: 12px;
-          color: #888;
+          color: #767676;
           transition: transform 0.2s;
           display: inline-block;
         }
@@ -1137,7 +1160,7 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
         .dropdown-table th {
           font-size: 9px;
           font-weight: 600;
-          color: #888;
+          color: #767676;
           text-transform: uppercase;
           letter-spacing: 0.3px;
           padding: 4px 3px;
@@ -1155,6 +1178,11 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
 
         .dropdown-table tbody tr:hover {
           background: rgba(76,175,80,0.08);
+        }
+
+        .dropdown-table tbody tr:focus-visible {
+          outline: 2px solid #3B82F6;
+          outline-offset: -2px;
         }
 
         .dropdown-table tbody tr.dt-row-active {
@@ -1212,7 +1240,7 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
           appearance: none;
           background: #C8E6C9;
           border-radius: 2px;
-          outline: none;
+          /* outline handled by :focus-visible */
         }
 
         .effect-filter-slider::-webkit-slider-thumb {

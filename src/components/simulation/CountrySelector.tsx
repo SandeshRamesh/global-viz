@@ -804,7 +804,6 @@ export function CountrySelector() {
             borderColor: '#ddd',
             borderRadius: 6,
             fontSize: 13,
-            outline: 'none',
             boxSizing: 'border-box',
             background: countriesLoading || countryLoading ? '#f5f5f5' : 'white',
             cursor: countriesLoading || countryLoading ? 'wait' : 'text',
@@ -814,6 +813,7 @@ export function CountrySelector() {
         />
         {/* Dropdown caret */}
         <button
+          className="touch-target-44"
           onClick={() => {
             setIsFocused(!isFocused)
             if (!isFocused) inputRef.current?.focus()
@@ -1034,19 +1034,6 @@ export function CountrySelector() {
         </div>
       )}
 
-      <style>{`
-        input:focus-visible,
-        button:focus-visible {
-          outline: 2px solid #3B82F6;
-          outline-offset: 2px;
-        }
-
-        .country-option:focus-visible {
-          outline: 2px solid #3B82F6;
-          outline-offset: -2px;
-          background: #eef4ff;
-        }
-      `}</style>
     </div>
   )
 }

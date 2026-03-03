@@ -548,7 +548,6 @@ const timelineStyles = `
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(8px);
     transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-    outline: none;
   }
 
   .docked-btn:hover:not(.disabled) {
@@ -654,6 +653,7 @@ const timelineStyles = `
   }
 
   .play-btn {
+    position: relative;
     width: 32px;
     height: 32px;
     border: none;
@@ -666,7 +666,16 @@ const timelineStyles = `
     justify-content: center;
     transition: background 0.2s ease;
     flex-shrink: 0;
-    outline: none;
+  }
+
+  .play-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .play-btn:hover:not(.disabled) {

@@ -556,6 +556,7 @@ export function DataQualityPanel({
           <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>Data Quality</span>
         </div>
         <button
+          className="touch-target-44"
           onClick={onClose}
           aria-label="Close data quality panel"
           style={{

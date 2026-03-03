@@ -6030,7 +6030,7 @@ function App() {
             }}
             placeholder="Search... (/)"
             style={{
-              flex: 1, border: 'none', outline: 'none', fontSize: 12,
+              flex: 1, border: 'none', fontSize: 12,
               background: 'transparent', minWidth: 0
             }}
           />
@@ -6038,6 +6038,8 @@ function App() {
           {/* Clear button */}
           {searchQuery && (
             <button
+              className="touch-target-44"
+              aria-label="Clear search"
               onClick={() => {
                 setSearchQuery('')
                 setSearchResults([])
@@ -6150,13 +6152,17 @@ function App() {
                   {i < ringStats.length - 1 && (
                     <>
                       <button
+                        className="touch-target-44"
                         onClick={() => expandRing(i)}
-                        style={{ padding: '0 3px', fontSize: 9, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
+                        aria-label={`Expand ${ring.label}`}
+                        style={{ padding: '2px 6px', fontSize: 9, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
                         title={`Expand ${ring.label}`}
                       >+</button>
                       <button
+                        className="touch-target-44"
                         onClick={() => collapseRing(i)}
-                        style={{ padding: '0 3px', fontSize: 9, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
+                        aria-label={`Collapse ${ring.label}`}
+                        style={{ padding: '2px 6px', fontSize: 9, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
                         title={`Collapse ${ring.label}`}
                       >−</button>
                     </>
@@ -6215,8 +6221,7 @@ function App() {
               cursor: 'pointer',
               boxShadow: dataQualityOpen ? '0 2px 8px rgba(16, 185, 129, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.1)',
               backdropFilter: 'blur(8px)',
-              transition: 'background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease',
-              outline: 'none'
+              transition: 'background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease'
             }}
           >
             {/* Erlenmeyer flask icon */}
@@ -6246,8 +6251,7 @@ function App() {
               cursor: 'pointer',
               boxShadow: isPanelOpen ? '0 2px 8px rgba(59, 130, 246, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.1)',
               backdropFilter: 'blur(8px)',
-              transition: 'background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease',
-              outline: 'none'
+              transition: 'background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease'
             }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

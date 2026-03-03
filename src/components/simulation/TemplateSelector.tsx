@@ -137,6 +137,8 @@ export function TemplateSelector() {
       {/* Dropdown + clear button */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <select
+          id="policy-template"
+          name="policy-template"
           value={activeTemplate?.id ?? ''}
           onChange={handleSelectChange}
           disabled={templatesLoading}
@@ -148,8 +150,7 @@ export function TemplateSelector() {
             background: 'white',
             color: '#333',
             fontSize: 12,
-            cursor: 'pointer',
-            outline: 'none'
+            cursor: 'pointer'
           }}
           aria-label="Select a policy template"
         >
@@ -167,6 +168,7 @@ export function TemplateSelector() {
 
         {activeTemplate && (
           <button
+            className="touch-target-44"
             onClick={handleClear}
             title="Clear template"
             aria-label="Clear template"
@@ -176,7 +178,7 @@ export function TemplateSelector() {
               color: '#767676',
               fontSize: 16,
               cursor: 'pointer',
-              padding: '0 4px',
+              padding: '4px 8px',
               lineHeight: 1
             }}
             onMouseEnter={(e) => e.currentTarget.style.color = '#666'}
