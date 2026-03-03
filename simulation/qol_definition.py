@@ -16,7 +16,7 @@ import csv
 import json
 import math
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 
 DEFINITION_ID = "qol_v1_hdi_calibrated"
@@ -38,6 +38,80 @@ class QoLResult(TypedDict):
     calibrated: float
     n_indicators: int
     n_domains: int
+
+
+def _aggregate_domain_score(
+    domain_means_map: Dict[str, float],
+    domain_weights: Optional[Dict[str, float]] = None,
+) -> float:
+    """
+    Aggregate domain means into a single raw QoL value.
+    """
+    if not domain_means_map:
+        raise ValueError("domain_means_map cannot be empty")
+
+    if domain_weights:
+        weighted_terms = []
+        weight_total = 0.0
+        for domain, mean_value in domain_means_map.items():
+            w = float(domain_weights.get(domain, 0.0))
+            if w <= 0:
+                continue
+            weighted_terms.append(w * mean_value)
+            weight_total += w
+        if weight_total > 0:
+            return sum(weighted_terms) / weight_total
+
+    return sum(domain_means_map.values()) / len(domain_means_map)
+
+
+def compute_domain_means(
+    indicator_values: Dict[str, float],
+    metadata: Dict[str, IndicatorMeta],
+    norm_stats: Dict[str, NormStats],
+    direction_overrides: Optional[Dict[str, str]] = None,
+    z_clip: Optional[float] = None,
+    min_indicators_per_domain: int = 1,
+) -> Optional[Tuple[Dict[str, float], int]]:
+    """
+    Compute per-domain normalized means from raw indicator values.
+
+    Returns:
+        ({domain: mean_z, ...}, n_indicators_used) or None when fewer than
+        3 domains pass `min_indicators_per_domain`.
+    """
+    domain_scores: Dict[str, List[float]] = {}
+    n_indicators = 0
+
+    for ind_id, value in indicator_values.items():
+        meta = metadata.get(ind_id)
+        if meta is None:
+            continue
+
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            continue
+
+        normalized = normalize_indicator(float(value), ind_id, norm_stats, metadata, direction_overrides)
+        if normalized is None:
+            continue
+
+        if z_clip is not None:
+            normalized = max(-z_clip, min(z_clip, normalized))
+
+        domain = meta["domain"]
+        domain_scores.setdefault(domain, []).append(normalized)
+        n_indicators += 1
+
+    filtered_domain_means = {
+        domain: (sum(scores) / len(scores))
+        for domain, scores in domain_scores.items()
+        if len(scores) >= min_indicators_per_domain
+    }
+
+    if len(filtered_domain_means) < 3:
+        return None
+
+    return filtered_domain_means, n_indicators
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +249,9 @@ def compute_raw_qol(
     metadata: Dict[str, IndicatorMeta],
     norm_stats: Dict[str, NormStats],
     direction_overrides: Optional[Dict[str, str]] = None,
+    domain_weights: Optional[Dict[str, float]] = None,
+    z_clip: Optional[float] = None,
+    min_indicators_per_domain: int = 1,
 ) -> Optional[Tuple[float, int, int]]:
     """
     Compute raw (uncalibrated) QoL score from indicator values.
@@ -189,32 +266,21 @@ def compute_raw_qol(
     Returns:
         (raw_qol, n_indicators, n_domains) or None
     """
-    domain_scores: Dict[str, List[float]] = {}
-    n_indicators = 0
-
-    for ind_id, value in indicator_values.items():
-        meta = metadata.get(ind_id)
-        if meta is None:
-            continue
-
-        if value is None or (isinstance(value, float) and math.isnan(value)):
-            continue
-
-        normalized = normalize_indicator(float(value), ind_id, norm_stats, metadata, direction_overrides)
-        if normalized is None:
-            continue
-
-        domain = meta["domain"]
-        domain_scores.setdefault(domain, []).append(normalized)
-        n_indicators += 1
-
-    if len(domain_scores) < 3:
+    computed = compute_domain_means(
+        indicator_values=indicator_values,
+        metadata=metadata,
+        norm_stats=norm_stats,
+        direction_overrides=direction_overrides,
+        z_clip=z_clip,
+        min_indicators_per_domain=min_indicators_per_domain,
+    )
+    if computed is None:
         return None
 
-    domain_means = [sum(scores) / len(scores) for scores in domain_scores.values()]
-    raw_qol = sum(domain_means) / len(domain_means)
+    domain_means_map, n_indicators = computed
+    raw_qol = _aggregate_domain_score(domain_means_map, domain_weights)
 
-    return raw_qol, n_indicators, len(domain_scores)
+    return raw_qol, n_indicators, len(domain_means_map)
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +326,201 @@ def apply_hdi_calibration(
     return float(hdi_values[-1])
 
 
+def _build_residual_feature_vector(
+    base_calibrated: float,
+    domain_means: Dict[str, float],
+    n_indicators: int,
+    n_domains: int,
+    residual_model: Dict[str, Any],
+) -> Optional[List[float]]:
+    """
+    Build feature vector for residual correction model from calibration metadata.
+    """
+    feature_names = residual_model.get("feature_names")
+    if not isinstance(feature_names, list) or not feature_names:
+        return None
+
+    feature_fill = residual_model.get("feature_fill", [])
+    vector: List[float] = []
+    for idx, name in enumerate(feature_names):
+        value: Optional[float]
+        if name == "base_calibrated":
+            value = float(base_calibrated)
+        elif isinstance(name, str) and name.startswith("domain:"):
+            domain = name.split(":", 1)[1]
+            raw_value = domain_means.get(domain)
+            value = float(raw_value) if raw_value is not None else None
+        elif name == "n_indicators":
+            value = float(n_indicators)
+        elif name == "n_domains":
+            value = float(n_domains)
+        else:
+            value = None
+
+        if value is None or not math.isfinite(value):
+            fill_value = 0.0
+            if isinstance(feature_fill, list) and idx < len(feature_fill):
+                try:
+                    fill_value = float(feature_fill[idx])
+                except (TypeError, ValueError):
+                    fill_value = 0.0
+            value = fill_value
+
+        vector.append(float(value))
+
+    return vector
+
+
+def predict_residual_correction(
+    base_calibrated: float,
+    domain_means: Dict[str, float],
+    n_indicators: int,
+    n_domains: int,
+    residual_model: Dict[str, Any],
+) -> Optional[float]:
+    """
+    Predict additive residual correction using a serialized KNN model.
+    """
+    if residual_model.get("type") != "knn_gaussian_v1":
+        return None
+
+    vector = _build_residual_feature_vector(
+        base_calibrated=base_calibrated,
+        domain_means=domain_means,
+        n_indicators=n_indicators,
+        n_domains=n_domains,
+        residual_model=residual_model,
+    )
+    if vector is None:
+        return None
+
+    feature_mean = residual_model.get("feature_mean")
+    feature_std = residual_model.get("feature_std")
+    train_features = residual_model.get("train_features_scaled")
+    train_residuals = residual_model.get("train_residuals")
+    if (
+        not isinstance(feature_mean, list)
+        or not isinstance(feature_std, list)
+        or not isinstance(train_features, list)
+        or not isinstance(train_residuals, list)
+        or not train_features
+        or len(train_features) != len(train_residuals)
+        or len(feature_mean) != len(vector)
+        or len(feature_std) != len(vector)
+    ):
+        return None
+
+    # Standardize request feature vector.
+    scaled = []
+    for value, mu, std in zip(vector, feature_mean, feature_std):
+        try:
+            mu_f = float(mu)
+            std_f = float(std)
+            value_f = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(mu_f) or not math.isfinite(std_f) or std_f <= 0:
+            return None
+        scaled.append((value_f - mu_f) / std_f)
+
+    try:
+        k = int(residual_model.get("k", 8))
+    except (TypeError, ValueError):
+        k = 8
+    try:
+        bandwidth = float(residual_model.get("bandwidth", 1.0))
+    except (TypeError, ValueError):
+        bandwidth = 1.0
+    if bandwidth <= 0:
+        bandwidth = 1.0
+    k = max(1, min(k, len(train_features)))
+    denom = 2.0 * (bandwidth ** 2)
+
+    # Brute-force nearest-neighbor search over serialized training rows.
+    distances: List[Tuple[float, int]] = []
+    for idx, train_vec in enumerate(train_features):
+        if not isinstance(train_vec, list) or len(train_vec) != len(scaled):
+            continue
+        d2 = 0.0
+        valid = True
+        for a, b in zip(scaled, train_vec):
+            try:
+                b_f = float(b)
+            except (TypeError, ValueError):
+                valid = False
+                break
+            diff = a - b_f
+            d2 += diff * diff
+        if valid:
+            distances.append((d2, idx))
+
+    if not distances:
+        return None
+
+    distances.sort(key=lambda item: item[0])
+    nearest = distances[:k]
+
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for d2, idx in nearest:
+        try:
+            residual = float(train_residuals[idx])
+        except (TypeError, ValueError):
+            continue
+        weight = math.exp(-d2 / denom) if denom > 0 else 1.0
+        weighted_sum += weight * residual
+        weight_total += weight
+
+    if weight_total <= 1e-12:
+        try:
+            fallback = float(residual_model.get("global_mean_residual", 0.0))
+        except (TypeError, ValueError):
+            fallback = 0.0
+        correction = fallback
+    else:
+        correction = weighted_sum / weight_total
+
+    try:
+        residual_clip = float(residual_model.get("residual_clip", 0.2))
+    except (TypeError, ValueError):
+        residual_clip = 0.2
+    residual_clip = max(0.0, residual_clip)
+    correction = max(-residual_clip, min(residual_clip, correction))
+    return correction
+
+
+def apply_qol_calibration(
+    raw_qol: float,
+    calibration: Dict[str, object],
+    domain_means: Optional[Dict[str, float]] = None,
+    n_indicators: Optional[int] = None,
+    n_domains: Optional[int] = None,
+) -> float:
+    """
+    Apply primary HDI calibration plus optional residual correction.
+    """
+    base_calibrated = apply_hdi_calibration(raw_qol, calibration)  # type: ignore[arg-type]
+
+    residual_model = calibration.get("residual_model")
+    if (
+        isinstance(residual_model, dict)
+        and domain_means is not None
+        and n_indicators is not None
+        and n_domains is not None
+    ):
+        correction = predict_residual_correction(
+            base_calibrated=base_calibrated,
+            domain_means=domain_means,
+            n_indicators=n_indicators,
+            n_domains=n_domains,
+            residual_model=residual_model,
+        )
+        if correction is not None:
+            base_calibrated += correction
+
+    return max(0.0, min(1.0, float(base_calibrated)))
+
+
 # ---------------------------------------------------------------------------
 # Full pipeline
 # ---------------------------------------------------------------------------
@@ -268,7 +529,7 @@ def compute_qol(
     indicator_values: Dict[str, float],
     metadata: Dict[str, IndicatorMeta],
     norm_stats: Dict[str, NormStats],
-    calibration: Dict[str, List[float]],
+    calibration: Dict[str, object],
     direction_overrides: Optional[Dict[str, str]] = None,
 ) -> Optional[QoLResult]:
     """
@@ -277,12 +538,43 @@ def compute_qol(
     Returns:
         { raw, calibrated, n_indicators, n_domains } or None if insufficient data.
     """
-    result = compute_raw_qol(indicator_values, metadata, norm_stats, direction_overrides)
-    if result is None:
+    domain_weights = calibration.get("domain_weights") if isinstance(calibration.get("domain_weights"), dict) else None
+    z_clip = calibration.get("z_clip")
+    if z_clip is not None:
+        try:
+            z_clip = float(z_clip)
+        except (TypeError, ValueError):
+            z_clip = None
+    min_indicators_per_domain = calibration.get("min_indicators_per_domain", 1)
+    try:
+        min_indicators_per_domain = int(min_indicators_per_domain)
+    except (TypeError, ValueError):
+        min_indicators_per_domain = 1
+
+    computed = compute_domain_means(
+        indicator_values=indicator_values,
+        metadata=metadata,
+        norm_stats=norm_stats,
+        direction_overrides=direction_overrides,
+        z_clip=z_clip,
+        min_indicators_per_domain=min_indicators_per_domain,
+    )
+    if computed is None:
         return None
 
-    raw_qol, n_indicators, n_domains = result
-    calibrated = apply_hdi_calibration(raw_qol, calibration)
+    domain_means_map, n_indicators = computed
+    n_domains = len(domain_means_map)
+    raw_qol = _aggregate_domain_score(
+        domain_means_map,
+        domain_weights=domain_weights,  # type: ignore[arg-type]
+    )
+    calibrated = apply_qol_calibration(
+        raw_qol=raw_qol,
+        calibration=calibration,
+        domain_means=domain_means_map,
+        n_indicators=n_indicators,
+        n_domains=n_domains,
+    )
 
     return {
         "raw": raw_qol,
