@@ -459,12 +459,12 @@ export function InterventionBuilder() {
       id: `intervention-${Date.now()}`,
       indicator: '',
       change_percent: 20,
-      year: 2020,
+      year: simulationStartYear,
       indicatorLabel: '',
       domain: ''
     }
     addIntervention(newIntervention)
-  }, [interventions.length, addIntervention])
+  }, [interventions.length, addIntervention, simulationStartYear])
 
   // Update intervention indicator (clears stale temporal edge count)
   const handleIndicatorChange = useCallback((index: number, indicatorId: string) => {
