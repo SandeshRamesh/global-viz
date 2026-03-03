@@ -173,7 +173,7 @@ export function TemplateSelector() {
             style={{
               background: 'none',
               border: 'none',
-              color: '#999',
+              color: '#767676',
               fontSize: 16,
               cursor: 'pointer',
               padding: '0 4px',
@@ -222,7 +222,7 @@ export function TemplateSelector() {
           </div>
 
           {/* Source + badges */}
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <div style={{ fontSize: 11, color: '#767676', marginBottom: 6, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
             <span>{t.source}, {t.year}</span>
             <Badge
               label={t.difficulty}
@@ -278,7 +278,7 @@ export function TemplateSelector() {
                 {t.expected_outcomes.secondary.map((s, i) => (
                   <div key={i} style={{ color: '#777', marginLeft: 4 }}>{'\u2022'} {s}</div>
                 ))}
-                <div style={{ color: '#888', marginTop: 4, fontStyle: 'italic' }}>
+                <div style={{ color: '#767676', marginTop: 4, fontStyle: 'italic' }}>
                   Time horizon: {t.expected_outcomes.time_horizon_years} years
                 </div>
               </div>
@@ -307,19 +307,19 @@ export function TemplateSelector() {
                   {'\u201C'}{t.evidence.case_study}{'\u201D'}
                 </div>
                 {t.evidence.citations.map((c, i) => (
-                  <div key={i} style={{ color: '#888', fontSize: 10 }}>{c}</div>
+                  <div key={i} style={{ color: '#767676', fontSize: 10 }}>{c}</div>
                 ))}
               </div>
             )}
           </div>
 
           {/* Target audience */}
-          <div style={{ fontSize: 10, color: '#999', marginTop: 4 }}>
+          <div style={{ fontSize: 10, color: '#767676', marginTop: 4 }}>
             Target: {t.target_audience}
           </div>
 
           {/* Cost estimate */}
-          <div style={{ fontSize: 10, color: '#999' }}>
+          <div style={{ fontSize: 10, color: '#767676' }}>
             Est. cost: {t.cost_estimate_usd}
           </div>
 

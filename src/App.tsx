@@ -27,6 +27,7 @@ import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData } from '.
 import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
 import { perfTrace, type StructuralActionName } from './utils/perfTrace'
 import { layoutTrace } from './utils/layoutTrace'
+import { initAnnouncer, announce } from './utils/announce'
 import { SIM_MS_PER_YEAR } from './constants/time'
 import { REGION_DISPLAY_NAMES, REGION_TO_ISO3S } from './constants/regions'
 import {
@@ -1658,6 +1659,7 @@ function App() {
 
   // Expand all nodes in a specific ring (that are currently visible)
   const expandRing = useCallback((ring: number) => {
+    announce(`Expanded to ${RING_LABELS[ring + 1] ?? `ring ${ring + 1}`}`)
     runOrQueueStructuralAction(() => {
       beginLayoutAction('ring_expand', 'expandRing', { ring })
       // Bulk expansion — enable dots mode for deep rings
@@ -1682,6 +1684,7 @@ function App() {
   // Collapse all nodes in a specific ring
   const collapseRing = useCallback((ring: number) => {
     if (!rawData) return
+    announce(`Collapsed to ${RING_LABELS[ring] ?? `ring ${ring}`}`)
     runOrQueueStructuralAction(() => {
       beginLayoutAction('ring_collapse', 'collapseRing', { ring })
       dotsModeRef.current = false
@@ -3056,7 +3059,20 @@ function App() {
     const height = window.innerHeight
     svg.attr('width', width).attr('height', height)
 
-
+    // Accessible SVG title + description (screen readers)
+    const svgLabel = selectedCountry
+      || (selectedRegion ? REGION_DISPLAY_NAMES[selectedRegion] : selectedStratum)
+    if (svg.select('title').empty()) {
+      svg.insert('title', ':first-child')
+    }
+    svg.select('title').text(`Causal graph: ${svgLabel}`)
+    if (svg.select('desc').empty()) {
+      svg.insert('desc', 'title + *').raise()
+      // Ensure desc follows title
+    }
+    svg.select('desc').text(
+      `${visibleNodes.length} nodes and ${visibleEdges.length} edges visualized as concentric rings`
+    )
 
     // Get or create persistent container with layered groups for z-ordering
     let g = svg.select<SVGGElement>('g.graph-container')
@@ -3065,7 +3081,7 @@ function App() {
         .attr('class', 'graph-container')
         .style('will-change', 'transform')
       // Create layer groups in correct z-order (first = back, last = front)
-      g.append('g').attr('class', 'layer-rings')
+      g.append('g').attr('class', 'layer-rings').attr('aria-hidden', 'true')
       g.append('g').attr('class', 'layer-glow-local')  // Cyan glow for Local View nodes
       g.append('g').attr('class', 'layer-glow-sim')    // Simulation effect glow (green/red)
       g.append('g').attr('class', 'layer-glow')  // Glow layer for search highlights (yellow)
@@ -3399,6 +3415,9 @@ function App() {
       playbackMode === 'simulation' &&
       isPanelOpen &&
       isPlaying
+    const hideQolStroke =
+      playbackMode === 'simulation' &&
+      temporalResults !== null
 
     const getSimBorder = (node: ExpandableNode): { color: string; width: number; opacity: number } | null => {
       if (simPlaybackActive) return null  // During playback/scrub: fill, not borders
@@ -3597,25 +3616,26 @@ function App() {
         exit => exit.remove()
       )
 
-    // Ring labels
-    ringsLayer.selectAll<SVGTextElement, typeof ringData[0]>('text.ring-label')
-      .data(ringData, d => d.index)
-      .join(
-        enter => enter.append('text')
-          .attr('class', 'ring-label')
-          .attr('x', 0)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', 10)
-          .attr('font-weight', '400')
-          .attr('fill', '#aaa')
-          .attr('fill-opacity', 0.6)
-          .attr('y', d => -d.radius - 12)
-          .text(d => d.label || ringConfigs[d.index]?.label || ''),
-        update => update
-          .attr('y', d => -d.radius - 12)
-          .text(d => d.label || ringConfigs[d.index]?.label || ''),
-        exit => exit.remove()
-      )
+    // Ring labels (commented out — may re-enable later)
+    // ringsLayer.selectAll<SVGTextElement, typeof ringData[0]>('text.ring-label')
+    //   .data(ringData, d => d.index)
+    //   .join(
+    //     enter => enter.append('text')
+    //       .attr('class', 'ring-label')
+    //       .attr('x', 0)
+    //       .attr('text-anchor', 'middle')
+    //       .attr('font-size', 10)
+    //       .attr('font-weight', '400')
+    //       .attr('fill', '#767676')
+    //       .attr('fill-opacity', 1)
+    //       .attr('y', d => -d.radius - 12)
+    //       .text(d => d.label || ringConfigs[d.index]?.label || ''),
+    //     update => update
+    //       .attr('y', d => -d.radius - 12)
+    //       .text(d => d.label || ringConfigs[d.index]?.label || ''),
+    //     exit => exit.remove()
+    //   )
+    ringsLayer.selectAll('text.ring-label').remove()
 
     // === GLOW ANIMATION TIMING ===
     // Glows must wait until nodes finish ALL animation before appearing
@@ -4168,8 +4188,9 @@ function App() {
       ineligibleSelection.enter()
         .append('circle')
         .attr('class', 'glow-sim-weak')
-        .attr('cx', d => getParentPosition(d).x)
-        .attr('cy', d => getParentPosition(d).y)
+        // Spawn at the indicator itself (no parent-origin travel).
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
         .attr('r', 0)
         .attr('fill', 'none')
         .attr('stroke', d => {
@@ -4184,8 +4205,6 @@ function App() {
         .delay(expandEnterDelay)
         .duration(enterExitDuration)
         .ease(d3.easeCubicOut)
-        .attr('cx', d => d.x)
-        .attr('cy', d => d.y)
         .attr('r', d => getSize(d) + 3)
         .attr('opacity', d => {
           const g = getSimGlowForIneligible(d)
@@ -4241,8 +4260,9 @@ function App() {
       flashSelection.enter()
         .append('circle')
         .attr('class', 'glow-sim-flash')
-        .attr('cx', d => getParentPosition(d).x)
-        .attr('cy', d => getParentPosition(d).y)
+        // Spawn at the affected node itself (no root/parent travel).
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
         .attr('r', 0)
         .attr('fill', 'none')
         .attr('stroke', d => {
@@ -4263,8 +4283,6 @@ function App() {
         .delay(expandEnterDelay)
         .duration(enterExitDuration)
         .ease(d3.easeCubicOut)
-        .attr('cx', d => d.x)
-        .attr('cy', d => d.y)
         .attr('r', d => getSize(d) + 1.5)
         .attr('opacity', 1)
 
@@ -4599,7 +4617,10 @@ function App() {
       const dashArray = (!simBorder && !isAffectedDuringPlayback && isNodeFloored(d.importance)) ? '2,2' : 'none'
 
       // Ring 0 QoL outline: RdYlGn tint — hidden during simulation (cyan pulse + glow handle it)
-      if (d.ring === 0 && qolNodeScore != null && playbackMode !== 'simulation') {
+      if (d.ring === 0 && hideQolStroke) {
+        strokeColor = 'transparent'
+        strokeWidth = 0
+      } else if (d.ring === 0 && qolNodeScore != null && playbackMode !== 'simulation') {
         strokeColor = d3.scaleSequential(d3.interpolateRdYlGn).domain([0.3, 0.95])(qolNodeScore)
         strokeWidth = Math.max(1.5, getSize(d) * 0.06)
       } else if (d.ring === 0 && playbackMode === 'simulation') {
@@ -4615,7 +4636,7 @@ function App() {
           .attr('fill', getColor(d))
           .attr('stroke', strokeColor)
           .attr('stroke-width', strokeWidth)
-          .attr('stroke-opacity', strokeOpacity)
+          .attr('stroke-opacity', d.ring === 0 && hideQolStroke ? 0 : strokeOpacity)
           .attr('stroke-dasharray', dashArray)
         return
       }
@@ -4627,9 +4648,16 @@ function App() {
           .attr('fill', getColor(d))
           .attr('stroke', strokeColor)
           .attr('stroke-width', strokeWidth)
-          .attr('stroke-opacity', strokeOpacity)
+          .attr('stroke-opacity', d.ring === 0 && hideQolStroke ? 0 : strokeOpacity)
           .attr('stroke-dasharray', dashArray)
       } else {
+        if (d.ring === 0 && hideQolStroke) {
+          // Apply immediately so delayed transitions never flash the historical QoL border.
+          nodeEl
+            .attr('stroke', 'transparent')
+            .attr('stroke-width', 0)
+            .attr('stroke-opacity', 0)
+        }
 
         const currentCx = parseFloat(nodeEl.attr('cx') || '0')
         const currentCy = parseFloat(nodeEl.attr('cy') || '0')
@@ -4652,7 +4680,7 @@ function App() {
             .attr('fill', getColor(d))
             .attr('stroke', strokeColor)
             .attr('stroke-width', strokeWidth)
-            .attr('stroke-opacity', strokeOpacity)
+            .attr('stroke-opacity', d.ring === 0 && hideQolStroke ? 0 : strokeOpacity)
             .attr('stroke-dasharray', dashArray)
         } else if (!shouldSkipRotation) {
           // Position matches but may need size/color update
@@ -4665,7 +4693,7 @@ function App() {
             .attr('fill', getColor(d))
             .attr('stroke', strokeColor)
             .attr('stroke-width', strokeWidth)
-            .attr('stroke-opacity', strokeOpacity)
+            .attr('stroke-opacity', d.ring === 0 && hideQolStroke ? 0 : strokeOpacity)
             .attr('stroke-dasharray', dashArray)
         }
       }
@@ -4698,6 +4726,7 @@ function App() {
       .attr('fill', d => getColor(d))
       .attr('stroke', d => {
         // Ring 0 QoL outline: hidden during sim, RdYlGn tint otherwise
+        if (d.ring === 0 && hideQolStroke) return 'transparent'
         if (d.ring === 0 && playbackMode === 'simulation') return '#78909C'
         if (d.ring === 0 && qolNodeScore != null) {
           return d3.scaleSequential(d3.interpolateRdYlGn).domain([0.3, 0.95])(qolNodeScore)
@@ -4710,6 +4739,7 @@ function App() {
       })
       .attr('stroke-width', d => {
         // Ring 0 QoL outline: hidden during sim
+        if (d.ring === 0 && hideQolStroke) return 0
         if (d.ring === 0 && playbackMode === 'simulation') return 0.5
         if (d.ring === 0 && qolNodeScore != null) {
           return Math.max(1.5, getSize(d) * 0.06)
@@ -4724,6 +4754,7 @@ function App() {
         return getBorderWidth(d)
       })
       .attr('stroke-opacity', d => {
+        if (d.ring === 0 && hideQolStroke) return 0
         const eLookup = simEffectLookup.get(d.id)
         const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
         if (affectedDuringPlayback) return 0
@@ -4882,8 +4913,12 @@ function App() {
           if (node) {
             const radius = getSize(node)
             const sb = getSimBorder(node)
-            const baseStroke = sb ? sb.width : isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node)
-            const hoverStroke = Math.min(baseStroke + 1, radius * 0.8)
+            const baseStroke = (node.ring === 0 && hideQolStroke)
+              ? 0
+              : (sb ? sb.width : isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node))
+            const hoverStroke = (node.ring === 0 && hideQolStroke)
+              ? 0
+              : Math.min(baseStroke + 1, radius * 0.8)
             d3.select(target)
               .attr('r', radius * 1.3)
               .attr('stroke-width', hoverStroke)
@@ -4909,7 +4944,9 @@ function App() {
           if (node) {
             const radius = getSize(node)
             const sb = getSimBorder(node)
-            const baseStroke = sb ? sb.width : isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node)
+            const baseStroke = (node.ring === 0 && hideQolStroke)
+              ? 0
+              : (sb ? sb.width : isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node))
             d3.select(target)
               .attr('r', radius)
               .attr('stroke-width', baseStroke)
@@ -5404,6 +5441,58 @@ function App() {
 
   }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, qolNodeScoreForTooltip, storeInterventions, finalizeStructuralTrace, setStructuralLock])
 
+  // Initialize screen reader live region
+  useEffect(() => { initAnnouncer() }, [])
+
+  // ── Screen reader announcements for key state changes ──
+
+  // Country / region selection
+  const prevAnnouncedCountry = useRef(selectedCountry)
+  const prevAnnouncedRegion = useRef(selectedRegion)
+  useEffect(() => {
+    if (selectedCountry && selectedCountry !== prevAnnouncedCountry.current) {
+      announce(`Now showing ${selectedCountry} causal graph`)
+    } else if (selectedRegion && selectedRegion !== prevAnnouncedRegion.current) {
+      announce(`Now showing ${REGION_DISPLAY_NAMES[selectedRegion] ?? selectedRegion} causal graph`)
+    }
+    prevAnnouncedCountry.current = selectedCountry
+    prevAnnouncedRegion.current = selectedRegion
+  }, [selectedCountry, selectedRegion])
+
+  // View mode switch
+  const prevAnnouncedView = useRef(viewMode)
+  useEffect(() => {
+    if (viewMode !== prevAnnouncedView.current) {
+      announce(`Switched to ${viewMode} view`)
+      prevAnnouncedView.current = viewMode
+    }
+  }, [viewMode])
+
+  // Simulation complete
+  const prevTemporalResultsForA11y = useRef(temporalResults)
+  useEffect(() => {
+    if (temporalResults && !prevTemporalResultsForA11y.current) {
+      const lastYear = Object.keys(temporalResults.effects).sort().pop()
+      const count = lastYear ? Object.keys(temporalResults.effects[lastYear]).length : 0
+      announce(`Simulation complete. ${count} indicators affected`)
+    }
+    prevTemporalResultsForA11y.current = temporalResults
+  }, [temporalResults])
+
+  // Timeline year change (debounced during playback)
+  const yearAnnounceTimer = useRef<number | null>(null)
+  useEffect(() => {
+    if (yearAnnounceTimer.current) clearTimeout(yearAnnounceTimer.current)
+    const year = playbackMode === 'simulation' && temporalResults
+      ? temporalResults.base_year + currentYearIndex
+      : historicalTimeline?.years?.[currentYearIndex]
+    if (year == null) return
+    yearAnnounceTimer.current = window.setTimeout(() => {
+      announce(`Year ${year}`)
+    }, 500)
+    return () => { if (yearAnnounceTimer.current) clearTimeout(yearAnnounceTimer.current) }
+  }, [currentYearIndex, playbackMode, temporalResults, historicalTimeline])
+
   // Fetch data once on mount
   useEffect(() => {
     fetchData()
@@ -5884,7 +5973,7 @@ function App() {
           boxShadow: '0 2px 6px rgba(0,0,0,0.1)', width: 260, boxSizing: 'border-box'
         }}>
           {/* Search icon */}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
           </svg>
@@ -5892,6 +5981,8 @@ function App() {
           {/* Search input */}
           <input
             ref={searchInputRef}
+            id="graph-search"
+            name="graph-search"
             type="text"
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
@@ -5932,7 +6023,7 @@ function App() {
                 padding: 4, display: 'flex', alignItems: 'center'
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" aria-hidden="true">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
@@ -5969,12 +6060,12 @@ function App() {
                   <div style={{ fontSize: 13, fontWeight: 500, color: '#333' }}>
                     {node.label}
                   </div>
-                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: '#767676', marginTop: 2 }}>
                     {node.domain}
                     {node.subdomain && node.subdomain !== node.domain && (
                       <> &rsaquo; {node.subdomain}</>
                     )}
-                    <span style={{ marginLeft: 8, color: '#aaa' }}>
+                    <span style={{ marginLeft: 8, color: '#767676' }}>
                       Ring {node.ring}
                     </span>
                   </div>
@@ -5998,7 +6089,7 @@ function App() {
             background: 'white', borderRadius: 8, marginTop: 4, padding: '8px 12px',
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '100%'
           }}>
-            <div style={{ fontSize: 10, color: '#888', marginBottom: 6 }}>Recent searches</div>
+            <div style={{ fontSize: 10, color: '#767676', marginBottom: 6 }}>Recent searches</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {recentSearches.map((term, i) => (
                 <button
@@ -6070,7 +6161,7 @@ function App() {
                 <div key={domain} style={{ display: 'flex', alignItems: 'center' }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: DOMAIN_COLORS[domain] || '#9E9E9E', marginRight: 6, flexShrink: 0 }} />
                   <span style={{ fontSize: 10, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domain}</span>
-                  <span style={{ fontSize: 9, color: '#888', marginLeft: 4 }}>({count})</span>
+                  <span style={{ fontSize: 9, color: '#767676', marginLeft: 4 }}>({count})</span>
                 </div>
               ))}
             </div>
@@ -6104,7 +6195,7 @@ function App() {
             }}
           >
             {/* Erlenmeyer flask icon */}
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.9H6.8A2 2 0 0 1 5 17l4-9V3z" />
               <line x1="9" y1="3" x2="15" y2="3" />
               <path d="M8 14h8" />
@@ -6134,7 +6225,7 @@ function App() {
               outline: 'none'
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="4" y="4" width="16" height="16" rx="2" />
               <rect x="9" y="9" width="6" height="6" />
               <line x1="9" y1="1" x2="9" y2="4" />
@@ -6256,6 +6347,8 @@ function App() {
         >
           <svg
             ref={svgRef}
+            role="img"
+            aria-label={`Causal graph visualization for ${selectedCountry || (selectedRegion ? REGION_DISPLAY_NAMES[selectedRegion] : selectedStratum)}`}
             style={{
               width: '100%',
               height: '100%',
@@ -6387,7 +6480,7 @@ function App() {
           }}>
             {/* Breadcrumb path (file-path style) */}
             {breadcrumbPath.length > 1 && (
-              <div style={{ fontSize: 10, color: '#888', marginBottom: 6, fontFamily: 'monospace' }}>
+              <div style={{ fontSize: 10, color: '#767676', marginBottom: 6, fontFamily: 'monospace' }}>
                 {breadcrumbPath.slice(0, -1).join(' / ')}
               </div>
             )}
@@ -6448,7 +6541,7 @@ function App() {
                 <span style={{ color: '#666' }}>#{ringRank} of {ringNodes.length}</span>
               )}
               {currentYear && (
-                <span style={{ color: '#888' }}>{currentYear}</span>
+                <span style={{ color: '#767676' }}>{currentYear}</span>
               )}
             </div>
 
@@ -6494,7 +6587,7 @@ function App() {
 
             {/* Expand hint */}
             {displayNode.hasChildren && (
-              <div style={{ fontSize: 10, color: '#888', marginTop: 4 }}>
+              <div style={{ fontSize: 10, color: '#767676', marginTop: 4 }}>
                 {expandedNodes.has(displayNode.id) ? 'Click to collapse' : `Click to expand (${displayNode.childIds.length})`}
               </div>
             )}

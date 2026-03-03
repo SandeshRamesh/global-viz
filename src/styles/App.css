@@ -1,5 +1,12 @@
 /* Minimal styles for visualization */
 
+/* ─── Accessible color tokens ─── */
+/* Lightest grays that pass WCAG AA 4.5:1 on white (#fff / #fafafa) */
+:root {
+  --text-muted: #767676;     /* was #888/#999/#aaa — 4.54:1 on #fff */
+  --text-subtle: #6b6b6b;    /* was #777/#888 for slightly bolder muted — 5.0:1 */
+}
+
 /* ─── Accessibility ─── */
 
 /* Visually hidden but accessible to screen readers */
@@ -78,7 +85,7 @@
 .loading-subtext {
   margin-top: 8px;
   font-size: 12px;
-  color: #999;
+  color: var(--text-muted);
 }
 
 /* Intervention node breathing pulse — cyan glow */

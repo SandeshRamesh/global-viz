@@ -473,7 +473,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
         <span className={`year-display-always ${isDocking ? 'fading' : ''}`}>
           {actualYear}
           {playbackMode === 'simulation' && temporalResults?.affected_per_year && actualYear != null && (
-            <span style={{ fontSize: '9px', color: '#999', marginLeft: '4px' }}>
+            <span style={{ fontSize: '9px', color: '#767676', marginLeft: '4px' }}>
               ({temporalResults.affected_per_year[String(actualYear)] ?? 0})
             </span>
           )}

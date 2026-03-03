@@ -995,7 +995,7 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
           </span>
           <span className={`dropdown-chevron ${isExpanded ? 'open' : ''}`}>▾</span>
         </div>
-        <span style={{ fontSize: 10, color: '#888' }}>
+        <span style={{ fontSize: 10, color: '#767676' }}>
           {temporalResults.base_year} → {temporalResults.base_year + temporalResults.horizon_years}
         </span>
       </button>

@@ -59,7 +59,7 @@ const styles = {
     margin: 0
   },
   count: {
-    color: '#888',
+    color: '#767676',
     fontSize: 11
   },
   interventionCard: {
@@ -151,7 +151,7 @@ const styles = {
   emptyState: {
     textAlign: 'center' as const,
     padding: '12px',
-    color: '#888',
+    color: '#767676',
     fontSize: 11
   }
 }
@@ -679,7 +679,7 @@ export function InterventionBuilder() {
                   causal edges in {year}
                 </span>
                 {staticCount !== temporalCount && temporalCount !== null && (
-                  <span style={{ color: '#999', marginLeft: 'auto', fontSize: 10 }}>
+                  <span style={{ color: '#767676', marginLeft: 'auto', fontSize: 10 }}>
                     ({staticCount} static)
                   </span>
                 )}

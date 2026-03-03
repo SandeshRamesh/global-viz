@@ -70,7 +70,7 @@ export function Breadcrumb({ nodeId, nodeMap, onNavigate, domainColors }: Breadc
         alignItems: 'center',
         gap: 4,
         fontSize: 12,
-        color: '#999'
+        color: '#767676'
       }}
     >
       {displayPath.map((node, i) => {

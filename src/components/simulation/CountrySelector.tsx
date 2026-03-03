@@ -244,6 +244,7 @@ export function CountrySelector() {
 
   const [searchTerm, setSearchTerm] = useState('')
   const [isFocused, setIsFocused] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const listboxId = 'country-selector-listbox'
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -478,6 +479,38 @@ export function CountrySelector() {
 
   const showDropdown = isFocused && !countriesLoading && !countryLoading
 
+  /** Flat list of selectable items for arrow-key navigation. */
+  type FlatOption = { type: 'country'; country: CountryWithMeta } | { type: 'region'; key: RegionKey }
+  const flatOptions = useMemo((): FlatOption[] => {
+    const result: FlatOption[] = []
+    if (searchTerm) {
+      // Matched regions first, then remaining countries
+      const shownNames = new Set<string>()
+      for (const rk of REGION_KEYS) {
+        if (!matchedRegionKeys.has(rk)) continue
+        result.push({ type: 'region', key: rk })
+        const regionCountries = groupedByBackendRegion.get(rk) || []
+        for (const c of regionCountries) {
+          result.push({ type: 'country', country: c })
+          shownNames.add(c.name)
+        }
+      }
+      for (const c of filteredCountries) {
+        if (!shownNames.has(c.name)) result.push({ type: 'country', country: c })
+      }
+    } else {
+      for (const [regionKey, countries] of groupedByBackendRegion.entries()) {
+        if (countries.length === 0) continue
+        if (regionKey !== 'other') result.push({ type: 'region', key: regionKey as RegionKey })
+        for (const c of countries) result.push({ type: 'country', country: c })
+      }
+    }
+    return result
+  }, [searchTerm, matchedRegionKeys, filteredCountries, groupedByBackendRegion])
+
+  // Reset active index when list changes
+  useEffect(() => { setActiveIndex(-1) }, [flatOptions])
+
   const handleSelect = (country: CountryWithMeta) => {
     setCountry(country.name)
     setSearchTerm('')
@@ -490,10 +523,55 @@ export function CountrySelector() {
     inputRef.current?.focus()
   }
 
+  /** Scroll the option at idx into view in the listbox. */
+  const scrollOptionIntoView = (idx: number) => {
+    const el = listRef.current?.querySelector(`[data-option-index="${idx}"]`) as HTMLElement | null
+    el?.scrollIntoView({ block: 'nearest' })
+  }
+
+  const selectFlatOption = (opt: FlatOption) => {
+    if (opt.type === 'region') {
+      setSelectedRegion(opt.key)
+      setSearchTerm('')
+      setIsFocused(false)
+    } else {
+      handleSelect(opt.country)
+    }
+  }
+
+  const activeOptionId = activeIndex >= 0 ? `country-option-${activeIndex}` : undefined
+
   const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setIsFocused(true)
+      if (!isFocused) { setIsFocused(true); return }
+      setActiveIndex(prev => {
+        const next = Math.min(prev + 1, flatOptions.length - 1)
+        requestAnimationFrame(() => scrollOptionIntoView(next))
+        return next
+      })
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActiveIndex(prev => {
+        const next = Math.max(prev - 1, 0)
+        requestAnimationFrame(() => scrollOptionIntoView(next))
+        return next
+      })
+      return
+    }
+    if (event.key === 'Home') {
+      event.preventDefault()
+      setActiveIndex(0)
+      requestAnimationFrame(() => scrollOptionIntoView(0))
+      return
+    }
+    if (event.key === 'End') {
+      event.preventDefault()
+      const last = flatOptions.length - 1
+      setActiveIndex(last)
+      requestAnimationFrame(() => scrollOptionIntoView(last))
       return
     }
     if (event.key === 'Escape') {
@@ -502,6 +580,11 @@ export function CountrySelector() {
     }
     if (event.key === 'Enter') {
       event.preventDefault()
+      // If an option is highlighted via arrow keys, select it
+      if (activeIndex >= 0 && activeIndex < flatOptions.length) {
+        selectFlatOption(flatOptions[activeIndex])
+        return
+      }
       // Single region match with no individual country matches → select region
       if (matchedRegionKeys.size === 1 && filteredCountries.length === 0) {
         const rk = Array.from(matchedRegionKeys)[0]
@@ -540,28 +623,34 @@ export function CountrySelector() {
             }}
           />
         </div>
-        <span style={{ fontSize: 10, color: '#888' }}>{percent}%</span>
+        <span style={{ fontSize: 10, color: '#767676' }}>{percent}%</span>
       </div>
     )
   }
 
+  // Track option index across render calls for keyboard nav
+  const optionIndexCounter = useRef(0)
+
   // Render country row in dropdown
   const renderCountryRow = (country: CountryWithMeta) => {
     const isMapHovered = mapHoveredCountry === country.name
+    const idx = optionIndexCounter.current++
+    const isActive = idx === activeIndex
     return (
     <div
       key={country.name}
+      id={`country-option-${idx}`}
+      data-option-index={idx}
       className="country-option"
       onClick={() => handleSelect(country)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          handleSelect(country)
-        }
+      onMouseEnter={(e) => {
+        setActiveIndex(idx)
+        e.currentTarget.style.background = isMapHovered ? '#bbdefb' : '#f5f5f5'
       }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = isMapHovered ? '#e3f2fd' : 'white' }}
       role="option"
       aria-selected={selectedCountry === country.name}
-      tabIndex={0}
+      tabIndex={-1}
       style={{
         padding: '8px 12px',
         cursor: 'pointer',
@@ -570,10 +659,8 @@ export function CountrySelector() {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        background: isMapHovered ? '#e3f2fd' : 'white'
+        background: isActive ? '#eef4ff' : isMapHovered ? '#e3f2fd' : 'white'
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = isMapHovered ? '#bbdefb' : '#f5f5f5' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = isMapHovered ? '#e3f2fd' : 'white' }}
     >
       {/* Flag */}
       <span style={{ fontSize: 16 }}>{country.flag}</span>
@@ -589,7 +676,7 @@ export function CountrySelector() {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-          <span style={{ fontSize: 10, color: '#888' }}>
+          <span style={{ fontSize: 10, color: '#767676' }}>
             {country.n_edges.toLocaleString()} edges
           </span>
           <CoverageBar coverage={country.coverage} />
@@ -612,7 +699,7 @@ export function CountrySelector() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 16 }}>{REGION_ICONS[selectedRegion] ?? '🌐'}</span>
           <div>
-            <div style={{ fontSize: 10, color: '#888', fontWeight: 500 }}>Regional</div>
+            <div style={{ fontSize: 10, color: '#767676', fontWeight: 500 }}>Regional</div>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#7C3AED' }}>
               {REGION_DISPLAY_NAMES[selectedRegion] ?? selectedRegion}
             </div>
@@ -641,6 +728,9 @@ export function CountrySelector() {
 
     return <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Unified model (203 countries)</span>
   }
+
+  // Reset option index counter each render so indices match flatOptions
+  optionIndexCounter.current = 0
 
   return (
     <div
@@ -691,6 +781,8 @@ export function CountrySelector() {
       <div style={{ position: 'relative' }}>
         <input
           ref={inputRef}
+          id="country-search"
+          name="country-search"
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -703,6 +795,7 @@ export function CountrySelector() {
           aria-expanded={showDropdown}
           aria-controls={listboxId}
           aria-label="Search and select country"
+          aria-activedescendant={activeOptionId}
           style={{
             width: '100%',
             padding: '8px 32px 8px 12px',
@@ -740,7 +833,7 @@ export function CountrySelector() {
             padding: '4px 6px',
             display: 'flex',
             alignItems: 'center',
-            color: '#888'
+            color: '#767676'
           }}
           tabIndex={-1}
         >
@@ -782,7 +875,7 @@ export function CountrySelector() {
           {/* Country list */}
           <div ref={listRef} style={{ flex: 1, overflowY: 'auto', maxHeight: 280 }}>
             {filteredCountries.length === 0 && matchedRegionKeys.size === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: '#888', fontSize: 13 }}>
+              <div style={{ padding: 16, textAlign: 'center', color: '#767676', fontSize: 13 }}>
                 No countries or regions found
               </div>
             ) : searchTerm ? (
@@ -795,21 +888,20 @@ export function CountrySelector() {
                 for (const rk of REGION_KEYS) {
                   if (!matchedRegionKeys.has(rk)) continue
                   const regionCountries = groupedByBackendRegion.get(rk) || []
-                  const isActive = selectedRegion === rk
+                  const isRegionSelected = selectedRegion === rk
+                  const regionIdx = optionIndexCounter.current++
+                  const isRegionActive = regionIdx === activeIndex
                   elements.push(
                     <div key={`region-${rk}`} role="presentation">
                       <div
+                        id={`country-option-${regionIdx}`}
+                        data-option-index={regionIdx}
                         className="country-option"
                         onClick={() => { setSelectedRegion(rk); setIsFocused(false) }}
+                        onMouseEnter={() => setActiveIndex(regionIdx)}
                         role="option"
-                        aria-selected={isActive}
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setSelectedRegion(rk); setIsFocused(false)
-                          }
-                        }}
+                        aria-selected={isRegionSelected}
+                        tabIndex={-1}
                         style={{
                           padding: '8px 12px',
                           cursor: 'pointer',
@@ -818,18 +910,16 @@ export function CountrySelector() {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 8,
-                          background: isActive ? '#F3E8FF' : '#f9f9fb',
+                          background: isRegionActive ? '#eef4ff' : isRegionSelected ? '#F3E8FF' : '#f9f9fb',
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = isActive ? '#EDE5FF' : '#f0eef5' }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? '#F3E8FF' : '#f9f9fb' }}
                       >
                         <span style={{ fontSize: 16 }}>{REGION_ICONS[rk] ?? '🌐'}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: isActive ? '#7C3AED' : '#444' }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: isRegionSelected ? '#7C3AED' : '#444' }}>
                               {REGION_DISPLAY_NAMES[rk]}
                             </span>
-                            <span style={{ fontSize: 10, fontWeight: 500, color: '#888' }}>
+                            <span style={{ fontSize: 10, fontWeight: 500, color: '#767676' }}>
                               {regionCountries.length} countries
                             </span>
                           </div>
@@ -856,30 +946,28 @@ export function CountrySelector() {
               Array.from(groupedByBackendRegion.entries())
                 .filter(([, countries]) => countries.length > 0)
                 .map(([regionKey, countries]) => {
-                  const isActive = selectedRegion === regionKey
+                  const isRegionSelected = selectedRegion === regionKey
                   const displayName = regionKey === 'other'
                     ? 'Other'
                     : REGION_DISPLAY_NAMES[regionKey as RegionKey] ?? regionKey
+                  const regionIdx = regionKey !== 'other' ? optionIndexCounter.current++ : -1
+                  const isRegionActive = regionIdx === activeIndex
                   return (
                   <div key={regionKey} role="presentation">
                     {/* Region row — clickable, styled like country rows */}
                     {regionKey !== 'other' && (
                       <div
+                        id={`country-option-${regionIdx}`}
+                        data-option-index={regionIdx}
                         className="country-option"
                         onClick={() => {
                           setSelectedRegion(regionKey as RegionKey)
                           setIsFocused(false)
                         }}
+                        onMouseEnter={() => setActiveIndex(regionIdx)}
                         role="option"
-                        aria-selected={isActive}
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            setSelectedRegion(regionKey as RegionKey)
-                            setIsFocused(false)
-                          }
-                        }}
+                        aria-selected={isRegionSelected}
+                        tabIndex={-1}
                         style={{
                           padding: '8px 12px',
                           cursor: 'pointer',
@@ -888,24 +976,22 @@ export function CountrySelector() {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 8,
-                          background: isActive ? '#F3E8FF' : '#f9f9fb',
+                          background: isRegionActive ? '#eef4ff' : isRegionSelected ? '#F3E8FF' : '#f9f9fb',
                           position: 'sticky',
                           top: 0,
                           zIndex: 1,
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = isActive ? '#EDE5FF' : '#f0eef5' }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? '#F3E8FF' : '#f9f9fb' }}
                       >
                         <span style={{ fontSize: 16 }}>{REGION_ICONS[regionKey as RegionKey] ?? '🌐'}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: isActive ? '#7C3AED' : '#444' }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: isRegionSelected ? '#7C3AED' : '#444' }}>
                               {displayName}
                             </span>
                             <span style={{
                               fontSize: 10,
                               fontWeight: 500,
-                              color: '#888',
+                              color: '#767676',
                             }}>
                               {countries.length} countries
                             </span>
@@ -938,7 +1024,7 @@ export function CountrySelector() {
             borderTop: '1px solid #eee',
             background: '#fafafa',
             fontSize: 11,
-            color: '#888'
+            color: '#767676'
           }}>
             {searchTerm && matchedRegionKeys.size > 0
               ? `${matchedRegionKeys.size} region${matchedRegionKeys.size > 1 ? 's' : ''} + ${filteredCountries.length} countries`

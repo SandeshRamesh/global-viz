@@ -135,6 +135,52 @@ export function DataQualityPanel({
     }
   }, [isOpen])
 
+  // Focus management: move focus into panel on open, restore on close
+  const triggerRef = useRef<Element | null>(null)
+  useEffect(() => {
+    if (isOpen) {
+      triggerRef.current = document.activeElement
+      requestAnimationFrame(() => {
+        const first = panelRef.current?.querySelector<HTMLElement>('button, input, [tabindex="0"]')
+        first?.focus()
+      })
+    } else if (triggerRef.current instanceof HTMLElement) {
+      triggerRef.current.focus()
+      triggerRef.current = null
+    }
+  }, [isOpen])
+
+  // Focus trap + Escape to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen || !panelRef.current) return
+
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+
+      if (e.key === 'Tab') {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     // Only drag from header, not close button
@@ -458,7 +504,10 @@ export function DataQualityPanel({
   return (
     <div
       ref={panelRef}
+      role="dialog"
+      aria-modal="false"
       aria-hidden={!isOpen}
+      aria-label="Data quality"
       style={{
         position: 'fixed',
         top: position.y,
@@ -498,7 +547,7 @@ export function DataQualityPanel({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             {/* Erlenmeyer flask */}
             <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.9H6.8A2 2 0 0 1 5 17l4-9V3z" />
             <line x1="9" y1="3" x2="15" y2="3" />
@@ -508,6 +557,7 @@ export function DataQualityPanel({
         </div>
         <button
           onClick={onClose}
+          aria-label="Close data quality panel"
           style={{
             background: 'none',
             border: 'none',
@@ -515,7 +565,7 @@ export function DataQualityPanel({
             padding: 4,
             display: 'flex',
             alignItems: 'center',
-            color: '#999'
+            color: '#767676'
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -631,7 +681,7 @@ export function DataQualityPanel({
 
               {/* Subtitle */}
               {displayValues.subtitle && (
-                <div style={{ fontSize: 11, color: '#888', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: '#767676', marginBottom: 12 }}>
                   {displayValues.subtitle}
                 </div>
               )}
@@ -688,7 +738,7 @@ export function DataQualityPanel({
                 <div style={{ fontSize: 11, color: '#666', marginBottom: 8, fontWeight: 500 }}>
                   Data Quality Timeline
                   {viewMode !== 'country' && (
-                    <span style={{ fontWeight: 400, color: '#999' }}> (avg across countries)</span>
+                    <span style={{ fontWeight: 400, color: '#767676' }}> (avg across countries)</span>
                   )}
                 </div>
                 <div style={{
@@ -713,7 +763,7 @@ export function DataQualityPanel({
                   gap: 12,
                   marginTop: 8,
                   fontSize: 10,
-                  color: '#888',
+                  color: '#767676',
                   flexWrap: 'wrap'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -750,7 +800,7 @@ export function DataQualityPanel({
               )}
             </>
           ) : (
-            <div style={{ color: '#999', fontSize: 12, textAlign: 'center', padding: 20 }}>
+            <div style={{ color: '#767676', fontSize: 12, textAlign: 'center', padding: 20 }}>
               No data quality information available
             </div>
           )
@@ -808,7 +858,7 @@ export function DataQualityPanel({
                 gap: 16,
                 marginBottom: 16,
                 fontSize: 10,
-                color: '#888'
+                color: '#767676'
               }}>
                 <div>
                   Dev→Emerg: <strong>${distributionData.thresholds.developing_to_emerging.toLocaleString()}</strong>
@@ -833,7 +883,7 @@ export function DataQualityPanel({
               </div>
             </>
           ) : (
-            <div style={{ color: '#999', fontSize: 12, textAlign: 'center', padding: 20 }}>
+            <div style={{ color: '#767676', fontSize: 12, textAlign: 'center', padding: 20 }}>
               No distribution data available
             </div>
           )
@@ -944,7 +994,7 @@ function CIStatsContent({ edges, targetIds, nodeById }: CIStatsContentProps) {
 
   if (targetIds.length === 0) {
     return (
-      <div style={{ color: '#888', fontSize: 12, textAlign: 'center', padding: 20 }}>
+      <div style={{ color: '#767676', fontSize: 12, textAlign: 'center', padding: 20 }}>
         Select target nodes in Local View to see CI statistics
       </div>
     )
@@ -956,7 +1006,7 @@ function CIStatsContent({ edges, targetIds, nodeById }: CIStatsContentProps) {
       {summaryStats && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 600, fontSize: 13, color: '#333', marginBottom: 8 }}>
-            Summary <span style={{ color: '#888', fontWeight: 400 }}>({summaryStats.edgeCount} edges)</span>
+            Summary <span style={{ color: '#767676', fontWeight: 400 }}>({summaryStats.edgeCount} edges)</span>
           </div>
           <div style={{
             display: 'grid',
@@ -965,15 +1015,15 @@ function CIStatsContent({ edges, targetIds, nodeById }: CIStatsContentProps) {
             fontSize: 11
           }}>
             <div style={{ background: '#f9fafb', padding: '6px 8px', borderRadius: 4 }}>
-              <div style={{ color: '#888', fontSize: 9 }}>Avg R²</div>
+              <div style={{ color: '#767676', fontSize: 9 }}>Avg R²</div>
               <div style={{ fontWeight: 600 }}>{formatNum(summaryStats.avgRSquared)}</div>
             </div>
             <div style={{ background: '#f9fafb', padding: '6px 8px', borderRadius: 4 }}>
-              <div style={{ color: '#888', fontSize: 9 }}>Significant</div>
+              <div style={{ color: '#767676', fontSize: 9 }}>Significant</div>
               <div style={{ fontWeight: 600 }}>{summaryStats.significantPct.toFixed(0)}%</div>
             </div>
             <div style={{ background: '#f9fafb', padding: '6px 8px', borderRadius: 4 }}>
-              <div style={{ color: '#888', fontSize: 9 }}>Avg Samples</div>
+              <div style={{ color: '#767676', fontSize: 9 }}>Avg Samples</div>
               <div style={{ fontWeight: 600 }}>{Math.round(summaryStats.avgSamples).toLocaleString()}</div>
             </div>
           </div>
@@ -1026,7 +1076,7 @@ function CIStatsContent({ edges, targetIds, nodeById }: CIStatsContentProps) {
                   }}>
                     {getNodeName(targetId)}
                   </div>
-                  <div style={{ fontSize: 10, color: '#888' }}>
+                  <div style={{ fontSize: 10, color: '#767676' }}>
                     {incomingEdges.length} in · {outgoingEdges.length} out
                   </div>
                 </div>
@@ -1094,7 +1144,7 @@ function CIStatsContent({ edges, targetIds, nodeById }: CIStatsContentProps) {
                     )
                   })}
                   {nodeEdges.length > 15 && (
-                    <div style={{ fontSize: 9, color: '#888', marginTop: 4 }}>
+                    <div style={{ fontSize: 9, color: '#767676', marginTop: 4 }}>
                       +{nodeEdges.length - 15} more edges
                     </div>
                   )}
@@ -1158,13 +1208,13 @@ function StatBox({
       padding: '8px 10px',
       borderLeft: `3px solid ${color}`
     }}>
-      <div style={{ fontSize: 9, color: '#888', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+      <div style={{ fontSize: 9, color: '#767676', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
         {label}
       </div>
       <div style={{ fontSize: 16, fontWeight: 600, color: '#333' }}>
         {value}
       </div>
-      <div style={{ fontSize: 9, color: '#888', marginTop: 1 }}>
+      <div style={{ fontSize: 9, color: '#767676', marginTop: 1 }}>
         {subtext}
       </div>
     </div>
@@ -1264,7 +1314,7 @@ function TimelineCell({
       {showLabel && (
         <div style={{
           fontSize: 8,
-          color: '#999',
+          color: '#767676',
           marginTop: 4,
           fontWeight: 500
         }}>
@@ -1318,7 +1368,7 @@ function TransitionRow({ transition }: { transition: { year: number; from: strin
         {transition.to}
       </span>
       {transition.gni_at_transition && (
-        <span style={{ color: '#888', marginLeft: 'auto', fontSize: 10 }}>
+        <span style={{ color: '#767676', marginLeft: 'auto', fontSize: 10 }}>
           ${transition.gni_at_transition.toLocaleString()}
         </span>
       )}
@@ -1404,7 +1454,7 @@ function PieChart({
           <div style={{ fontSize: 24, fontWeight: 700, color: '#333' }}>
             {totalCountries}
           </div>
-          <div style={{ fontSize: 10, color: '#888' }}>
+          <div style={{ fontSize: 10, color: '#767676' }}>
             countries
           </div>
         </div>
@@ -1426,7 +1476,7 @@ function PieChart({
             }} />
             <div style={{ fontSize: 11 }}>
               <span style={{ fontWeight: 600, color: '#333' }}>{distribution[stratum].count}</span>
-              <span style={{ color: '#888', marginLeft: 2 }}>({distribution[stratum].percentage.toFixed(0)}%)</span>
+              <span style={{ color: '#767676', marginLeft: 2 }}>({distribution[stratum].percentage.toFixed(0)}%)</span>
             </div>
           </div>
         ))}
@@ -1498,7 +1548,7 @@ function StratumCountryList({
           </span>
           <span style={{
             fontSize: 11,
-            color: '#888',
+            color: '#767676',
             background: '#fff',
             padding: '2px 6px',
             borderRadius: 10
@@ -1529,7 +1579,7 @@ function StratumCountryList({
           background: '#fff',
           borderTop: '1px solid #f0f0f0'
         }}>
-          <div style={{ fontSize: 9, color: '#888', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div style={{ fontSize: 9, color: '#767676', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             {stratum === 'advanced' ? 'Lowest GNI' : 'Closest to Next Tier'}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1621,7 +1671,7 @@ function CountryProgressRow({
       {country.gni_per_capita !== null && (
         <div style={{
           fontSize: compact ? 10 : 11,
-          color: '#888',
+          color: '#767676',
           whiteSpace: 'nowrap'
         }}>
           ${country.gni_per_capita.toLocaleString()}
@@ -1652,7 +1702,7 @@ function CountryProgressRow({
       {!compact && (
         <div style={{
           fontSize: 10,
-          color: '#888',
+          color: '#767676',
           minWidth: 40,
           textAlign: 'right'
         }}>

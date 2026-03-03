@@ -1269,7 +1269,7 @@ export function LocalView({
           <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>
             No targets selected
           </div>
-          <div style={{ fontSize: 14, color: '#888' }}>
+          <div style={{ fontSize: 14, color: '#767676' }}>
             Double-click a node in Global View to explore its causal pathways
           </div>
           <button
@@ -1318,7 +1318,7 @@ export function LocalView({
           <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>
             No causal relationships found
           </div>
-          <div style={{ fontSize: 14, color: '#888', marginBottom: 16, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 14, color: '#767676', marginBottom: 16, lineHeight: 1.5 }}>
             <strong>{targetLabel}</strong> has no causal connections at its ring level
             {localViewData.totalChildCount !== undefined && localViewData.totalChildCount > 0 && (
               <span> (checked {localViewData.totalChildCount} child indicators)</span>
@@ -1428,7 +1428,7 @@ export function LocalView({
               }}
               title="Decrease min"
             >−</button>
-            <span style={{ fontSize: 10, color: '#999', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
+            <span style={{ fontSize: 10, color: '#767676', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
             <input
               type="range"
               min={sliderMin}
@@ -1439,7 +1439,7 @@ export function LocalView({
               onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
               style={{ width: 70, cursor: 'grab' }}
             />
-            <span style={{ fontSize: 10, color: '#999', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
+            <span style={{ fontSize: 10, color: '#767676', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
             <button
               onClick={() => {
                 const increment = betaRange.step * 2
@@ -1462,7 +1462,7 @@ export function LocalView({
               style={{
                 width: 14, height: 14, padding: 0, fontSize: 9, lineHeight: 1,
                 cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
-                background: 'white', color: '#888'
+                background: 'white', color: '#767676'
               }}
               title="Reset"
             >↺</button>
@@ -1618,7 +1618,7 @@ export function LocalView({
               }}
               title="Decrease min"
             >−</button>
-            <span style={{ fontSize: 10, color: '#999', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
+            <span style={{ fontSize: 10, color: '#767676', minWidth: 20, textAlign: 'right' }}>{sliderMin.toFixed(1)}</span>
             <input
               type="range"
               min={sliderMin}
@@ -1629,7 +1629,7 @@ export function LocalView({
               onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
               style={{ width: 70, cursor: 'grab' }}
             />
-            <span style={{ fontSize: 10, color: '#999', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
+            <span style={{ fontSize: 10, color: '#767676', minWidth: 20 }}>{sliderMax.toFixed(1)}</span>
             {/* Increase max bound */}
             <button
               onClick={() => {
@@ -1654,7 +1654,7 @@ export function LocalView({
               style={{
                 width: 14, height: 14, padding: 0, fontSize: 9, lineHeight: 1,
                 cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
-                background: 'white', color: '#888'
+                background: 'white', color: '#767676'
               }}
               title="Reset"
             >↺</button>
@@ -1664,7 +1664,7 @@ export function LocalView({
         {/* Stats + Clear */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {stats && (
-            <span style={{ color: '#888' }}>
+            <span style={{ color: '#767676' }}>
               {stats.totalInputs}↓ {stats.totalOutputs}↑ ({stats.totalEdges})
             </span>
           )}
@@ -1775,12 +1775,12 @@ export function LocalView({
                   <span>
                     <strong>95% CI:</strong> [{(ciData.ci_lower * 100).toFixed(1)}%, {(ciData.ci_upper * 100).toFixed(1)}%]
                   </span>
-                  <span style={{ color: '#888' }}>
+                  <span style={{ color: '#767676' }}>
                     ±{(ciData.std * 100).toFixed(2)}%
                   </span>
                 </div>
                 {isAggregated && ciData.n_children && (
-                  <div style={{ marginTop: 4, fontSize: 9, color: '#888' }}>
+                  <div style={{ marginTop: 4, fontSize: 9, color: '#767676' }}>
                     Aggregated from {ciData.n_children} children
                     {ciData.child_coverage !== undefined && ciData.child_coverage < 1 && (
                       <span> ({(ciData.child_coverage * 100).toFixed(0)}% with data)</span>
@@ -1788,7 +1788,7 @@ export function LocalView({
                   </div>
                 )}
                 {currentYear && (
-                  <div style={{ marginTop: 4, fontSize: 9, color: '#888' }}>
+                  <div style={{ marginTop: 4, fontSize: 9, color: '#767676' }}>
                     Year: {currentYear}
                   </div>
                 )}
@@ -1833,7 +1833,7 @@ export function LocalView({
                   Global (W)
                 </button>
               )}
-              <span style={{ fontSize: 11, color: '#888' }}>
+              <span style={{ fontSize: 11, color: '#767676' }}>
                 Double-click to explore
               </span>
             </div>
@@ -1856,7 +1856,7 @@ export function LocalView({
               >
                 ← Go Back (d)
               </button>
-              <span style={{ fontSize: 11, color: '#888' }}>
+              <span style={{ fontSize: 11, color: '#767676' }}>
                 Return to previous view
               </span>
             </div>
@@ -1879,7 +1879,7 @@ export function LocalView({
               >
                 Drill Down (d)
               </button>
-              <span style={{ fontSize: 11, color: '#888' }}>
+              <span style={{ fontSize: 11, color: '#767676' }}>
                 View {hoveredNode.childIds?.length || 0} children
               </span>
             </div>
@@ -1920,7 +1920,7 @@ export function LocalView({
               β = {hoveredEdge.beta >= 0 ? '+' : ''}{hoveredEdge.beta.toFixed(3)}
               {isAggregated && <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 4 }}>(avg)</span>}
             </div>
-            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: '#767676', marginTop: 4 }}>
               {isAggregated
                 ? `${pathwayCount} pathway${pathwayCount !== 1 ? 's' : ''} through child indicators`
                 : (hoveredEdge.beta >= 0 ? 'Positive relationship' : 'Negative relationship')

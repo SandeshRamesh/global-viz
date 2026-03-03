@@ -52,6 +52,23 @@ export function SimulationPanel() {
     }
   }, [])
 
+  // Focus management: move focus into panel on open, restore on close
+  const triggerRef = useRef<Element | null>(null)
+  useEffect(() => {
+    if (isPanelOpen) {
+      // Remember what had focus before opening
+      triggerRef.current = document.activeElement
+      // Focus the first focusable element after mount/animation
+      requestAnimationFrame(() => {
+        const firstInput = panelRef.current?.querySelector<HTMLElement>('input, button, [tabindex="0"]')
+        firstInput?.focus()
+      })
+    } else if (triggerRef.current instanceof HTMLElement) {
+      triggerRef.current.focus()
+      triggerRef.current = null
+    }
+  }, [isPanelOpen])
+
   // Reset position when panel opens
   useEffect(() => {
     if (isPanelOpen) {
@@ -105,11 +122,32 @@ export function SimulationPanel() {
     }
   }, [isDragging, handleMouseMove, handleMouseUp])
 
-  // Close panel with Escape key
+  // Focus trap + Escape to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isPanelOpen) {
+      if (!isPanelOpen || !panelRef.current) return
+
+      if (e.key === 'Escape') {
         closePanel()
+        return
+      }
+
+      // Focus trap: cycle Tab within panel
+      if (e.key === 'Tab') {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]'
+        )
+        if (focusable.length === 0) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
       }
     }
     document.addEventListener('keydown', handleKeyDown)
@@ -174,7 +212,7 @@ export function SimulationPanel() {
           style={{
             background: 'none',
             border: 'none',
-            color: '#999',
+            color: '#767676',
             fontSize: 18,
             cursor: 'pointer',
             padding: '0 4px',
