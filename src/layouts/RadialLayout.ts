@@ -14,6 +14,11 @@
 import type { RawNodeV21 } from '../types'
 import { debug } from '../utils/debug'
 import type { NodeSizeRange } from './ViewportScales'
+import { getRingCompactness, getTextBoostFactor } from './branchCurves'
+import {
+  computeOutcomeSectors,
+  type OutcomeSectorSnapshot
+} from './outcomeAngles'
 
 export interface RingConfig {
   radius: number
@@ -32,6 +37,8 @@ export type TextOrientation = 'radial' | 'horizontal' | 'hidden'
 export interface TextConfig {
   /** Number of expanded Ring 1 branches (affects text boost) */
   expandedBranchCount: number
+  /** Total number of Ring 1 outcomes currently visible */
+  totalOutcomeCount: number
   /** Minimum readable font size (default 4px) */
   minReadableSize: number
   /** Maximum boosted font size (default 5px) */
@@ -71,6 +78,10 @@ export interface LayoutConfig {
   textConfig?: TextConfig
   // Causal layout hints for simulation angular clustering (optional)
   causalHint?: CausalLayoutHint
+  // Stable ring-1 angular snapshot (optional)
+  prevOutcomeSectorSnapshot?: OutcomeSectorSnapshot
+  // Max per-layout global rotation adjustment for outcome sectors (radians)
+  maxOutcomeRotationStep?: number
 }
 
 export interface ComputedRingConfig {
@@ -99,6 +110,7 @@ export interface LayoutResult {
   nodes: LayoutNode[]
   nodeMap: Map<string, LayoutNode>
   computedRings: ComputedRingConfig[]
+  outcomeSectorSnapshot: OutcomeSectorSnapshot
 }
 
 /**
@@ -149,6 +161,7 @@ let currentCausalHint: CausalLayoutHint | null = null
 
 // Module-level ring node counts for density-based text scaling
 let ringNodeCounts: Map<number, number> = new Map()
+let totalOutcomeCount = 0
 
 /**
  * Update the current layout parameters (called from computeRadialLayout)
@@ -220,7 +233,14 @@ function getTextOrientation(ringIndex: number): TextOrientation {
 function calculateFontSize(importance: number, ringIndex: number): number {
   if (!currentTextConfig) return 0
 
-  const { minFontSize, maxFontSize, expandedBranchCount, minReadableSize, maxBoostedSize } = currentTextConfig
+  const {
+    minFontSize,
+    maxFontSize,
+    expandedBranchCount,
+    totalOutcomeCount: textOutcomeCount,
+    minReadableSize,
+    maxBoostedSize
+  } = currentTextConfig
   const range = maxFontSize - minFontSize
 
   // Base font size (same formula as ViewportScales)
@@ -228,8 +248,8 @@ function calculateFontSize(importance: number, ringIndex: number): number {
   const ringMultiplier = RING_TEXT_MULTIPLIERS[ringIndex] ?? 0.5
   const fontSize = baseFontSize * ringMultiplier * 0.9
 
-  // Apply boost for branch exploration
-  const boostFactor = expandedBranchCount <= 0 ? 0 : Math.max(0, 1 - (expandedBranchCount - 1) / 4)
+  // Apply smooth boost for branch exploration.
+  const boostFactor = getTextBoostFactor(expandedBranchCount, textOutcomeCount)
 
   if (boostFactor === 0 || fontSize >= minReadableSize) {
     return fontSize
@@ -299,8 +319,8 @@ function calculateVisualFootprint(
 
   // Calculate boost factor for extra spacing during single-branch exploration
   // More boost = more spacing for readability
-  const { expandedBranchCount } = currentTextConfig
-  const boostFactor = expandedBranchCount <= 0 ? 0 : Math.max(0, 1 - (expandedBranchCount - 1) / 4)
+  const { expandedBranchCount, totalOutcomeCount: textOutcomeCount } = currentTextConfig
+  const boostFactor = getTextBoostFactor(expandedBranchCount, textOutcomeCount)
 
   // Extra padding when exploring few branches (scales down as more branches expand)
   // Increased to 3x fontSize for better indicator label readability
@@ -400,110 +420,39 @@ const COLLAPSED_OUTCOME_MIN_EXTENT = Math.PI / 24  // ~7.5°
 function assignOutcomeAngles(
   allOutcomeIds: string[],
   outcomeRequirements: Map<string, number>,
-  expandedNodeIds: Set<string>
-): { angles: Map<string, number>; extents: Map<string, number> } {
-  const angles = new Map<string, number>()
-  const extents = new Map<string, number>()
-
-  if (allOutcomeIds.length === 0) return { angles, extents }
-
-  // Separate expanded and collapsed outcomes
-  // In simulation mode with causal hints, anchor outcomes (those containing affected
-  // descendants) are treated as expanded for sector assignment — they cluster at 0°.
+  expandedNodeIds: Set<string>,
+  prevOutcomeSectorSnapshot: OutcomeSectorSnapshot | undefined,
+  maxOutcomeRotationStep: number
+): { angles: Map<string, number>; extents: Map<string, number>; snapshot: OutcomeSectorSnapshot } {
   const anchorOutcomes = currentCausalHint?.anchorOutcomes
-  const expanded: Array<{ id: string; minExtent: number }> = []
-  const collapsed: Array<{ id: string; minExtent: number }> = []
+  const result = computeOutcomeSectors({
+    outcomeIds: allOutcomeIds,
+    outcomeRequirements,
+    expandedNodeIds,
+    anchorOutcomeIds: anchorOutcomes,
+    minCollapsedExtent: COLLAPSED_OUTCOME_MIN_EXTENT,
+    prevSnapshot: prevOutcomeSectorSnapshot,
+    maxRotationStep: maxOutcomeRotationStep,
+    targetBiasAngle: 0,
+  })
 
-  for (const id of allOutcomeIds) {
-    const isExpanded = expandedNodeIds.has(id)
-    const isAnchor = anchorOutcomes?.has(id) ?? false
-    const shouldCluster = isExpanded || isAnchor
-    const minExtent = shouldCluster
-      ? (outcomeRequirements.get(id) ?? COLLAPSED_OUTCOME_MIN_EXTENT)
-      : COLLAPSED_OUTCOME_MIN_EXTENT
+  const clusteredSet = new Set(result.snapshot.clusteredOutcomeIds)
+  debug.sector('[SECTOR FILLING] STABLE RIGHT-BIASED:')
+  debug.sector(`  Outcomes: ${allOutcomeIds.length}, clustered: ${clusteredSet.size}, rotation: ${toDeg(result.snapshot.rotation)}`)
 
-    if (shouldCluster) {
-      expanded.push({ id, minExtent })
-    } else {
-      collapsed.push({ id, minExtent })
-    }
+  for (const id of result.snapshot.order) {
+    const angle = result.angles.get(id)
+    const extent = result.extents.get(id)
+    if (angle === undefined || extent === undefined) continue
+    const status = clusteredSet.has(id) ? 'CLUSTER' : 'stable'
+    debug.sector(`  [${status}] ${id}: ${toDeg(angle)} (extent: ${toDeg(extent)})`)
   }
 
-  // Calculate totals
-  const expandedTotal = expanded.reduce((sum, o) => sum + o.minExtent, 0)
-  const collapsedTotal = collapsed.reduce((sum, o) => sum + o.minExtent, 0)
-  const totalMinRequired = expandedTotal + collapsedTotal
-
-  // Available space is full circle - ALWAYS fill 360°
-  const availableSpace = 2 * Math.PI
-
-  // Use UNIFIED compactness for Ring 1 positioning
-  // This matches Ring 2 compactness so inter-branch spacing equals intra-branch spacing
-  const ring1Compactness = getUnifiedCompactness(expanded.length)
-
-  // Base scale for expanded outcomes (full extent needed for Ring 2 children)
-  const baseScale = availableSpace / totalMinRequired
-
-  // Expanded outcomes: full extent for child allocation, compacted positioning
-  for (const outcome of expanded) {
-    extents.set(outcome.id, outcome.minExtent * baseScale)
+  return {
+    angles: result.angles,
+    extents: result.extents,
+    snapshot: result.snapshot
   }
-
-  // Calculate how much angular space expanded outcomes use for POSITIONING
-  const expandedFullExtent = expandedTotal * baseScale
-  const expandedPositioningSpace = expandedFullExtent * ring1Compactness
-
-  // Collapsed outcomes: expand to fill ALL remaining space
-  const remainingSpace = availableSpace - expandedPositioningSpace
-  const collapsedScale = collapsedTotal > 0 ? remainingSpace / collapsedTotal : 1
-  for (const outcome of collapsed) {
-    extents.set(outcome.id, outcome.minExtent * collapsedScale)
-  }
-
-  // POSITION EXPANDED OUTCOMES: Centered around 0° (right side)
-  let currentAngle = -expandedPositioningSpace / 2  // Start so they center on 0°
-
-  for (const outcome of expanded) {
-    const fullExtent = extents.get(outcome.id)!
-    const positioningExtent = fullExtent * ring1Compactness  // Compacted for positioning
-    const centerAngle = currentAngle + positioningExtent / 2
-    angles.set(outcome.id, centerAngle)
-    currentAngle += positioningExtent
-  }
-
-  // POSITION COLLAPSED OUTCOMES: Fill remaining space (starting after expanded positioning)
-  // They spread evenly across the remaining arc (left/top/bottom)
-  currentAngle = expandedPositioningSpace / 2
-
-  for (const outcome of collapsed) {
-    const extent = extents.get(outcome.id)!  // Already scaled to fill remaining space
-    let centerAngle = currentAngle + extent / 2
-
-    // Normalize to [-π, π]
-    while (centerAngle > Math.PI) centerAngle -= 2 * Math.PI
-    while (centerAngle < -Math.PI) centerAngle += 2 * Math.PI
-
-    angles.set(outcome.id, centerAngle)
-    currentAngle += extent
-  }
-
-  // Log assignment
-  debug.sector('[SECTOR FILLING] RIGHT-SIDE PRIORITY:')
-  debug.sector(`  Expanded: ${expanded.length} outcomes, positioned in ${toDeg(expandedPositioningSpace)} (compactness: ${ring1Compactness.toFixed(2)}), full extent: ${toDeg(expandedFullExtent)}`)
-  debug.sector(`  Collapsed: ${collapsed.length} outcomes filling remaining ${toDeg(remainingSpace)} (scale: ${collapsedScale.toFixed(2)}x)`)
-
-  for (const outcome of expanded) {
-    const angle = angles.get(outcome.id)!
-    const extent = extents.get(outcome.id)!
-    debug.sector(`  [EXPANDED] ${outcome.id}: ${toDeg(angle)} (extent: ${toDeg(extent)})`)
-  }
-  for (const outcome of collapsed) {
-    const angle = angles.get(outcome.id)!
-    const extent = extents.get(outcome.id)!
-    debug.sector(`  [collapsed] ${outcome.id}: ${toDeg(angle)} (extent: ${toDeg(extent)})`)
-  }
-
-  return { angles, extents }
 }
 
 /**
@@ -525,14 +474,10 @@ let expandedOutcomeCount = 0
  * By using the same compactness for both:
  * - Ring 1 outcomes are positioned such that their Ring 2 children's extents meet
  * - Inter-branch Ring 2 spacing equals intra-branch Ring 2 spacing
- *
- * Scale: 1 expanded → 0.4, linear to 5+ expanded → 1.0
+ * - No hard threshold jumps when branch count changes
  */
 function getUnifiedCompactness(expandedCount: number): number {
-  if (expandedCount <= 0) return 1.0
-  if (expandedCount >= 5) return 1.0
-  // Linear: 1→0.4, 2→0.55, 3→0.7, 4→0.85, 5→1.0
-  return 0.4 + (expandedCount - 1) * (0.6 / 4)
+  return getRingCompactness(expandedCount, totalOutcomeCount, 0.4)
 }
 
 // ============================================================================
@@ -1274,6 +1219,7 @@ export function computeRadialLayout(
 
   // Count expanded outcomes (Ring 1 nodes) for Ring 2 compactness
   const outcomeNodeIds = nodes.filter(n => n.layer === 1).map(n => String(n.id))
+  totalOutcomeCount = outcomeNodeIds.length
   expandedOutcomeCount = outcomeNodeIds.filter(id => expandedNodeIds.has(id)).length
 
   const computedRings = computeRingConfigs(nodes, config)
@@ -1358,10 +1304,16 @@ export function computeRadialLayout(
   }
 
   // Assign target angles and extents for ALL outcomes (grow from right)
-  const { angles: outcomeTargetAngles, extents: outcomeTargetExtents } = assignOutcomeAngles(
+  const {
+    angles: outcomeTargetAngles,
+    extents: outcomeTargetExtents,
+    snapshot: outcomeSectorSnapshot
+  } = assignOutcomeAngles(
     outcomeNodes.map(n => n.id),
     outcomeRequirements,
-    expandedNodeIds
+    expandedNodeIds,
+    config.prevOutcomeSectorSnapshot,
+    config.maxOutcomeRotationStep ?? 0
   )
 
   // ========================================================================
@@ -1432,7 +1384,8 @@ export function computeRadialLayout(
   return {
     nodes: layoutNodes,
     nodeMap: layoutNodeMap,
-    computedRings
+    computedRings,
+    outcomeSectorSnapshot
   }
 }
 

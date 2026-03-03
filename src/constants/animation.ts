@@ -22,6 +22,7 @@ export interface LayoutBudget extends BudgetPreset {
 }
 
 export const STRUCTURAL_LOCK_FALLBACK_MS = 300
+export const PANEL_EXIT_MS = 180
 
 const BALANCED: BudgetPreset = {
   rotationMs: 260,
@@ -53,6 +54,12 @@ const PRESETS: Record<LayoutAction, { normal: BudgetPreset; fast: BudgetPreset }
   global_expand: { normal: FAST, fast: FAST },
   global_collapse: { normal: FAST, fast: FAST },
 }
+const BULK_ACTIONS = new Set<LayoutAction>([
+  'ring_expand',
+  'ring_collapse',
+  'global_expand',
+  'global_collapse',
+])
 
 export interface LayoutBudgetInput {
   action: LayoutAction
@@ -65,7 +72,7 @@ const EDGE_DELTA_FAST_THRESHOLD = 160
 
 export const resolveLayoutBudget = ({ action, nodeDelta, edgeDelta }: LayoutBudgetInput): LayoutBudget => {
   const preset = PRESETS[action]
-  const isBulkAction = action.startsWith('ring_') || action.startsWith('global_')
+  const isBulkAction = BULK_ACTIONS.has(action)
   const isLargeDiff = nodeDelta >= NODE_DELTA_FAST_THRESHOLD || edgeDelta >= EDGE_DELTA_FAST_THRESHOLD
   const useFastPath = isBulkAction || isLargeDiff
   const chosen = useFastPath ? preset.fast : preset.normal
@@ -74,4 +81,3 @@ export const resolveLayoutBudget = ({ action, nodeDelta, edgeDelta }: LayoutBudg
     useFastPath,
   }
 }
-

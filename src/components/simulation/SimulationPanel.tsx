@@ -11,6 +11,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSimulationStore, useIsPanelOpen } from '../../stores/simulationStore'
 import { usePresence } from '../../hooks/usePresence'
+import { PANEL_EXIT_MS } from '../../constants/animation'
 import CountrySelector from './CountrySelector'
 import TemplateSelector from './TemplateSelector'
 import InterventionBuilder from './InterventionBuilder'
@@ -18,7 +19,6 @@ import SimulationRunner from './SimulationRunner'
 
 const PANEL_WIDTH = 380
 const PANEL_HEIGHT = 560
-const PANEL_EXIT_MS = 180
 
 const getDefaultPosition = () => {
   if (typeof window === 'undefined') return { x: 24, y: 24 }

@@ -26,6 +26,7 @@ import { simulationAPI, type CountryGraphEdge } from './services/api'
 import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData } from './utils/causalEdges'
 import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
 import { perfTrace, type StructuralActionName } from './utils/perfTrace'
+import { layoutTrace } from './utils/layoutTrace'
 import { SIM_MS_PER_YEAR } from './constants/time'
 import { REGION_DISPLAY_NAMES, REGION_TO_ISO3S } from './constants/regions'
 import {
@@ -44,6 +45,8 @@ import {
   type TextConfig,
   type CausalLayoutHint
 } from './layouts/RadialLayout'
+import { getTextBoostFactor } from './layouts/branchCurves'
+import type { OutcomeSectorSnapshot } from './layouts/outcomeAngles'
 import {
   ViewportAwareLayout,
   createViewportLayout
@@ -195,6 +198,21 @@ function generateRingConfigs(radii: number[], maxNodeRadius: number = 20) {
     nodeSize: maxNodeRadius,  // Placeholder, actual sizing is viewport-aware
     label
   }))
+}
+
+function getOutcomeRotationStep(layoutAction: LayoutAction | null): number {
+  switch (layoutAction) {
+    case 'single_expand':
+      return Math.PI / 14  // ~12.9°
+    case 'ring_expand':
+    case 'global_expand':
+      return Math.PI / 18  // 10°
+    case 'single_collapse':
+    case 'ring_collapse':
+    case 'global_collapse':
+    default:
+      return 0
+  }
 }
 
 /** Extended PositionedNode with parent reference for expansion logic */
@@ -402,6 +420,7 @@ function App() {
   const autoZoomRafRef = useRef<number | null>(null)
   const autoZoomRunTokenRef = useRef(0)
   const visibleCountsRef = useRef({ nodes: 0, edges: 0 })
+  const outcomeSectorSnapshotRef = useRef<OutcomeSectorSnapshot | null>(null)
 
   // Temporal edges cache for Local View timeline playback
   // Maps year → country edges for the currently selected country/stratum
@@ -433,6 +452,8 @@ function App() {
     interventions: storeInterventions,
     targetVisibleEffects,
     isPlaying,
+    play: storePlay,
+    pause: storePause,
     setPlaybackMode,
     layoutReady,
     setLayoutReady,
@@ -507,6 +528,13 @@ function App() {
     perfTrace.noteZoomOverlap(structuralTraceIdRef.current)
   }, [])
 
+  const resetOutcomeSectorCache = useCallback(() => {
+    outcomeSectorSnapshotRef.current = null
+    if (import.meta.env.DEV) {
+      layoutTrace.reset()
+    }
+  }, [])
+
   const flushQueuedStructuralAction = useCallback(() => {
     const queuedAction = queuedStructuralActionRef.current
     if (!queuedAction) return
@@ -550,9 +578,9 @@ function App() {
     const graphContainer = svg.select<SVGGElement>('g.graph-container')
     if (graphContainer.empty()) return
 
-    graphContainer.selectAll('circle.node').interrupt('rotation').interrupt('timeline-size')
-    graphContainer.selectAll('line.edge').interrupt('rotation')
-    graphContainer.selectAll('text.node-label').interrupt('rotation')
+    graphContainer.selectAll('circle.node').interrupt('rotation').interrupt('timeline-size').interrupt('node-exit')
+    graphContainer.selectAll('line.edge').interrupt('rotation').interrupt('edge-exit')
+    graphContainer.selectAll('text.node-label').interrupt('rotation').interrupt('label-exit')
     graphContainer.selectAll('circle.glow').interrupt('glow-move').interrupt('glow-show')
     graphContainer.selectAll('circle.local-glow').interrupt('local-glow-move').interrupt('local-glow-show')
     graphContainer.selectAll('circle.sim-glow').interrupt('sim-glow-move').interrupt('sim-glow-show')
@@ -600,10 +628,11 @@ function App() {
     const wasPresent = prevTemporalResultsRef.current !== null
     prevTemporalResultsRef.current = temporalResults
     if (wasPresent && !temporalResults) {
+      resetOutcomeSectorCache()
       setExpandedNodes(new Set())
       setPinnedPaths(new Set())
     }
-  }, [temporalResults])
+  }, [temporalResults, resetOutcomeSectorCache])
 
   // Current year derived from active playback source (historical SHAP vs simulation timeline)
   const mapCurrentYear = useMemo(() => {
@@ -740,6 +769,10 @@ function App() {
       if (resetFitTimerRef.current !== null) {
         clearTimeout(resetFitTimerRef.current)
         resetFitTimerRef.current = null
+      }
+      if (collapseGuardTimerRef.current !== null) {
+        clearTimeout(collapseGuardTimerRef.current)
+        collapseGuardTimerRef.current = null
       }
       if (structuralTraceIdRef.current !== null) {
         perfTrace.finish(structuralTraceIdRef.current, {
@@ -1002,9 +1035,15 @@ function App() {
 
   // Track collapse animation to prevent second render from overriding delayed rotation
   const collapseAnimationRef = useRef<{ inProgress: boolean; endTime: number }>({ inProgress: false, endTime: 0 })
+  const collapseGuardTimerRef = useRef<number | null>(null)
 
   // Raw data (fetched once, cached)
   const [rawData, setRawData] = useState<GraphDataV21 | null>(null)
+
+  // Topology/context boundaries invalidate cached outcome sectors.
+  useEffect(() => {
+    resetOutcomeSectorCache()
+  }, [rawData, selectedCountry, selectedRegion, selectedStratum, playbackMode, resetOutcomeSectorCache])
 
   // Memoized node lookup map for Local View
   const nodeByIdMap = useMemo(() => {
@@ -1219,6 +1258,7 @@ function App() {
   const [precomputedCICache, setPrecomputedCICache] = useState<Map<number, Map<string, NodeCIData>>>(new Map())
 
   // SHAP cache: seed the first available year quickly, then finish the rest in idle chunks.
+  // Important: do not depend on currentYearIndex/historicalTimeline; scrubbing should not restart this pipeline.
   useEffect(() => {
     if (!effectiveShapTimeline || !rawData) return
 
@@ -1229,7 +1269,7 @@ function App() {
     let cancelled = false
     let idleHandle: IdleHandle | null = null
 
-    const primeYear = historicalTimeline?.years?.[currentYearIndex] ?? years[0]
+    const primeYear = years[0]
     const primeIndex = years.indexOf(primeYear)
     if (primeIndex >= 0) {
       cache.set(primeYear, computeYearImportance(primeYear))
@@ -1260,7 +1300,7 @@ function App() {
       cancelled = true
       cancelIdleTask(idleHandle)
     }
-  }, [effectiveShapTimeline, rawData, historicalTimeline, currentYearIndex, computeYearImportance, selectedStratum])
+  }, [effectiveShapTimeline, rawData, computeYearImportance, selectedStratum])
 
   // CI cache: non-critical, fully deferred to idle.
   useEffect(() => {
@@ -1550,30 +1590,6 @@ function App() {
   }, [rawData, expandedNodes, runOrQueueStructuralAction, beginLayoutAction])
 
   // Expand all nodes
-  const expandAll = useCallback(() => {
-    if (!rawData) return
-    runOrQueueStructuralAction(() => {
-      beginLayoutAction('global_expand', 'expandAll')
-      dotsModeRef.current = true
-      setPinnedPaths(new Set())
-      // Use rawData to get ALL nodes (not just visible ones)
-      const allExpandable = rawData.nodes
-        .filter(n => n.children && n.children.length > 0)
-        .map(n => String(n.id))
-      setExpandedNodes(new Set(allExpandable))
-    })
-  }, [rawData, runOrQueueStructuralAction, beginLayoutAction])
-
-  // Collapse all nodes
-  const collapseAll = useCallback(() => {
-    runOrQueueStructuralAction(() => {
-      beginLayoutAction('global_collapse', 'collapseAll')
-      dotsModeRef.current = false
-      setPinnedPaths(new Set())
-      setExpandedNodes(new Set())
-    })
-  }, [runOrQueueStructuralAction, beginLayoutAction])
-
   // Calculate initial zoom transform to fit content tightly
   const calculateInitialTransform = useCallback((nodes: ExpandableNode[], containerWidth?: number, containerHeight?: number) => {
     // Use provided dimensions or calculate from viewMode and splitRatio
@@ -1899,9 +1915,10 @@ function App() {
     const pins = buildPins(new Set(), rawData, storeInterventions)
     if (pins.size <= 1) return
 
+    resetOutcomeSectorCache()
     setExpandedNodes(new Set())
     setPinnedPaths(pins)
-  }, [temporalResults, rawData, storeInterventions])
+  }, [temporalResults, rawData, storeInterventions, resetOutcomeSectorCache])
 
   // Track whether playback has started at least once for this simulation run
   const playbackStartedRef = useRef(false)
@@ -2336,6 +2353,7 @@ function App() {
       const svg = d3.select(svgRef.current)
 
       // Phase 1: collapse to just the QoL root node
+      resetOutcomeSectorCache()
       setExpandedNodes(new Set())
       setPinnedPaths(new Set())
       currentTransformRef.current = null
@@ -2363,7 +2381,7 @@ function App() {
         }, 1500)
       }
     }
-  }, [allNodes, calculateInitialTransform, viewMode, clearCountry])
+  }, [allNodes, calculateInitialTransform, viewMode, clearCountry, resetOutcomeSectorCache])
 
   // Fit view to all visible nodes (for double-click on empty space)
   const fitToVisibleNodes = useCallback(() => {
@@ -2718,10 +2736,32 @@ function App() {
           setSelectedRegion(null)
         }
       }
+
+      // Space to toggle timeline play/pause
+      if (e.key === ' ') {
+        e.preventDefault()
+        if (isPlaying) {
+          storePause()
+        } else {
+          storePlay()
+        }
+      }
+
+      // +/= to expand next ring layer, -/_ to collapse outermost ring layer
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault()
+        const maxRing = visibleNodes.reduce((max, n) => Math.max(max, n.ring), 0)
+        if (maxRing < 5) expandRing(maxRing)
+      }
+      if (e.key === '-' || e.key === '_') {
+        e.preventDefault()
+        const maxRing = visibleNodes.reduce((max, n) => Math.max(max, n.ring), 0)
+        if (maxRing > 0) collapseRing(maxRing - 1)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [localViewTargets.length, clearLocalViewTargets, temporalResults, clearResults, selectedCountry, clearCountry, selectedRegion, setSelectedRegion])
+  }, [localViewTargets.length, clearLocalViewTargets, temporalResults, clearResults, selectedCountry, clearCountry, selectedRegion, setSelectedRegion, visibleNodes, expandRing, collapseRing, isPlaying, storePlay, storePause])
 
   // Fetch data once on mount
   const fetchData = useCallback(async () => {
@@ -2899,15 +2939,25 @@ function App() {
     const expandedBranchCount = visibleRawNodes.filter(
       n => n.layer === 1 && expandedNodes.has(String(n.id))
     ).length
+    const totalOutcomeCount = visibleRawNodes.filter(n => n.layer === 1).length
 
     // Build text config for text-aware spacing
     const textConfig: TextConfig = {
       expandedBranchCount,
+      totalOutcomeCount,
       minReadableSize: 3,
       maxBoostedSize: 5,
       minFontSize: currentLayoutValues.textMinSize,
       maxFontSize: currentLayoutValues.textMaxSize
     }
+
+    const contextScope = selectedCountry
+      ? `country:${selectedCountry}`
+      : selectedRegion
+        ? `region:${selectedRegion}`
+        : `stratum:${selectedStratum}`
+    const traceContextKey = `${contextScope}|playback:${playbackMode}|pinned:${pinnedPaths.size > 0 ? '1' : '0'}`
+    const maxOutcomeRotationStep = getOutcomeRotationStep(activeLayoutActionRef.current)
 
     // Build layout config with dynamic radii and viewport-aware sizing
     const layoutConfig: LayoutConfig = {
@@ -2925,7 +2975,9 @@ function App() {
       // Pass text config for text-aware spacing
       textConfig,
       // Pass causal hints for angular clustering during simulation
-      causalHint: playbackMode === 'simulation' ? causalHint : undefined
+      causalHint: playbackMode === 'simulation' ? causalHint : undefined,
+      prevOutcomeSectorSnapshot: outcomeSectorSnapshotRef.current ?? undefined,
+      maxOutcomeRotationStep
     }
 
     // Compute layout using ring-independent angular positioning algorithm
@@ -2933,6 +2985,14 @@ function App() {
     // Pass expandedNodes for smart lateral-first sector filling of outcomes
     const layoutResult = computeRadialLayout(visibleRawNodes, layoutConfig, expandedNodes)
     const { computedRings } = layoutResult
+    outcomeSectorSnapshotRef.current = layoutResult.outcomeSectorSnapshot
+    if (import.meta.env.DEV) {
+      layoutTrace.record({
+        action: activeLayoutActionRef.current ?? 'passive',
+        contextKey: traceContextKey,
+        snapshot: layoutResult.outcomeSectorSnapshot,
+      })
+    }
 
     // Post-process: resolve any remaining overlaps by pushing nodes apart
     resolveOverlaps(layoutResult.nodes, computedRings, nodePadding, 50)
@@ -2983,7 +3043,7 @@ function App() {
       drivers: driverCount,
       overlaps: overlaps.length
     })
-  }, [effectiveNodes, nodePadding, expandedNodes, pinnedPaths, playbackMode, causalHint])  // Uses effectiveNodes for country-specific importance
+  }, [effectiveNodes, nodePadding, expandedNodes, pinnedPaths, playbackMode, causalHint, selectedCountry, selectedRegion, selectedStratum])  // Uses effectiveNodes for country-specific importance
 
   // Render visible nodes and edges (called when expansion state changes)
   const renderVisualization = useCallback(() => {
@@ -4257,12 +4317,12 @@ function App() {
         if (dotsMode && targetRing >= DEEP_RING_THRESHOLD) {
           el.remove()
         } else if (activeBudget.useFastPath) {
-          el.transition()
+          el.transition('edge-exit')
             .duration(exitDuration)
             .style('opacity', 0)
             .remove()
         } else {
-          el.transition()
+          el.transition('edge-exit')
             .delay(collapseExitDelay)
             .duration(exitDuration)
             .attr('x2', el.attr('x1'))
@@ -4285,11 +4345,20 @@ function App() {
       // Start of collapse animation - mark it and set end time
       const totalCollapseTime = collapseRotationDelay + rotationDuration
       collapseAnimationRef.current = { inProgress: true, endTime: now + totalCollapseTime }
+      if (collapseGuardTimerRef.current !== null) {
+        clearTimeout(collapseGuardTimerRef.current)
+        collapseGuardTimerRef.current = null
+      }
       // Schedule cleanup after animation completes
-      setTimeout(() => {
+      collapseGuardTimerRef.current = window.setTimeout(() => {
+        collapseGuardTimerRef.current = null
         collapseAnimationRef.current = { inProgress: false, endTime: 0 }
       }, totalCollapseTime + 50)
     } else if (!useCollapseAnimationGuard) {
+      if (collapseGuardTimerRef.current !== null) {
+        clearTimeout(collapseGuardTimerRef.current)
+        collapseGuardTimerRef.current = null
+      }
       collapseAnimationRef.current = { inProgress: false, endTime: 0 }
     }
 
@@ -4482,7 +4551,7 @@ function App() {
           return
         }
         if (activeBudget.useFastPath) {
-          el.transition()
+          el.transition('node-exit')
             .duration(exitDuration)
             .style('opacity', 0)
             .remove()
@@ -4492,7 +4561,7 @@ function App() {
         if (id) {
           const nodeData = nodePositionsRef.current.get(id)
           const parentPos = nodeData?.parentId ? nodePositionsRef.current.get(nodeData.parentId) : null
-          el.transition()
+          el.transition('node-exit')
             .delay(collapseExitDelay)
             .duration(exitDuration)
             .ease(d3.easeCubicIn)
@@ -4937,10 +5006,10 @@ function App() {
     // Count expanded Ring 1 nodes (outcomes being explored)
     const expandedOutcomes = visibleNodes.filter(n => n.ring === 1 && expandedNodes.has(n.id))
     const expandedCount = expandedOutcomes.length
+    const totalVisibleOutcomes = visibleNodes.filter(n => n.ring === 1).length
 
-    // Boost factor: 1.0 at 1 branch, decreasing to 0.0 at 5+ branches
-    // Linear interpolation: 1 branch = 1.0, 2 = 0.75, 3 = 0.5, 4 = 0.25, 5+ = 0.0
-    const boostFactor = expandedCount <= 0 ? 0 : Math.max(0, 1 - (expandedCount - 1) / 4)
+    // Smooth boost factor: no hard drop at branch count thresholds.
+    const boostFactor = getTextBoostFactor(expandedCount, totalVisibleOutcomes)
 
     /**
      * Apply readability boost to font size
@@ -5112,7 +5181,7 @@ function App() {
 
     // Exit labels (COLLAPSE: fade out first, before nodes collapse)
     labelSelection.exit()
-      .transition()
+      .transition('label-exit')
       .delay(collapseTextDelay)
       .duration(textFadeDuration)
       .style('opacity', 0)
@@ -5767,6 +5836,9 @@ function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#fafafa', position: 'relative' }}>
+      {/* Skip link for keyboard users */}
+      <a href="#main-content" className="skip-link">Skip to main content</a>
+
       {/* World Map - background choropleth layer */}
       <WorldMap
         foreground={mapForeground}
@@ -5800,7 +5872,7 @@ function App() {
         }}
       >
         {/* Top Group - Search, Country, Rings, Domains */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <header style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {/* Search Bar */}
           <div className="search-container" style={{
             display: 'flex', flexDirection: 'column', alignItems: 'stretch',
@@ -5952,7 +6024,7 @@ function App() {
 
         {/* Rings Panel - Hidden in local view */}
         {ringStats.length > 0 && viewMode !== 'local' && (
-          <div style={{ background: 'white', padding: '8px 10px', borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', fontSize: 11, pointerEvents: 'auto', maxWidth: 180 }}>
+          <nav aria-label="Graph controls" style={{ background: 'white', padding: '8px 10px', borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', fontSize: 11, pointerEvents: 'auto', maxWidth: 180 }}>
             <div style={{ fontWeight: 'bold', marginBottom: 6, fontSize: 11 }}>Rings</div>
             {ringStats.map((ring, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, paddingBottom: 2, borderBottom: i < ringStats.length - 1 ? '1px solid #eee' : 'none' }}>
@@ -5976,11 +6048,7 @@ function App() {
                 </div>
               </div>
             ))}
-            <div style={{ marginTop: 6, display: 'flex', gap: 4 }}>
-              <button onClick={expandAll} style={{ flex: 1, padding: '3px 6px', fontSize: 10, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 3, background: '#f5f5f5' }}>Expand</button>
-              <button onClick={collapseAll} style={{ flex: 1, padding: '3px 6px', fontSize: 10, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 3, background: '#f5f5f5' }}>Collapse</button>
-            </div>
-          </div>
+          </nav>
         )}
 
         {/* Domain Legend */}
@@ -6008,7 +6076,7 @@ function App() {
             </div>
           </div>
         )}
-        </div>
+        </header>
 
         {/* Bottom - Data Quality & Simulate Buttons */}
         <div style={{ pointerEvents: 'auto', display: 'flex', gap: 8 }}>
@@ -6160,7 +6228,8 @@ function App() {
       )}
 
       {/* Views Container - handles split view layout */}
-      <div
+      <main
+        id="main-content"
         className="split-container"
         style={{
           display: 'flex',
@@ -6266,7 +6335,7 @@ function App() {
             />
           )}
         </div>
-      </div>
+      </main>
 
       {/* Hover tooltip panel - always rendered for smooth transitions */}
       {(() => {

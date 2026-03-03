@@ -15,6 +15,7 @@ import { useSimulationStore } from '../../stores/simulationStore'
 import { simulationAPI } from '../../services/api'
 import { debug } from '../../utils/debug'
 import { DATA_YEAR_MAX, DATA_YEAR_MIN } from '../../constants/time'
+import { PANEL_EXIT_MS } from '../../constants/animation'
 import { usePresence } from '../../hooks/usePresence'
 import type {
   CountryDataQuality,
@@ -74,7 +75,6 @@ type QualityData = CountryQualityData | UnifiedQualityData | StratifiedQualityDa
 // Year range for the mini timeline
 const TIMELINE_START = DATA_YEAR_MIN
 const TIMELINE_END = DATA_YEAR_MAX
-const PANEL_EXIT_MS = 180
 
 const isAbortError = (error: unknown): boolean => (
   (error instanceof DOMException && error.name === 'AbortError') ||

@@ -115,106 +115,15 @@ viz/
 | `/api/simulate/v31` | V3.1 instant simulation |
 | `/api/simulate/v31/temporal` | V3.1 temporal simulation |
 
-## Current Work: Pre-Launch → Launch
+## Roadmap & Progress
 
-Phase 2 complete 2026-02-18. Phase 3 sim polish complete 2026-02-19. Phase 4 sim UX complete 2026-02-20. Phase 5 pre-launch complete 2026-03-01. Map integration complete 2026-03-02.
+See `docs/plans/roadmap.md` for full phase history and feature details.
 
-### Completed Pre-Launch
+**Completed**: Phases 2–7.5 (Core Sim → Sim Polish → Sim UX → Pre-Launch → Map → Regional → Polish)
 
-2. ~~**Pre-built scenario library**~~ — **DONE** (2026-02-20)
-3. ~~**Export suite**~~ — **DONE** (2026-03-01): PNG screenshot, CSV results, shareable URL with encoded state
-4. ~~**2D + Globe map integration**~~ — **DONE** (2026-03-02): Choropleth world map with QoL heatmap, M-key toggle (hold/tap), dynamic QoL root node encoding (size, outline, interpolated score), smooth crossfade transitions
+**Next**: Phase 8 — Accessibility (WCAG 2.1 AA)
 
-### Launch Features (current)
-
-5. **Regional views** — aggregate results by region (Sub-Saharan Africa, SE Asia, etc.). Backend already supports `view_type: "regional"` in simulation endpoints (feature-flagged via `ENABLE_REGIONAL_VIEW`). Precomputed data exists: regional baselines, graphs, SHAP, stats across 11 regions. Frontend needs: region selector UI, regional graph rendering, regional simulation integration.
-6. **3D global graph view** — radial viz rendered in 3D with depth, rotation, fly-through
-
-### Post-Launch Polish
-
-7. **Polish, tutorial, animations** — guided first-visit tutorial, smooth transition animations, loading states
-8. **Mobile support** — responsive layout, touch interactions, simplified views for small screens
-9. **Accessibility** — ARIA attributes, keyboard navigation, screen reader support, color contrast
-
-### Post-Launch Advanced
-
-10. **Security & safety** — CORS production gating, rate limiting, input sanitization, ENV-based config
-11. **Methodology page** — standalone `/methodology` route explaining PC algorithm, SHAP, temporal bootstrapping, limitations
-12. **Sensitivity analysis & multi-target optimization** — edge weight perturbation, ensemble runs, confidence intervals
-13. **Public-facing API** — documented REST API with auth, rate limits, usage docs
-
-## Completed Features
-
-### Phase 6: Map Integration (2026-03-02)
-
-- WorldMap choropleth with QoL heatmap (RdYlGn scale, country-level shading)
-- M-key toggle: tap toggles, hold (≥250ms) peeks and reverts on release
-- Smooth crossfade transitions (opacity-based, no z-index flash)
-- Dynamic QoL root node: size encodes level (0.5-1.0), grey fill with RdYlGn outline
-- QoL score interpolation across all years (1990-2024) — linear between known points, hold at edges
-- QoL x/10 label below root node (70% size, 70% opacity)
-- Ring 0 cyan pulse during simulation timeline playback
-- Ref-based QoL node positioning (eliminates React re-renders during zoom/pan)
-- Animated reset: collapse to root → 1s delay → expand ring 1
-- Progressive pinning capped to keepCount (top N by magnitude)
-- Subtler ring labels (10px, normal weight, 60% opacity)
-- Export suite: PNG screenshot, CSV results, shareable URL with encoded state
-
-### Phase 5: Pre-Launch Polish (Week 10, 2026-02-20)
-
-- Pre-built scenario library: 17 curated policy templates (6 categories) with research-backed interventions
-  - Templates: Bolsa Família, Nordic Welfare, Bangladesh Health, Thailand UCS, Rwanda Digital, Estonia eGov, Kenya M-Pesa, Vietnam Export, China Infra/WTO, Ethiopia Roads, India Agri/SSA, Energiewende, Korea Education, Georgia/Singapore Governance
-  - TemplateSelector component with category-grouped dropdown, expandable description, collapsible outcomes/evidence panels
-  - Template state in simulationStore: `activeTemplate`, `templateModified`, `applyTemplate()`, `resetTemplate()`, `clearTemplate()`
-  - "Reset to policy defaults" button appears when user modifies template interventions
-  - Hover tooltips on dropdown options showing full description
-  - All templates validated against live API (100 indicators, all IDs exist)
-- Draggable SimulationPanel: header-drag with viewport constraints (same pattern as DataQualityPanel)
-- `C` hotkey clears both local view targets and simulation results + interventions
-- `clearResults` also resets interventions, template state
-
-### Phase 4: Simulation UX Polish (Week 10, 2026-02-20)
-
-- Sim in Local View: intervention nodes center, negative effects left, positive right, organized by hop
-- Edge pulse cascade: 3-tier CSS animations (near/mid/far) radiating from intervention via BFS hop distance
-- Cyan intervention glow (`#00E5FF`): persists entire sim state, `intervention-pulse` CSS animation
-- Node flash glow: red/green flash synced to edge ripple arrival at each ring
-- Glow ring sync: all sim glow layers (intervention, ineligible, flash) now transition-match node animations
-- Auto-zoom on sim node count change (global + local views)
-- Zoom-to-node on results panel click (smooth 400ms pan)
-- Hover cards with sim info (% change, year, coverage) for both global and local views
-- Effects count slider (3-50, pre-simulation) controlling visible effect count
-- `T` hotkey toggles timeline with auto-play
-- Intervention slider range: -100% to +200%
-- Clear results resets expansion to ring 1
-
-### Phase 3: Simulation Polish (Week 9, 2026-02-19)
-
-- Selective branch expansion (pinnedPaths): post-simulation shows only direct paths to affected indicators
-- Parent aggregate effects: affected-only mean + coverage ratio
-- Border gating: leaves |pct| >= 0.5%, parents coverage >= 15% AND |pct| >= 1.0%, top-K per ring
-- Saturating-curve border widths: `width = minPx + maxExtraPx * (1 - e^(-|pct|/6))`
-- Coverage-based opacity for parent borders
-- Subtle glow for ineligible parents
-- Single-child intermediate pruning with skip-edges
-- Ring compression via parent remapping
-- Temporal edge count badge per intervention
-- Simulation error enrichment + baseline year warning
-
-### Phase 2: Core Simulation (Weeks 5-8)
-
-- Income stratification (StrataTabs with dynamic counts)
-- Timeline player (1990-2024 scrubbing, auto-collapse)
-- Country selector (178 countries, region grouping, autocomplete)
-- Temporal SHAP caching (smooth playback, no flash)
-- Data Quality Panel (coverage, confidence, transitions)
-- Local View temporal edges (year-aware edge updates)
-- Per-intervention year support (staggered interventions)
-- Simulation range control (dual-thumb slider, 1990-2030)
-- Node glow effects (green/red proportional to effect intensity)
-- Auto-expand affected branches post-simulation
-- Scenario save/load to localStorage
-- V3.1 API integration with year-specific temporal graphs
+**Pending fix**: Layout stability on single-node collapse — see `docs/plans/codex-layout-stability-fix.md`
 
 ## Key Constants
 
@@ -235,10 +144,4 @@ SIM_MS_PER_YEAR     // Animation speed per sim year
 
 ## Backlog (unscheduled)
 
-- Scenario comparison (overlay mode) — two scenarios side-by-side with diff view
-- Country comparison mode — side-by-side country graphs
-- Education/guided mode — simplified interface for non-technical users
-- PWA support — offline capability, installable app
-
-# currentDate
-Today's date is 2026-02-20.
+See `docs/plans/roadmap.md` → "Future Phases (BACKLOG)" for full list.

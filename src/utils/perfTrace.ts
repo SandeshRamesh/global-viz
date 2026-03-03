@@ -51,6 +51,7 @@ declare global {
 }
 
 const LONG_FRAME_MS = 24
+const MAX_TRACE_RECORDS = 500
 
 const createPerfTrace = () => {
   const records: StructuralTraceRecord[] = []
@@ -120,6 +121,9 @@ const createPerfTrace = () => {
       longFrameCount: trace.longFrameCount,
     }
     records.push(record)
+    if (records.length > MAX_TRACE_RECORDS) {
+      records.splice(0, records.length - MAX_TRACE_RECORDS)
+    }
     return record
   }
 

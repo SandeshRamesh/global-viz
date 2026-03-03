@@ -71,45 +71,82 @@ Development roadmap for the Global Project causal visualization tool.
 
 ---
 
-## Phase 7 — Regional Views (CURRENT)
+## Phase 7 — Regional Views (COMPLETE 2026-03-03)
 
-Goal: Regional aggregate simulation and exploration across 11 regions.
-
-**Backend status: READY** — `view_type: "regional"` supported in both `/api/simulate/v31` and `/api/simulate/v31/temporal`, feature-flagged via `ENABLE_REGIONAL_VIEW`. Precomputed data exists for all 11 regions (baselines, graphs, SHAP, indicator stats).
-
-**11 regions:** East Asia & Pacific, Europe & Central Asia, Latin America & Caribbean, MENA, North America, South Asia, Sub-Saharan Africa, Western Europe, Eastern Europe, Central Asia, Southeast Asia
-
-### TODO
-- [ ] Enable `ENABLE_REGIONAL_VIEW` feature flag
-- [ ] Region selector UI (dropdown or map-based selection)
-- [ ] Regional graph rendering on radial viz
-- [ ] Regional simulation integration (run sims against regional aggregate graphs)
-- [ ] Regional QoL scores on map (region-level choropleth shading)
-- [ ] Region ↔ country drill-down (click region to see member countries)
+- Region selector in CountrySelector (search by region name/alias, auto-select on single match)
+- Regional graph rendering on radial viz (reuses country graph pipeline)
+- Regional simulation integration (`view_type: "regional"` in both instant and temporal endpoints)
+- 11 regions with display names, icons, and ISO3 mapping (`constants/regions.ts`)
+- Region search aliases (e.g. "SSA" → Sub-Saharan Africa, "MENA" → Middle East & North Africa)
+- Region ↔ country grouping in dropdown (World Bank region headers)
 
 ---
 
-## Phase 8 — 3D Global Graph View (PLANNED)
+## Phase 7.5 — Polish & Animations (COMPLETE 2026-03-03)
 
-Goal: Radial viz rendered in 3D with depth, rotation, fly-through.
+- Panel enter/exit CSS transitions (SimulationPanel, DataQualityPanel)
+- Named D3 exit transitions (`node-exit`, `label-exit`, `edge-exit`)
+- Stale circle/label cleanup before D3 data join (fixes reset node-vanish bug)
+- `+`/`-` hotkeys for ring expand/collapse, space bar play/pause
+- QoL calibration fix: KNN Gaussian residual correction
+- QoL score label sync during simulation playback (2 decimal places)
+- Simulation start year fix (was hardcoded to 2020)
+- SHAP cache pipeline stability (no restart on year scrub)
+- Hide unaffected domain nodes during simulation
+- CountrySelector dropdown animation
+- Layout stability fix for single-node collapse (pending: `docs/plans/codex-layout-stability-fix.md`)
 
-- Three.js or WebGL radial viz with depth encoding causal distance
-- Camera controls: orbit, zoom, fly-through
-- 3D node interaction (hover, click, select)
+---
+
+## Phase 8 — Accessibility (PLANNED)
+
+Goal: WCAG 2.1 AA compliance. Keyboard navigation, screen reader support, color contrast, focus management, ARIA attributes across all interactive elements.
+
+---
+
+## Phase 9 — Mobile & Responsive (PLANNED)
+
+Goal: Full screen size support from phone to ultrawide. Responsive layout, touch interactions, simplified views for small screens, adaptive UI panels.
+
+---
+
+## Phase 10 — Security & Safety (PLANNED)
+
+Goal: Production-ready security. CORS production gating, rate limiting, input sanitization, ENV-based config, CSP headers.
+
+---
+
+## Phase 11 — Tutorial (PLANNED)
+
+Goal: Guided first-visit walkthrough. Step-by-step tour of the causal graph, simulation panel, timeline, and map features.
+
+---
+
+## Phase 12 — Methodology Page (PLANNED)
+
+Goal: Standalone `/methodology` route explaining the PC algorithm, SHAP importance, temporal bootstrapping, income stratification, QoL composite, and limitations.
+
+---
+
+## Phase 13 — Sensitivity Analysis (PLANNED)
+
+Goal: Edge weight perturbation, ensemble simulation runs, confidence intervals, multi-target optimization.
+
+---
+
+## Phase 14 — Public API (PLANNED)
+
+Goal: Documented REST API with authentication, rate limits, usage docs, and versioning.
 
 ---
 
 ## Future Phases (BACKLOG)
 
+- **3D global graph view**: Radial viz in 3D with depth, rotation, fly-through (Three.js/WebGL)
 - **Scenario comparison**: Two scenarios side-by-side with diff view
 - **Country comparison**: Same scenario across two countries
-- **Methodology page**: PC algorithm, SHAP, temporal bootstrapping explainer
-- **Sensitivity analysis**: Edge weight perturbation, ensemble runs, confidence intervals
 - **Education mode**: Guided tour of the causal graph
-- **Accessibility**: WCAG 2.1 AA, keyboard navigation, screen reader support
-- **Mobile support**: Responsive layout, touch interactions
 - **PWA**: Offline capability, installable app
-- **Public API**: Documented REST API with auth and rate limits
 - **i18n**: Translation infrastructure (French, Spanish)
 
 ---
