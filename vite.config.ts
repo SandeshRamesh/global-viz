@@ -8,6 +8,7 @@ export default defineConfig({
   base: '/',
   server: {
     port: 5174,
+    host: true,
     watch: {
       usePolling: true,  // Required for hot reload over SSH
     },

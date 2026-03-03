@@ -816,7 +816,8 @@ export function CountrySelector() {
           className="touch-target-44"
           onClick={() => {
             setIsFocused(!isFocused)
-            if (!isFocused) inputRef.current?.focus()
+            // Only auto-focus input on desktop to avoid mobile keyboard popup
+            if (!isFocused && window.innerWidth >= 768) inputRef.current?.focus()
           }}
           aria-label={isFocused ? 'Close country list' : 'Open country list'}
           aria-expanded={showDropdown}

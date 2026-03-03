@@ -20,6 +20,10 @@ interface ViewTabsProps {
   simMode?: boolean           // Sim mode enables local/split even without targets
   /** Hide text labels on action buttons, show icon only */
   compact?: boolean
+  /** Hide the Split tab entirely (e.g. on narrow viewports) */
+  hideSplit?: boolean
+  /** Mobile layout — repositions Map button to bottom-right */
+  isMobileLayout?: boolean
 }
 
 /**
@@ -34,7 +38,9 @@ export function ViewTabs({
   canClear,
   onShare,
   simMode = false,
-  compact = false
+  compact = false,
+  hideSplit = false,
+  isMobileLayout = false,
 }: ViewTabsProps) {
   const hasTargets = localTargetCount > 0 || simMode
   const clearEnabled = canClear ?? hasTargets
@@ -68,6 +74,7 @@ export function ViewTabs({
   }
 
   return (
+    <>
     <div
       style={{
         display: 'flex',
@@ -145,29 +152,31 @@ export function ViewTabs({
               Global
             </button>
 
-            {/* Split tab */}
-            <button
-              onClick={() => onViewChange('split')}
-              disabled={!hasTargets && activeView !== 'split'}
-              style={{
-                padding: '8px 16px',
-                fontSize: 13,
-                fontWeight: activeView === 'split' ? 600 : 400,
-                cursor: !hasTargets && activeView !== 'split' ? 'not-allowed' : 'pointer',
-                border: 'none',
-                borderLeft: '1px solid #ddd',
-                background: activeView === 'split' ? '#3B82F6' : 'white',
-                color: activeView === 'split' ? 'white' : !hasTargets ? '#aaa' : '#555',
-                opacity: !hasTargets && activeView !== 'split' ? 0.6 : 1,
-                transition: 'all 0.15s ease'
-              }}
-              title={!hasTargets
-                ? "Double-click a node to enable split view"
-                : "Split View - See both views side by side (S)"
-              }
-            >
-              Split
-            </button>
+            {/* Split tab — hidden on narrow viewports */}
+            {!hideSplit && (
+              <button
+                onClick={() => onViewChange('split')}
+                disabled={!hasTargets && activeView !== 'split'}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontWeight: activeView === 'split' ? 600 : 400,
+                  cursor: !hasTargets && activeView !== 'split' ? 'not-allowed' : 'pointer',
+                  border: 'none',
+                  borderLeft: '1px solid #ddd',
+                  background: activeView === 'split' ? '#3B82F6' : 'white',
+                  color: activeView === 'split' ? 'white' : !hasTargets ? '#aaa' : '#555',
+                  opacity: !hasTargets && activeView !== 'split' ? 0.6 : 1,
+                  transition: 'all 0.15s ease'
+                }}
+                title={!hasTargets
+                  ? "Double-click a node to enable split view"
+                  : "Split View - See both views side by side (S)"
+                }
+              >
+                Split
+              </button>
+            )}
 
             {/* Local tab */}
             <button
@@ -292,58 +301,60 @@ export function ViewTabs({
         </button>
       </div>
 
-      {/* Row 3: Map layer toggle */}
-      <div
-        style={{
-          display: 'flex',
-          background: 'white',
-          borderRadius: 6,
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          border: '1px solid #ddd',
-          overflow: 'hidden'
-        }}
-      >
-        <button
-          onClick={() => toggleMapForeground()}
+      {/* Row 3: Map layer toggle — on mobile, rendered as fixed bottom-right button */}
+      {!isMobileLayout && (
+        <div
           style={{
-            padding: '6px 12px',
-            fontSize: 12,
-            fontWeight: 500,
-            cursor: 'pointer',
-            border: 'none',
-            borderRadius: 5,
-            background: mapForeground ? '#3B82F6' : 'white',
-            color: mapForeground ? 'white' : '#555',
-            transition: 'all 0.15s ease',
             display: 'flex',
-            alignItems: 'center',
-            gap: 5
-          }}
-          title={mapForeground ? 'Send map to background (M)' : 'Bring map forward (M)'}
-          onMouseEnter={(e) => {
-            if (!mapForeground) e.currentTarget.style.background = '#f5f5f5'
-          }}
-          onMouseLeave={(e) => {
-            if (!mapForeground) e.currentTarget.style.background = 'white'
+            background: 'white',
+            borderRadius: 6,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            border: '1px solid #ddd',
+            overflow: 'hidden'
           }}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+          <button
+            onClick={() => toggleMapForeground()}
+            style={{
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+              border: 'none',
+              borderRadius: 5,
+              background: mapForeground ? '#3B82F6' : 'white',
+              color: mapForeground ? 'white' : '#555',
+              transition: 'all 0.15s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5
+            }}
+            title={mapForeground ? 'Send map to background (M)' : 'Bring map forward (M)'}
+            onMouseEnter={(e) => {
+              if (!mapForeground) e.currentTarget.style.background = '#f5f5f5'
+            }}
+            onMouseLeave={(e) => {
+              if (!mapForeground) e.currentTarget.style.background = 'white'
+            }}
           >
-            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-            <line x1="8" y1="2" x2="8" y2="18" />
-            <line x1="16" y1="6" x2="16" y2="22" />
-          </svg>
-          {!compact && 'Map (M)'}
-        </button>
-      </div>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+              <line x1="8" y1="2" x2="8" y2="18" />
+              <line x1="16" y1="6" x2="16" y2="22" />
+            </svg>
+            {!compact && 'Map (M)'}
+          </button>
+        </div>
+      )}
 
       {/* Row 4: Share button */}
       <div
@@ -410,6 +421,56 @@ export function ViewTabs({
         </button>
       </div>
     </div>
+
+    {/* Mobile: Map button fixed at bottom-right */}
+    {isMobileLayout && (
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 10,
+          right: 10,
+          zIndex: 100,
+        }}
+      >
+        <button
+          onClick={() => toggleMapForeground()}
+          className="touch-target-44"
+          style={{
+            width: 48,
+            height: 48,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            border: mapForeground ? '1px solid #3B82F6' : '1px solid #e0e0e0',
+            borderRadius: 24,
+            background: mapForeground ? '#3B82F6' : 'rgba(255,255,255,0.95)',
+            color: mapForeground ? 'white' : '#666',
+            boxShadow: mapForeground ? '0 2px 8px rgba(59,130,246,0.4)' : '0 2px 12px rgba(0,0,0,0.1)',
+            backdropFilter: 'blur(8px)',
+            transition: 'all 0.2s ease',
+          }}
+          title={mapForeground ? 'Send map to background' : 'Bring map forward'}
+          aria-label={mapForeground ? 'Send map to background' : 'Bring map forward'}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+            <line x1="8" y1="2" x2="8" y2="18" />
+            <line x1="16" y1="6" x2="16" y2="22" />
+          </svg>
+        </button>
+      </div>
+    )}
+    </>
   )
 }
 

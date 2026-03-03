@@ -17,6 +17,8 @@ import type {
   ViewMode
 } from './types'
 import { ViewTabs } from './components/ViewTabs'
+import { SidebarDrawer } from './components/SidebarDrawer'
+import { DesktopBanner } from './components/DesktopBanner'
 import { StrataTabs } from './components/StrataTabs'
 import { LocalView } from './components/LocalView'
 import { WorldMap } from './components/WorldMap'
@@ -371,6 +373,12 @@ function getAdaptiveSplitDefault(width: number): number {
   return 0.50
 }
 
+/** On mobile, the graph's vertical anchor is at 1/6 of viewport (center of top 1/3).
+ *  On desktop, it's the normal center (1/2). */
+function getGraphCenterY(h: number): number {
+  return window.innerWidth < BREAKPOINTS.TABLET ? h / 3 : h / 2
+}
+
 function App() {
   const viewport = useViewport()
   const svgRef = useRef<SVGSVGElement>(null)
@@ -396,6 +404,9 @@ function App() {
   const [hoveredNode, setHoveredNode] = useState<ExpandableNode | null>(null)
   const [simulateBtnHovered, setSimulateBtnHovered] = useState(false)
   const [dataQualityOpen, setDataQualityOpen] = useState(false)
+  // Mobile minimized states: panel hidden but button stays colored
+  const [simMinimized, setSimMinimized] = useState(false)
+  const [dqMinimized, setDqMinimized] = useState(false)
   const [dataQualityBtnHovered, setDataQualityBtnHovered] = useState(false)
   const tooltipNodeRef = useRef<ExpandableNode | null>(null)  // Caches last hovered node for smooth tooltip fade
   const tooltipShowTimerRef = useRef<number | null>(null)
@@ -449,6 +460,7 @@ function App() {
   const outcomeSectorSnapshotRef = useRef<OutcomeSectorSnapshot | null>(null)
   const preSimulationExpandedNodesRef = useRef<Set<string>>(new Set())
   const preSimulationPinnedPathsRef = useRef<Set<string>>(new Set())
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const restoreNavAfterClearRef = useRef(false)
   const focusedGraphNodeIdRef = useRef<string | null>(null)
   const graphNavActiveRef = useRef(false)
@@ -471,6 +483,7 @@ function App() {
     selectedCountry,
     clearCountry,
     togglePanel,
+    openPanel,
     temporalResults,
     historicalTimeline,
     temporalShapTimeline,
@@ -898,6 +911,28 @@ function App() {
       setSplitRatio(getAdaptiveSplitDefault(viewport.width))
     }
   }, [viewport.width])
+
+  // Auto-switch from split to local when viewport drops below 1024px
+  useEffect(() => {
+    if (viewport.isBelow(1024)) {
+      setViewMode(prev => prev === 'split' ? 'local' : prev)
+    }
+  }, [viewport.width, viewport.isBelow])
+
+  // Auto-close sidebar drawer when a panel opens on mobile (phones only)
+  useEffect(() => {
+    if (viewport.isBelow(768) && (isPanelOpen || dataQualityOpen)) {
+      setSidebarOpen(false)
+    }
+  }, [isPanelOpen, dataQualityOpen, viewport])
+
+  // Reset minimized state when panel is fully closed (X button)
+  useEffect(() => {
+    if (!isPanelOpen) setSimMinimized(false)
+  }, [isPanelOpen])
+  useEffect(() => {
+    if (!dataQualityOpen) setDqMinimized(false)
+  }, [dataQualityOpen])
 
   // Add a node to Local View targets
   const addToLocalView = useCallback((nodeId: string) => {
@@ -1731,7 +1766,7 @@ function App() {
     const allYs = nodes.map(n => n.y)
 
     if (allXs.length === 0) {
-      return d3.zoomIdentity.translate(width / 2, height / 2).scale(1)
+      return d3.zoomIdentity.translate(width / 2, getGraphCenterY(height)).scale(1)
     }
 
     const boundsMinX = Math.min(...allXs)
@@ -1752,7 +1787,7 @@ function App() {
     const scale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
 
     const translateX = width / 2 - centerX * scale
-    const translateY = height / 2 - centerY * scale
+    const translateY = getGraphCenterY(height) - centerY * scale
 
     return d3.zoomIdentity.translate(translateX, translateY).scale(scale)
   }, [viewMode, splitRatio])
@@ -2556,7 +2591,7 @@ function App() {
     const fitScale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
 
     const newX = width / 2 - centerX * fitScale
-    const newY = height / 2 - centerY * fitScale
+    const newY = getGraphCenterY(height) - centerY * fitScale
     const newTransform = d3.zoomIdentity.translate(newX, newY).scale(fitScale)
 
     svg.transition().duration(300).call(zoomRef.current.transform, newTransform)
@@ -2595,7 +2630,7 @@ function App() {
     const currentScale = currentTransformRef.current?.k ?? 1
 
     const newX = width / 2 - node.x * currentScale
-    const newY = height / 2 - node.y * currentScale
+    const newY = getGraphCenterY(height) - node.y * currentScale
     const newTransform = d3.zoomIdentity.translate(newX, newY).scale(currentScale)
 
     svg.transition().duration(400).ease(d3.easeCubicOut)
@@ -2623,8 +2658,8 @@ function App() {
         }
       } else if (e.key === 's' || e.key === 'S') {
         e.preventDefault()
-        // Switch to split if there are targets or sim mode is active
-        if (localViewTargets.length > 0 || localViewSimMode) {
+        // Switch to split if there are targets or sim mode is active (disabled below 1024px)
+        if ((localViewTargets.length > 0 || localViewSimMode) && window.innerWidth >= 1024) {
           setViewMode('split')
         }
       } else if (e.key === 'm' || e.key === 'M') {
@@ -3294,7 +3329,7 @@ function App() {
       const fitScale = Math.min(scaleX, scaleY, 3) // Cap at 3x zoom
 
       const newX = containerWidth / 2 - centerX * fitScale
-      const newY = containerHeight / 2 - centerY * fitScale
+      const newY = getGraphCenterY(containerHeight) - centerY * fitScale
 
       return d3.zoomIdentity.translate(newX, newY).scale(fitScale)
     }
@@ -5443,8 +5478,9 @@ function App() {
         // Ring 1 (Outcomes): Narrower range (4-8px scaled by viewport)
         const baseMax = vLayout.getFontSize(1, 1)  // Get viewport-scaled maximum
         const scaleFactor = baseMax / 16  // Normalize to ~1.0 on 1080p
-        const ring1Min = 4 * scaleFactor
-        const ring1Max = 8 * scaleFactor
+        const mobileBoost = window.innerWidth < 768 ? 1.4 : 1
+        const ring1Min = 4 * scaleFactor * mobileBoost
+        const ring1Max = 8 * scaleFactor * mobileBoost
         fontSize = ring1Min + (ring1Max - ring1Min) * Math.sqrt(importance)
         // DEBUG: Log all Ring 1 font sizes
         debug.render(`  ${label}: ${fontSize.toFixed(1)}px (importance=${importance.toFixed(4)})`)
@@ -5914,6 +5950,10 @@ function App() {
     if (urlState.country || urlState.interventions || urlState.template) {
       const simStore = useSimulationStore.getState()
       simStore.openPanel()
+      // On mobile, start minimized so the graph is visible
+      if (window.innerWidth < 768) {
+        setSimMinimized(true)
+      }
 
       // Country and stratum are mutually exclusive in shared state
       if (urlState.country) {
@@ -6254,7 +6294,7 @@ function App() {
 
       // Calculate translation to center the relevant content
       let newX = width / 2 - centerX * newScale
-      let newY = height / 2 - centerY * newScale
+      let newY = getGraphCenterY(height) - centerY * newScale
 
       if (action === 'collapse' && collapseCenterRange) {
         const deltaX = Math.abs(newX - currentTransform.x)
@@ -6269,7 +6309,7 @@ function App() {
           const recenteredX = clamp(centerX * 0.72, collapseCenterRange.minCenterX, collapseCenterRange.maxCenterX)
           const recenteredY = clamp(centerY * 0.72, collapseCenterRange.minCenterY, collapseCenterRange.maxCenterY)
           newX = width / 2 - recenteredX * newScale
-          newY = height / 2 - recenteredY * newScale
+          newY = getGraphCenterY(height) - recenteredY * newScale
           logCamera('collapse nudge applied', {
             centerBefore: { x: centerX, y: centerY },
             centerAfter: { x: recenteredX, y: recenteredY },
@@ -6373,22 +6413,32 @@ function App() {
         mapViewMode={mapViewMode}
         onRegionSelect={(regionKey) => setSelectedRegion(regionKey as import('./constants/regions').RegionKey)}
         selectedRegion={selectedRegion}
+        enableZoom={viewport.isBelow(768)}
+        mobileLayout={viewport.isBelow(768)}
       />
 
       {/* Left Sidebar - Responsive flex container */}
+      <SidebarDrawer
+        isMobileLayout={viewport.isBelow(768)}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(prev => !prev)}
+        onClose={() => setSidebarOpen(false)}
+        strataVisible={!selectedCountry && !selectedRegion}
+        hideHamburger={(isPanelOpen && !simMinimized) || (dataQualityOpen && !dqMinimized)}
+      >
       <div
         className="left-sidebar"
         style={{
-          position: 'absolute',
-          top: 16,
-          left: 10,
-          bottom: 10,
-          width: 'min(220px, 26vw)',
+          position: viewport.isBelow(768) ? 'relative' : 'absolute',
+          top: viewport.isBelow(768) ? 0 : 16,
+          left: viewport.isBelow(768) ? 0 : 10,
+          bottom: viewport.isBelow(768) ? undefined : 10,
+          width: viewport.isBelow(768) ? '100%' : 'min(220px, 26vw)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          zIndex: 100,
-          pointerEvents: 'none'
+          zIndex: viewport.isBelow(768) ? undefined : 100,
+          pointerEvents: viewport.isBelow(768) ? 'auto' : 'none'
         }}
       >
         {/* Top Group - Search, Country, Rings, Domains */}
@@ -6542,13 +6592,13 @@ function App() {
         </div>
 
         {/* Country Selector */}
-        <div style={{ background: 'white', padding: '8px 10px', borderRadius: 6, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #ddd', pointerEvents: 'auto' }}>
+        <div style={{ background: 'white', padding: viewport.isBelow(768) ? '10px 12px' : '8px 10px', borderRadius: 6, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #ddd', pointerEvents: 'auto' }}>
           <CountrySelector />
         </div>
 
         {/* Rings Panel - Hidden in local view */}
         {ringStats.length > 0 && viewMode !== 'local' && (
-          <nav aria-label="Graph controls" style={{ background: 'white', padding: '8px 10px', borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', fontSize: 11, pointerEvents: 'auto', maxWidth: 180 }}>
+          <nav aria-label="Graph controls" style={{ background: 'white', padding: '8px 10px', borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', fontSize: 11, pointerEvents: 'auto', maxWidth: viewport.isBelow(768) ? undefined : 180 }}>
             <div style={{ fontWeight: 'bold', marginBottom: 6, fontSize: 11 }}>Rings</div>
             {ringStats.map((ring, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, paddingBottom: 2, borderBottom: i < ringStats.length - 1 ? '1px solid #eee' : 'none' }}>
@@ -6590,7 +6640,7 @@ function App() {
             flex: viewMode === 'local' ? 1 : 'none',
             display: 'flex',
             flexDirection: 'column',
-            maxWidth: 180
+            maxWidth: viewport.isBelow(768) ? undefined : 180
           }}>
             <div style={{ fontWeight: 'bold', marginBottom: 4, fontSize: 11 }}>Domains</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -6606,7 +6656,8 @@ function App() {
         )}
         </header>
 
-        {/* Bottom - Data Quality & Simulate Buttons */}
+        {/* Bottom - Data Quality & Simulate Buttons (desktop only inside sidebar) */}
+        {!viewport.isBelow(768) && (
         <div style={{ pointerEvents: 'auto', display: 'flex', gap: 8 }}>
           {/* Data Quality Button */}
           <button
@@ -6674,12 +6725,94 @@ function App() {
             </svg>
           </button>
         </div>
+        )}
       </div>
+      </SidebarDrawer>
+
+      {/* Bottom buttons — rendered outside drawer on mobile so they stay visible */}
+      {viewport.isBelow(768) && (
+        <div style={{
+          position: 'fixed',
+          bottom: 10,
+          left: 10,
+          display: 'flex',
+          gap: 8,
+          zIndex: 100,
+          pointerEvents: 'auto',
+        }}>
+          <button
+            onClick={() => {
+              if (dqMinimized) { setDqMinimized(false) }
+              else { setDataQualityOpen(!dataQualityOpen) }
+            }}
+            title="Data Quality"
+            style={{
+              width: 48,
+              height: 48,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: dataQualityOpen ? '#10B981' : 'rgba(255, 255, 255, 0.95)',
+              border: dataQualityOpen ? '1px solid #10B981' : '1px solid #e0e0e0',
+              borderRadius: 24,
+              color: dataQualityOpen ? 'white' : '#666',
+              cursor: 'pointer',
+              boxShadow: dataQualityOpen ? '0 2px 8px rgba(16, 185, 129, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.1)',
+              backdropFilter: 'blur(8px)',
+              transition: 'background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease',
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.9H6.8A2 2 0 0 1 5 17l4-9V3z" />
+              <line x1="9" y1="3" x2="15" y2="3" />
+              <path d="M8 14h8" />
+            </svg>
+          </button>
+          <button
+            onClick={() => {
+              if (simMinimized) { setSimMinimized(false) }
+              else if (isPanelOpen) { setSimMinimized(true) }
+              else { openPanel(); setSimMinimized(false) }
+            }}
+            title="Simulate"
+            style={{
+              width: 48,
+              height: 48,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: isPanelOpen ? '#3B82F6' : 'rgba(255, 255, 255, 0.95)',
+              border: isPanelOpen ? '1px solid #3B82F6' : '1px solid #e0e0e0',
+              borderRadius: 24,
+              color: isPanelOpen ? 'white' : '#666',
+              cursor: 'pointer',
+              boxShadow: isPanelOpen ? '0 2px 8px rgba(59, 130, 246, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.1)',
+              backdropFilter: 'blur(8px)',
+              transition: 'background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease',
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <rect x="9" y="9" width="6" height="6" />
+              <line x1="9" y1="1" x2="9" y2="4" />
+              <line x1="15" y1="1" x2="15" y2="4" />
+              <line x1="9" y1="20" x2="9" y2="23" />
+              <line x1="15" y1="20" x2="15" y2="23" />
+              <line x1="20" y1="9" x2="23" y2="9" />
+              <line x1="20" y1="15" x2="23" y2="15" />
+              <line x1="1" y1="9" x2="4" y2="9" />
+              <line x1="1" y1="15" x2="4" y2="15" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Data Quality Panel */}
+      {!dqMinimized && (
       <DataQualityPanel
         isOpen={dataQualityOpen}
         onClose={() => setDataQualityOpen(false)}
+        onMinimize={() => setDqMinimized(true)}
         edges={(() => {
           // Get current year from the effective timeline (historicalTimeline has filtered years)
           const year = historicalTimeline?.years?.[currentYearIndex]
@@ -6694,6 +6827,7 @@ function App() {
         nodeById={nodeByIdMap}
         isLocalView={viewMode === 'local' || viewMode === 'split'}
       />
+      )}
 
       {/* Minimal loading spinner - centered on QoL node, with delay to avoid flash */}
       <LoadingSpinner
@@ -6703,6 +6837,9 @@ function App() {
         posRef={qolNodePositionRef}
         elRef={spinnerElRef}
       />
+
+      {/* Desktop recommendation banner (mobile only) */}
+      <DesktopBanner show={viewport.isBelow(768)} />
 
       {/* Error State */}
       {error && (
@@ -6740,24 +6877,31 @@ function App() {
           onShare={shareCurrentState}
           simMode={localViewSimMode}
           compact={viewport.isBelow(1200)}
+          hideSplit={viewport.isBelow(1024)}
+          isMobileLayout={viewport.isBelow(768)}
         />
       </div>
 
       {/* Strata Tabs - Center top, available in all views when non-country/region specific */}
       {!selectedCountry && !selectedRegion && (
         <div
-          style={{
+          style={viewport.isBelow(768) ? {
+            position: 'absolute',
+            top: 16,
+            left: 10,
+            zIndex: 100,
+          } : {
             position: 'absolute',
             top: 4,
             left: '50%',
             transform: 'translateX(-50%)',
-            zIndex: 100
+            zIndex: 100,
           }}
         >
           <StrataTabs
             activeStratum={selectedStratum}
             onStratumChange={setStratum}
-            compact={viewport.isBelow(1200)}
+            compact={viewport.isBelow(1024) || viewport.isBelow(1200)}
           />
         </div>
       )}
@@ -7044,7 +7188,9 @@ function App() {
       })()}
 
       {/* Simulation Panel - Right sidebar */}
-      <SimulationPanel />
+      {!simMinimized && (
+        <SimulationPanel onMinimize={() => setSimMinimized(true)} />
+      )}
 
       {/* Timeline Player - Bottom center */}
       <TimelinePlayer

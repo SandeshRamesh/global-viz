@@ -17,6 +17,7 @@ import { debug } from '../../utils/debug'
 import { DATA_YEAR_MAX, DATA_YEAR_MIN } from '../../constants/time'
 import { PANEL_EXIT_MS } from '../../constants/animation'
 import { usePresence } from '../../hooks/usePresence'
+import { useResponsive } from '../../hooks/useResponsive'
 import type {
   CountryDataQuality,
   YearDataQuality,
@@ -33,6 +34,8 @@ import type { RawNodeV21 } from '../../types'
 interface DataQualityPanelProps {
   isOpen: boolean
   onClose: () => void
+  /** Called on mobile when user taps chevron to minimize (hide panel, keep button colored) */
+  onMinimize?: () => void
   /** Edges for CI Stats tab (optional, enables CI Stats in Local View) */
   edges?: CountryGraphEdge[]
   /** Target node IDs for Local View (optional) */
@@ -94,6 +97,7 @@ const STRATUM_CONFIG: Record<IncomeStratum, { label: string; color: string; dark
 export function DataQualityPanel({
   isOpen,
   onClose,
+  onMinimize,
   edges,
   targetIds,
   nodeById,
@@ -101,6 +105,7 @@ export function DataQualityPanel({
 }: DataQualityPanelProps) {
   const { isMounted, isVisible } = usePresence(isOpen, PANEL_EXIT_MS)
   const { selectedCountry, selectedStratum, historicalTimeline, currentYearIndex } = useSimulationStore()
+  const { isMobileLayout } = useResponsive()
 
   // Collapse state (local, not persisted)
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -189,6 +194,7 @@ export function DataQualityPanel({
 
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isMobileLayout) return
     // Only drag from header, not close button
     if ((e.target as HTMLElement).closest('button')) return
 
@@ -198,7 +204,7 @@ export function DataQualityPanel({
       y: e.clientY - position.y
     }
     e.preventDefault()
-  }, [position])
+  }, [position, isMobileLayout])
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging) return
@@ -511,15 +517,32 @@ export function DataQualityPanel({
     <div
       ref={panelRef}
       role="dialog"
-      aria-modal="false"
+      aria-modal={isMobileLayout ? 'true' : 'false'}
       aria-hidden={!isOpen}
       aria-label="Data quality"
-      style={{
+      style={isMobileLayout ? {
+        // Mobile: fullscreen overlay (above hamburger z-index 1051)
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'white',
+        borderRadius: 0,
+        zIndex: 1100,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? 'translateY(0)' : 'translateY(14px)',
+        pointerEvents: isVisible ? 'auto' : 'none',
+        transition: `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease`,
+      } : {
         position: 'fixed',
         top: position.y,
         left: position.x,
         width: Math.min(DQ_MAX_WIDTH, window.innerWidth - 40),
-        maxHeight: isCollapsed ? DQ_HEADER_HEIGHT : '80vh',
+        maxHeight: isCollapsed ? undefined : '80vh',
         background: 'white',
         borderRadius: 12,
         boxShadow: isDragging
@@ -529,16 +552,16 @@ export function DataQualityPanel({
         overflow: 'hidden',
         transition: isDragging
           ? 'none'
-          : `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease, box-shadow 0.2s ease, max-height 0.2s ease`,
+          : `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease, box-shadow 0.2s ease`,
         userSelect: isDragging ? 'none' : 'auto',
         display: 'flex',
         flexDirection: 'column',
         opacity: isVisible ? 1 : 0,
         transform: isVisible ? 'translateY(0)' : 'translateY(14px)',
-        pointerEvents: isVisible ? 'auto' : 'none'
+        pointerEvents: isVisible ? 'auto' : 'none',
       }}
     >
-      {/* Header - draggable */}
+      {/* Header - draggable (desktop) / tappable (mobile) */}
       <div
         onMouseDown={handleMouseDown}
         style={{
@@ -548,31 +571,31 @@ export function DataQualityPanel({
           justifyContent: 'space-between',
           alignItems: 'center',
           background: '#f8f9fa',
-          cursor: isDragging ? 'grabbing' : 'grab',
+          cursor: isMobileLayout ? 'default' : (isDragging ? 'grabbing' : 'grab'),
           flexShrink: 0,
-          minHeight: DQ_HEADER_HEIGHT
+          minHeight: DQ_HEADER_HEIGHT,
+          minWidth: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            {/* Erlenmeyer flask */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
             <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.9H6.8A2 2 0 0 1 5 17l4-9V3z" />
             <line x1="9" y1="3" x2="15" y2="3" />
             <path d="M8 14h8" />
           </svg>
-          <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>Data Quality</span>
+          <span style={{ fontWeight: 600, fontSize: 13, color: '#333', flexShrink: 0 }}>Data Quality</span>
           {isCollapsed && activePage !== 'quality' && (
             <span style={{ fontSize: 11, color: '#767676' }}>
               {activePage === 'distribution' ? '· Distribution' : '· CI Stats'}
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           <button
             className="touch-target-44"
-            onClick={() => setIsCollapsed(prev => !prev)}
-            title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
-            aria-label={isCollapsed ? 'Expand data quality panel' : 'Collapse data quality panel'}
+            onClick={(e) => { e.stopPropagation(); isMobileLayout && onMinimize ? onMinimize() : setIsCollapsed(prev => !prev) }}
+            title={isMobileLayout ? 'Minimize panel' : (isCollapsed ? 'Expand panel' : 'Collapse panel')}
+            aria-label={isMobileLayout ? 'Minimize data quality panel' : (isCollapsed ? 'Expand data quality panel' : 'Collapse data quality panel')}
             style={{
               background: 'none',
               border: 'none',
@@ -590,24 +613,24 @@ export function DataQualityPanel({
             ▾
           </button>
           <button
-            className="touch-target-44"
-            onClick={onClose}
-            aria-label="Close data quality panel"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 4,
-              display: 'flex',
-              alignItems: 'center',
-              color: '#767676'
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+              className="touch-target-44"
+              onClick={onClose}
+              aria-label="Close data quality panel"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                color: '#767676'
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
         </div>
       </div>
 

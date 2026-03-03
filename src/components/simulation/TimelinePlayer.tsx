@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSimulationStore } from '../../stores/simulationStore'
 import { INTERVENTION_YEAR_MAX, SIM_MS_PER_YEAR } from '../../constants/time'
+import { useResponsive } from '../../hooks/useResponsive'
 
 type PlayerState = 'docked' | 'expanded' | 'collapsed' | 'docking'
 
@@ -42,6 +43,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     layoutReady
   } = useSimulationStore()
 
+  const { isMobileLayout } = useResponsive()
   const intervalRef = useRef<number | null>(null)
   const [playerState, setPlayerState] = useState<PlayerState>('docked')
   const [pendingPlay, setPendingPlay] = useState(false)
@@ -203,10 +205,17 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     }
 
     if (playerState === 'expanded') {
-      // Not playing + expanded -> collapse after 2s
-      collapseTimeoutRef.current = window.setTimeout(() => {
-        setPlayerState('collapsed')
-      }, 4000)
+      if (isMobileLayout) {
+        // Mobile: skip collapsed, go straight to docking
+        collapseTimeoutRef.current = window.setTimeout(() => {
+          setPlayerState('docking')
+        }, 2000)
+      } else {
+        // Desktop: collapse after 4s
+        collapseTimeoutRef.current = window.setTimeout(() => {
+          setPlayerState('collapsed')
+        }, 4000)
+      }
     } else if (playerState === 'collapsed') {
       // Only allow docking when on the latest year
       // Otherwise stay collapsed to show the non-latest year
@@ -224,7 +233,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
     }
 
     return clearTimers
-  }, [isPlaying, playerState, isDragging, clearTimers, currentYearIndex, maxIndex])
+  }, [isPlaying, playerState, isDragging, clearTimers, currentYearIndex, maxIndex, isMobileLayout])
 
   // T key toggles timeline expanded/docked
   useEffect(() => {
@@ -826,6 +835,49 @@ const timelineStyles = `
   .timeline-player.expanded:not(.playing):not(.dragging) .cursor:hover .cursor-tooltip,
   .timeline-player.expanded:not(.playing):not(.dragging) .timeline-track:hover .cursor-tooltip {
     opacity: 1;
+  }
+
+  @media (max-width: 767px) {
+    .timeline-player {
+      padding: 6px 10px;
+      gap: 8px;
+      bottom: 10px;
+    }
+    .timeline-player.collapsed {
+      padding: 6px 8px;
+      gap: 6px;
+    }
+    .timeline-track {
+      width: 140px;
+      min-height: 44px;
+    }
+    .expandable-content {
+      gap: 8px;
+      max-width: 240px;
+    }
+    .year-display-always {
+      font-size: 11px;
+      min-width: 30px;
+    }
+    .play-btn {
+      width: 28px;
+      height: 28px;
+    }
+    .cursor {
+      width: 16px;
+      height: 16px;
+    }
+    .docked-btn {
+      width: 48px;
+      height: 48px;
+    }
+    .timeline-docked {
+      bottom: 10px;
+    }
+    .status-text {
+      font-size: 10px;
+      min-width: 60px;
+    }
   }
 `
 

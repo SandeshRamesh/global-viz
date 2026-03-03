@@ -96,6 +96,10 @@ interface WorldMapProps {
   mapViewMode: 'country' | 'regional'
   onRegionSelect?: (regionKey: string) => void
   selectedRegion?: string | null
+  /** Enable pinch-zoom / pan on the map (touch devices, mobile) */
+  enableZoom?: boolean
+  /** Position map in bottom 2/3 of viewport (mobile stacked layout) */
+  mobileLayout?: boolean
 }
 
 /**
@@ -224,7 +228,8 @@ const COLOR_TRANSITION_MS = 400
 export function WorldMap({
   foreground, qolScores, currentYear, selectedStratum, classificationsCache,
   simAdjustments, onCountrySelect, onCountryHover, selectedCountryIso3,
-  mapViewMode, onRegionSelect, selectedRegion,
+  mapViewMode, onRegionSelect, selectedRegion, enableZoom = false,
+  mobileLayout = false,
 }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -235,6 +240,8 @@ export function WorldMap({
   const initializedRef = useRef(false)
   const prevYearRef = useRef<number | null>(null)
   const hoveredRegionKeyRef = useRef<string | null>(null)
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const currentTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity)
 
   // Stable refs for callbacks
   const onCountrySelectRef = useRef(onCountrySelect)
@@ -318,7 +325,7 @@ export function WorldMap({
     const isRegional = mapViewModeRef.current === 'regional'
     const selRegion = selectedRegionRef.current
 
-    d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
+    d3.select(svg).select('g.map-content').selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
       .each(function (d) {
         const numId = normalizeId(d.id)
         const iso3 = NUMERIC_TO_ISO3[numId]
@@ -352,7 +359,7 @@ export function WorldMap({
       })
 
     // Update region boundary mesh stroke
-    d3.select(svg).selectAll<SVGPathElement, unknown>('path.region-boundary')
+    d3.select(svg).select('g.map-content').selectAll<SVGPathElement, unknown>('path.region-boundary')
       .attr('stroke', '#333')
       .attr('stroke-width', isRegional ? 1.5 : 0)
       .attr('stroke-opacity', isRegional && isFg ? 0.6 : 0)
@@ -385,7 +392,23 @@ export function WorldMap({
     svg.setAttribute('height', String(height))
 
     const projection = d3.geoNaturalEarth1()
-      .fitSize([width, height], { type: 'FeatureCollection', features: featuresRef.current })
+    // On mobile, exclude Antarctica (id "010") to reclaim vertical space
+    const features = mobileLayout
+      ? featuresRef.current.filter(f => f.id !== '010')
+      : featuresRef.current
+
+    if (mobileLayout) {
+      // Use filtered features for initial fit, then manually scale up and re-center on Africa
+      projection.fitSize([width, height], { type: 'FeatureCollection', features })
+      const baseScale = projection.scale()
+      const scaleFactor = 1.15
+      projection.scale(baseScale * scaleFactor)
+      // Center on Africa (lon ~20, lat ~5)
+      projection.translate([width / 2, height / 2])
+      projection.center([20, 5])
+    } else {
+      projection.fitSize([width, height], { type: 'FeatureCollection', features })
+    }
     projectionRef.current = projection
 
     const pathGen = d3.geoPath().projection(projection)
@@ -394,9 +417,16 @@ export function WorldMap({
     const sel = d3.select(svg)
     sel.selectAll('*').remove()
 
+    // Wrap all content in a <g> for zoom transform
+    const contentG = sel.append('g').attr('class', 'map-content')
+    // Restore persisted transform if zoom is active
+    if (enableZoom) {
+      contentG.attr('transform', currentTransformRef.current.toString())
+    }
+
     // Country paths
-    sel.selectAll('path.country')
-      .data(featuresRef.current)
+    contentG.selectAll('path.country')
+      .data(features)
       .enter()
       .append('path')
       .attr('class', 'country')
@@ -453,7 +483,7 @@ export function WorldMap({
         const rB = featureRegion(b as unknown as GeoJSON.Feature)
         return a !== b && rA !== rB
       })
-      sel.append('path')
+      contentG.append('path')
         .attr('class', 'region-boundary')
         .datum(regionMesh)
         .attr('d', pathGen)
@@ -466,7 +496,7 @@ export function WorldMap({
 
     initializedRef.current = true
     applySelectionStyle()
-  }, [fillColor, iso3ToName, applySelectionStyle])
+  }, [fillColor, iso3ToName, applySelectionStyle, mobileLayout, enableZoom])
 
   // Render on mount and resize
   useEffect(() => {
@@ -479,6 +509,49 @@ export function WorldMap({
     ro.observe(container)
     return () => ro.disconnect()
   }, [renderMap])
+
+  // Attach/detach d3.zoom when enableZoom changes
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+
+    const svgSel = d3.select<SVGSVGElement, unknown>(svg)
+
+    if (enableZoom) {
+      const zoom = d3.zoom<SVGSVGElement, unknown>()
+        .scaleExtent([1, 5])
+        .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+          currentTransformRef.current = event.transform
+          svgSel.select('g.map-content').attr('transform', event.transform.toString())
+        })
+
+      zoomBehaviorRef.current = zoom
+      svgSel.call(zoom)
+      // Restore persisted transform
+      if (currentTransformRef.current !== d3.zoomIdentity) {
+        svgSel.call(zoom.transform, currentTransformRef.current)
+      }
+    } else {
+      // Remove zoom behavior, reset transform
+      svgSel.on('.zoom', null)
+      zoomBehaviorRef.current = null
+      currentTransformRef.current = d3.zoomIdentity
+      svgSel.select('g.map-content').attr('transform', null)
+    }
+
+    return () => {
+      svgSel.on('.zoom', null)
+    }
+  }, [enableZoom])
+
+  // Reset zoom to identity when crossing the 1024px threshold (enableZoom toggles)
+  const prevEnableZoomRef = useRef(enableZoom)
+  useEffect(() => {
+    if (prevEnableZoomRef.current && !enableZoom) {
+      currentTransformRef.current = d3.zoomIdentity
+    }
+    prevEnableZoomRef.current = enableZoom
+  }, [enableZoom])
 
   // Re-apply selection style when selection, foreground, or view mode changes
   useEffect(() => {
@@ -493,7 +566,7 @@ export function WorldMap({
     const isFirstPaint = prevYearRef.current === null
     prevYearRef.current = currentYear
 
-    const paths = d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
+    const paths = d3.select(svg).select('g.map-content').selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
 
     if (isFirstPaint) {
       paths.attr('fill', fillColor)
@@ -580,7 +653,7 @@ export function WorldMap({
       if (foundRegion !== hoveredRegionKeyRef.current) {
         hoveredRegionKeyRef.current = foundRegion
         if (foundRegion) {
-          d3.select(svg).selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
+          d3.select(svg).select('g.map-content').selectAll<SVGPathElement, GeoJSON.Feature>('path.country')
             .each(function (fd) {
               const fIso3 = NUMERIC_TO_ISO3[normalizeId(fd.id)]
               const fRegion = fIso3 ? ISO3_TO_REGION[fIso3] : undefined
@@ -617,16 +690,17 @@ export function WorldMap({
       ref={containerRef}
       style={{
         position: 'absolute',
-        top: 0,
+        top: mobileLayout ? '30%' : 0,
         left: 0,
         width: '100%',
-        height: '100%',
+        height: mobileLayout ? '70%' : '100%',
         zIndex: foreground ? 50 : 0,
         pointerEvents: foreground ? 'auto' : 'none',
         opacity: foreground ? 1 : 0.45,
         filter: foreground ? 'none' : 'saturate(0.15) brightness(0.9)',
         transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), filter 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-        willChange: 'opacity, filter'
+        willChange: 'opacity, filter',
+        overflow: mobileLayout ? 'visible' : undefined,
       }}
     >
       <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />

@@ -12,6 +12,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSimulationStore, useIsPanelOpen } from '../../stores/simulationStore'
 import { usePresence } from '../../hooks/usePresence'
 import { PANEL_EXIT_MS } from '../../constants/animation'
+import { useResponsive } from '../../hooks/useResponsive'
 import CountrySelector from './CountrySelector'
 import TemplateSelector from './TemplateSelector'
 import InterventionBuilder from './InterventionBuilder'
@@ -43,13 +44,27 @@ const getDefaultPosition = () => {
 // Main Component
 // ============================================
 
-export function SimulationPanel() {
+interface SimulationPanelProps {
+  /** Called on mobile when user taps chevron to minimize (hide panel, keep button colored) */
+  onMinimize?: () => void
+}
+
+export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
   const isPanelOpen = useIsPanelOpen()
-  const { closePanel, selectedCountry, interventions } = useSimulationStore()
+  const { closePanel, selectedCountry, interventions, isSimulating } = useSimulationStore()
   const { isMounted, isVisible } = usePresence(isPanelOpen, PANEL_EXIT_MS)
+  const { isMobileLayout } = useResponsive()
 
   // Collapse state (local, not persisted)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [countryExpanded, setCountryExpanded] = useState(false)
+
+  // Auto-minimize on mobile when simulation starts so user can see the graph
+  useEffect(() => {
+    if (isMobileLayout && isSimulating && onMinimize) {
+      onMinimize()
+    }
+  }, [isMobileLayout, isSimulating, onMinimize])
 
   // Drag state
   const [position, setPosition] = useState(() => getDefaultPosition())
@@ -73,9 +88,11 @@ export function SimulationPanel() {
       // Remember what had focus before opening
       triggerRef.current = document.activeElement
       // Focus the first focusable element after mount/animation
+      // On mobile, skip input focus to avoid keyboard popup
       requestAnimationFrame(() => {
-        const firstInput = panelRef.current?.querySelector<HTMLElement>('input, button, [tabindex="0"]')
-        firstInput?.focus()
+        const selector = isMobileLayout ? 'button, [tabindex="0"]' : 'input, button, [tabindex="0"]'
+        const firstEl = panelRef.current?.querySelector<HTMLElement>(selector)
+        firstEl?.focus()
       })
     } else if (triggerRef.current instanceof HTMLElement) {
       triggerRef.current.focus()
@@ -99,8 +116,9 @@ export function SimulationPanel() {
     return () => window.removeEventListener('resize', handleResize)
   }, [clampPosition])
 
-  // Drag handlers
+  // Drag handlers (disabled on mobile — panel is fullscreen)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isMobileLayout) return
     if ((e.target as HTMLElement).closest('button')) return
 
     setIsDragging(true)
@@ -109,7 +127,7 @@ export function SimulationPanel() {
       y: e.clientY - position.y
     }
     e.preventDefault()
-  }, [position])
+  }, [position, isMobileLayout])
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging) return
@@ -168,21 +186,65 @@ export function SimulationPanel() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isPanelOpen, closePanel])
 
+  // Debug: trace panel state for mobile issues
+  useEffect(() => {
+    if (!isMobileLayout) return
+    console.log('[SimPanel] state:', { isPanelOpen, isMounted, isVisible, isCollapsed, isMobileLayout })
+  }, [isPanelOpen, isMounted, isVisible, isCollapsed, isMobileLayout])
+
+  // Debug: measure content div scroll capability
+  useEffect(() => {
+    if (!isMobileLayout || isCollapsed || !isPanelOpen) return
+    const timer = setTimeout(() => {
+      const panel = panelRef.current
+      if (!panel) return
+      const content = panel.querySelector('[data-scroll-debug]') as HTMLElement
+      if (content) {
+        console.log('[SimPanel] scroll debug:', {
+          scrollHeight: content.scrollHeight,
+          clientHeight: content.clientHeight,
+          offsetHeight: content.offsetHeight,
+          overflowY: getComputedStyle(content).overflowY,
+          canScroll: content.scrollHeight > content.clientHeight,
+        })
+      }
+      console.log('[SimPanel] panel computed z-index:', getComputedStyle(panel).zIndex)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [isMobileLayout, isCollapsed, isPanelOpen])
+
   if (!isMounted) return null
 
   return (
     <div
       ref={panelRef}
       role="dialog"
-      aria-modal="false"
+      aria-modal={isMobileLayout ? 'true' : 'false'}
       aria-hidden={!isPanelOpen}
       aria-label="Simulation controls"
-      style={{
+      style={isMobileLayout ? {
+        // Mobile: fullscreen overlay (above hamburger z-index 1051)
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(255,255,255,0.98)',
+        borderRadius: 0,
+        zIndex: 1100,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? 'translateY(0)' : 'translateY(14px)',
+        pointerEvents: isVisible ? 'auto' : 'none',
+        transition: `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease`,
+      } : {
         position: 'fixed',
         top: position.y,
         left: position.x,
         width: getPanelWidth(),
-        maxHeight: isCollapsed ? HEADER_HEIGHT : getPanelMaxHeight(),
+        maxHeight: isCollapsed ? undefined : getPanelMaxHeight(),
         background: 'rgba(255,255,255,0.98)',
         borderRadius: 8,
         boxShadow: isDragging
@@ -199,10 +261,10 @@ export function SimulationPanel() {
         pointerEvents: isVisible ? 'auto' : 'none',
         transition: isDragging
           ? 'none'
-          : `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease, box-shadow 0.2s ease, max-height 0.2s ease`
+          : `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease, box-shadow 0.2s ease`,
       }}
     >
-      {/* Header - draggable */}
+      {/* Header - draggable (desktop) / tappable (mobile) */}
       <div
         onMouseDown={handleMouseDown}
         style={{
@@ -212,13 +274,14 @@ export function SimulationPanel() {
           padding: '10px 14px',
           borderBottom: isCollapsed ? 'none' : '1px solid #eee',
           background: '#fafafa',
-          cursor: isDragging ? 'grabbing' : 'grab',
+          cursor: isMobileLayout ? 'default' : (isDragging ? 'grabbing' : 'grab'),
           flexShrink: 0,
-          minHeight: HEADER_HEIGHT
+          minHeight: HEADER_HEIGHT,
+          minWidth: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#333', flexShrink: 0 }}>
             Simulation
           </span>
           {isCollapsed && selectedCountry && (
@@ -235,12 +298,12 @@ export function SimulationPanel() {
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           <button
             className="touch-target-44"
-            onClick={() => setIsCollapsed(prev => !prev)}
-            title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
-            aria-label={isCollapsed ? 'Expand simulation panel' : 'Collapse simulation panel'}
+            onClick={(e) => { e.stopPropagation(); isMobileLayout && onMinimize ? onMinimize() : setIsCollapsed(prev => !prev) }}
+            title={isMobileLayout ? 'Minimize panel' : (isCollapsed ? 'Expand panel' : 'Collapse panel')}
+            aria-label={isMobileLayout ? 'Minimize simulation panel' : (isCollapsed ? 'Expand simulation panel' : 'Collapse simulation panel')}
             style={{
               background: 'none',
               border: 'none',
@@ -256,39 +319,81 @@ export function SimulationPanel() {
             ▾
           </button>
           <button
-            className="touch-target-44"
-            onClick={closePanel}
-            title="Close (Esc)"
-            aria-label="Close simulation panel"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#767676',
-              fontSize: 18,
-              cursor: 'pointer',
-              padding: '4px 8px',
-              lineHeight: 1
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.color = '#666'}
-            onMouseLeave={(e) => e.currentTarget.style.color = '#999'}
-          >
-            ×
-          </button>
+              className="touch-target-44"
+              onClick={closePanel}
+              title="Close (Esc)"
+              aria-label="Close simulation panel"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#767676',
+                fontSize: 18,
+                cursor: 'pointer',
+                padding: '4px 8px',
+                lineHeight: 1
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#666'}
+              onMouseLeave={(e) => e.currentTarget.style.color = '#999'}
+            >
+              ×
+            </button>
         </div>
       </div>
 
-      {/* Content - hidden when collapsed via display:none to avoid reflow */}
+      {/* Content - hidden when collapsed */}
       <div
+        data-scroll-debug
         style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           overflowX: 'hidden',
-          display: isCollapsed ? 'none' : 'block'
+          display: isCollapsed ? 'none' : 'flex',
+          flexDirection: 'column',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
-        {/* Country Selection */}
-        <div style={{ padding: '12px 14px', borderBottom: '1px solid #eee' }}>
-          <CountrySelector />
+        {/* Country Selection — collapsible section */}
+        <div style={{ borderBottom: '1px solid #eee' }}>
+          <button
+            onClick={() => setCountryExpanded(prev => !prev)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+              color: '#333',
+            }}
+            aria-expanded={countryExpanded}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              Country
+              {!countryExpanded && selectedCountry && (
+                <span style={{ fontWeight: 400, color: '#767676', fontSize: 11 }}>
+                  — {selectedCountry}
+                </span>
+              )}
+            </span>
+            <span style={{
+              fontSize: 14,
+              color: '#767676',
+              transition: 'transform 0.2s ease',
+              transform: countryExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+            }}>
+              ▾
+            </span>
+          </button>
+          {countryExpanded && (
+            <div style={{ padding: '0 14px 12px' }}>
+              <CountrySelector />
+            </div>
+          )}
         </div>
 
         {/* Intervention Builder */}
