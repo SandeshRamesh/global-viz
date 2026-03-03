@@ -473,6 +473,46 @@ export function WorldMap({
           if (name) onCountrySelectRef.current?.(name)
         }
       })
+      // Touch tap detection: D3 zoom swallows click on first touch, so detect taps manually
+      .on('touchstart', function (event: TouchEvent) {
+        if (event.touches.length !== 1) return
+        const t = event.touches[0]
+        ;(this as SVGPathElement).dataset.tapX = String(t.clientX)
+        ;(this as SVGPathElement).dataset.tapY = String(t.clientY)
+        ;(this as SVGPathElement).dataset.tapTime = String(Date.now())
+      }, { passive: true })
+      .on('touchend', function (event: TouchEvent, d: GeoJSON.Feature) {
+        const el = this as SVGPathElement
+        const startX = Number(el.dataset.tapX)
+        const startY = Number(el.dataset.tapY)
+        const startTime = Number(el.dataset.tapTime)
+        if (!startTime) return
+
+        const ct = event.changedTouches[0]
+        const dx = ct.clientX - startX
+        const dy = ct.clientY - startY
+        const dt = Date.now() - startTime
+
+        // Only count as tap if short duration and minimal movement
+        if (dt < 300 && Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+          if (!foregroundRef.current) return
+          const numId = normalizeId(d.id)
+          const iso3 = NUMERIC_TO_ISO3[numId]
+          if (!iso3) return
+
+          if (mapViewModeRef.current === 'regional') {
+            const region = ISO3_TO_REGION[iso3]
+            if (region) onRegionSelectRef.current?.(region)
+          } else {
+            const name = iso3ToName.get(iso3)
+            if (name) onCountrySelectRef.current?.(name)
+          }
+        }
+        // Clean up
+        delete el.dataset.tapX
+        delete el.dataset.tapY
+        delete el.dataset.tapTime
+      }, { passive: true })
 
     // Region boundary mesh (rendered on top, no fill, just strokes)
     const topo = topoRef.current
