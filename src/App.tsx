@@ -422,6 +422,9 @@ function App() {
   const autoZoomRunTokenRef = useRef(0)
   const visibleCountsRef = useRef({ nodes: 0, edges: 0 })
   const outcomeSectorSnapshotRef = useRef<OutcomeSectorSnapshot | null>(null)
+  const preSimulationExpandedNodesRef = useRef<Set<string>>(new Set())
+  const preSimulationPinnedPathsRef = useRef<Set<string>>(new Set())
+  const restoreNavAfterClearRef = useRef(false)
 
   // Temporal edges cache for Local View timeline playback
   // Maps year → country edges for the currently selected country/stratum
@@ -623,18 +626,6 @@ function App() {
     }
   }, [isPanelOpen, temporalResults, setHighlightedIndicator])
 
-  // Reset expansion to ring 1 when sim results are cleared
-  const prevTemporalResultsRef = useRef(temporalResults)
-  useEffect(() => {
-    const wasPresent = prevTemporalResultsRef.current !== null
-    prevTemporalResultsRef.current = temporalResults
-    if (wasPresent && !temporalResults) {
-      resetOutcomeSectorCache()
-      setExpandedNodes(new Set())
-      setPinnedPaths(new Set())
-    }
-  }, [temporalResults, resetOutcomeSectorCache])
-
   // Current year derived from active playback source (historical SHAP vs simulation timeline)
   const mapCurrentYear = useMemo(() => {
     if (playbackMode === 'simulation' && temporalResults) {
@@ -834,12 +825,22 @@ function App() {
     setDrillDownHistory(null)
   }, [])
 
-  // Clear all Local View targets
-  const clearLocalViewTargets = useCallback(() => {
+  // Clear working context in the current scope (country/region/stratum preserved).
+  const clearWorkingContext = useCallback(() => {
+    restoreNavAfterClearRef.current = temporalResults !== null
     setLocalViewTargets([])
-    setViewMode('global')
     setDrillDownHistory(null)
-  }, [])
+    if (viewMode !== 'global') {
+      setViewMode('global')
+    }
+    setHighlightedPath(new Set())
+    setHighlightedTarget(null)
+    setHoveredNode(null)
+    tooltipNodeRef.current = null
+    setPinnedPaths(new Set())
+    setHighlightedIndicator(null)
+    clearResults()
+  }, [viewMode, temporalResults, clearResults, setHighlightedIndicator])
 
   // Viewport-aware layout engine
   const viewportLayoutRef = useRef<ViewportAwareLayout | null>(null)
@@ -1018,6 +1019,32 @@ function App() {
 
   // Pinned paths - individual node IDs visible after simulation (no sibling expansion)
   const [pinnedPaths, setPinnedPaths] = useState<Set<string>>(new Set())
+
+  // Preserve/restore global navigation context around simulation sessions.
+  const prevTemporalResultsRef = useRef(temporalResults)
+  useEffect(() => {
+    const wasPresent = prevTemporalResultsRef.current !== null
+    prevTemporalResultsRef.current = temporalResults
+    const isNowPresent = temporalResults !== null
+
+    if (!wasPresent && isNowPresent) {
+      preSimulationExpandedNodesRef.current = new Set(expandedNodes)
+      preSimulationPinnedPathsRef.current = new Set(pinnedPaths)
+      return
+    }
+
+    if (wasPresent && !isNowPresent) {
+      resetOutcomeSectorCache()
+      if (restoreNavAfterClearRef.current) {
+        restoreNavAfterClearRef.current = false
+        setExpandedNodes(new Set(preSimulationExpandedNodesRef.current))
+        setPinnedPaths(new Set(preSimulationPinnedPathsRef.current))
+      } else {
+        setExpandedNodes(new Set())
+        setPinnedPaths(new Set())
+      }
+    }
+  }, [temporalResults, expandedNodes, pinnedPaths, resetOutcomeSectorCache])
 
   // Track if initial expansion after data load has happened
   const initialExpansionDoneRef = useRef(false)
@@ -2341,50 +2368,62 @@ function App() {
       resetFitTimerRef.current = null
     }
 
-    // Reset country selection to unified model
+    // Full reset should never restore pre-simulation navigation state.
+    restoreNavAfterClearRef.current = false
+
+    // Reset analysis context
+    setLocalViewTargets([])
+    setDrillDownHistory(null)
+    setHighlightedPath(new Set())
+    setHighlightedTarget(null)
+    setHoveredNode(null)
+    tooltipNodeRef.current = null
+    setPinnedPaths(new Set())
+    setHighlightedIndicator(null)
+    clearResults()
+    setStratum('unified')
+    void setSelectedRegion(null)
     clearCountry()
+    setViewMode('global')
 
     // Reset Local View if in local or split mode
     if ((viewMode === 'local' || viewMode === 'split') && localViewResetRef.current) {
       localViewResetRef.current()
     }
 
-    // Reset Global View if in global or split mode
-    if (viewMode === 'global' || viewMode === 'split') {
-      if (!zoomRef.current || !svgRef.current) return
+    if (!zoomRef.current || !svgRef.current) return
 
-      const svg = d3.select(svgRef.current)
+    const svg = d3.select(svgRef.current)
 
-      // Phase 1: collapse to just the QoL root node
-      resetOutcomeSectorCache()
-      setExpandedNodes(new Set())
-      setPinnedPaths(new Set())
-      currentTransformRef.current = null
+    // Phase 1: collapse to just the QoL root node
+    resetOutcomeSectorCache()
+    setExpandedNodes(new Set())
+    setPinnedPaths(new Set())
+    currentTransformRef.current = null
 
-      // Zoom to fit just the root node
-      const rootNodes = allNodes.filter(n => n.ring === 0)
-      const rootTransform = calculateInitialTransform(rootNodes)
-      svg.transition().duration(300).call(zoomRef.current.transform, rootTransform)
+    // Zoom to fit just the root node
+    const rootNodes = allNodes.filter(n => n.ring === 0)
+    const rootTransform = calculateInitialTransform(rootNodes)
+    svg.transition().duration(300).call(zoomRef.current.transform, rootTransform)
 
-      // Phase 2: after delay, expand root to reveal ring 1 and zoom to fit
-      const rootNode = allNodes.find(n => n.ring === 0)
-      if (rootNode) {
-        resetExpandTimerRef.current = window.setTimeout(() => {
-          resetExpandTimerRef.current = null
-          setExpandedNodes(new Set([rootNode.id]))
-          // Zoom to fit ring 0 + ring 1 after expansion settles
-          resetFitTimerRef.current = window.setTimeout(() => {
-            resetFitTimerRef.current = null
-            if (!zoomRef.current || !svgRef.current) return
-            const svgEl = d3.select(svgRef.current)
-            const ring01 = allNodes.filter(n => n.ring <= 1)
-            const fitTransform = calculateInitialTransform(ring01.length > 0 ? ring01 : rootNodes)
-            svgEl.transition().duration(400).call(zoomRef.current!.transform, fitTransform)
-          }, 350)
-        }, 1500)
-      }
+    // Phase 2: after delay, expand root to reveal ring 1 and zoom to fit
+    const rootNode = allNodes.find(n => n.ring === 0)
+    if (rootNode) {
+      resetExpandTimerRef.current = window.setTimeout(() => {
+        resetExpandTimerRef.current = null
+        setExpandedNodes(new Set([rootNode.id]))
+        // Zoom to fit ring 0 + ring 1 after expansion settles
+        resetFitTimerRef.current = window.setTimeout(() => {
+          resetFitTimerRef.current = null
+          if (!zoomRef.current || !svgRef.current) return
+          const svgEl = d3.select(svgRef.current)
+          const ring01 = allNodes.filter(n => n.ring <= 1)
+          const fitTransform = calculateInitialTransform(ring01.length > 0 ? ring01 : rootNodes)
+          svgEl.transition().duration(400).call(zoomRef.current!.transform, fitTransform)
+        }, 350)
+      }, 1500)
     }
-  }, [allNodes, calculateInitialTransform, viewMode, clearCountry, resetOutcomeSectorCache])
+  }, [allNodes, calculateInitialTransform, viewMode, clearCountry, clearResults, setSelectedRegion, setStratum, setHighlightedIndicator, resetOutcomeSectorCache])
 
   // Fit view to all visible nodes (for double-click on empty space)
   const fitToVisibleNodes = useCallback(() => {
@@ -2720,24 +2759,10 @@ function App() {
         searchInputRef.current?.blur()
       }
 
-      // C to clear Local View targets + simulation results + country/region selection
+      // C to clear working context (preserve country/region/stratum scope)
       if (e.key === 'c' || e.key === 'C') {
-        if (localViewTargets.length > 0) {
-          e.preventDefault()
-          clearLocalViewTargets()
-        }
-        if (temporalResults) {
-          e.preventDefault()
-          clearResults()
-        }
-        if (selectedCountry) {
-          e.preventDefault()
-          clearCountry()
-        }
-        if (selectedRegion) {
-          e.preventDefault()
-          setSelectedRegion(null)
-        }
+        e.preventDefault()
+        clearWorkingContext()
       }
 
       // Space to toggle timeline play/pause
@@ -2764,7 +2789,7 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [localViewTargets.length, clearLocalViewTargets, temporalResults, clearResults, selectedCountry, clearCountry, selectedRegion, setSelectedRegion, visibleNodes, expandRing, collapseRing, isPlaying, storePlay, storePause])
+  }, [clearWorkingContext, visibleNodes, expandRing, collapseRing, isPlaying, storePlay, storePause])
 
   // Fetch data once on mount
   const fetchData = useCallback(async () => {
@@ -6294,7 +6319,14 @@ function App() {
           onViewChange={setViewMode}
           localTargetCount={localViewTargets.length}
           onReset={resetView}
-          onClear={clearLocalViewTargets}
+          onClear={clearWorkingContext}
+          canClear={
+            localViewTargets.length > 0
+            || temporalResults !== null
+            || highlightedPath.size > 0
+            || highlightedTarget !== null
+            || pinnedPaths.size > 0
+          }
           onShare={shareCurrentState}
           simMode={localViewSimMode}
         />
@@ -6401,7 +6433,7 @@ function App() {
               nodeById={nodeByIdMap}
               domainColors={DOMAIN_COLORS}
               onRemoveTarget={removeFromLocalView}
-              onClearTargets={clearLocalViewTargets}
+              onClearTargets={clearWorkingContext}
               onSwitchToGlobal={() => setViewMode('global')}
               onNavigateToNode={(nodeId) => {
                 // Add clicked node as new target

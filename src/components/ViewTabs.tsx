@@ -15,6 +15,7 @@ interface ViewTabsProps {
   localTargetCount: number    // Number of targets in Local View
   onReset: () => void         // Reset view callback
   onClear?: () => void        // Clear local view targets callback
+  canClear?: boolean          // Whether clear action should be enabled
   onShare?: () => Promise<boolean>  // Copy shareable link callback
   simMode?: boolean           // Sim mode enables local/split even without targets
 }
@@ -28,10 +29,12 @@ export function ViewTabs({
   localTargetCount,
   onReset,
   onClear,
+  canClear,
   onShare,
   simMode = false
 }: ViewTabsProps) {
   const hasTargets = localTargetCount > 0 || simMode
+  const clearEnabled = canClear ?? hasTargets
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle')
   const [shareNudge, setShareNudge] = useState(false)
   const playbackFinishedToken = useSimulationStore(s => s.playbackFinishedToken)
@@ -221,25 +224,25 @@ export function ViewTabs({
         {/* Clear button - always rendered, fades in/out smoothly */}
         <button
           onClick={onClear}
-          disabled={!hasTargets}
+          disabled={!clearEnabled}
           style={{
             padding: '6px 12px',
             fontSize: 12,
             fontWeight: 500,
-            cursor: hasTargets ? 'pointer' : 'default',
+            cursor: clearEnabled ? 'pointer' : 'default',
             border: 'none',
             background: 'white',
-            color: hasTargets ? '#E53935' : '#ccc',
+            color: clearEnabled ? '#E53935' : '#ccc',
             transition: 'all 0.2s ease',
-            opacity: hasTargets ? 1 : 0.4
+            opacity: clearEnabled ? 1 : 0.4
           }}
           onMouseEnter={(e) => {
-            if (hasTargets) e.currentTarget.style.background = '#FFEBEE'
+            if (clearEnabled) e.currentTarget.style.background = '#FFEBEE'
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'white'
           }}
-          title={hasTargets ? "Clear all Local View targets (C)" : "No targets to clear"}
+          title={clearEnabled ? "Clear working context in current scope (C)" : "Nothing to clear"}
         >
           Clear (C)
         </button>
