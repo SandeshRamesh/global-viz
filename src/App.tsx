@@ -5019,7 +5019,7 @@ function App() {
 
         // Ring 0: add QoL score as second line when country selected
         const scoreText = qolNodeScore != null
-          ? `${(qolNodeScore * 10).toFixed(playbackMode === 'simulation' ? 3 : 1)}/10`
+          ? `${(qolNodeScore * 10).toFixed(playbackMode === 'simulation' ? 2 : 1)}/10`
           : null
         const lines = d.ring === 0 && qolNodeScore != null
           ? [label, scoreText!]
@@ -5181,6 +5181,18 @@ function App() {
               })
             }
           }
+        }
+
+        // Sync text content (e.g. QoL score updates during simulation)
+        const tspans = textEl.selectAll('tspan')
+        if (pos.lines.length > 1 && tspans.size() === pos.lines.length) {
+          tspans.each(function(_: unknown, i: number) {
+            const el = d3.select(this as Element)
+            if (el.text() !== pos.lines[i]) el.text(pos.lines[i])
+          })
+        } else if (pos.lines.length === 1 && tspans.empty()) {
+          const current = textEl.text()
+          if (current !== pos.lines[0]) textEl.text(pos.lines[0])
         }
 
         const newTransform = pos.rotation !== 0 ? `rotate(${pos.rotation}, ${pos.x}, ${pos.y})` : null
@@ -6316,7 +6328,7 @@ function App() {
 
             {/* QoL score for ring 0 (country, region mean, stratum mean, or global mean) */}
             {displayNode.ring === 0 && qolNodeScoreForTooltip != null && (() => {
-              const decimals = playbackMode === 'simulation' ? 3 : 1
+              const decimals = playbackMode === 'simulation' ? 2 : 1
               const label = selectedCountry
                 ? selectedCountry
                 : selectedRegion
