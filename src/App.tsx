@@ -1701,10 +1701,16 @@ function App() {
           collapseDescendants(nodeId)
           // Record collapse for auto-zoom
           pendingZoomRef.current = { nodeId, action: 'collapse' }
+          if (import.meta.env.DEV) {
+            console.log('[Camera]', 'queue collapse', { nodeId, nextExpandedCount: next.size })
+          }
         } else {
           next.add(nodeId)
           // Record expansion for auto-zoom
           pendingZoomRef.current = { nodeId, action: 'expand' }
+          if (import.meta.env.DEV) {
+            console.log('[Camera]', 'queue expand', { nodeId, nextExpandedCount: next.size })
+          }
         }
         return next
       })
@@ -3179,12 +3185,10 @@ function App() {
     svg.attr('width', width).attr('height', height)
 
     // Accessible SVG title + description (screen readers)
-    const svgLabel = selectedCountry
-      || (selectedRegion ? REGION_DISPLAY_NAMES[selectedRegion] : selectedStratum)
     if (svg.select('title').empty()) {
       svg.insert('title', ':first-child')
     }
-    svg.select('title').text(`Causal graph: ${svgLabel}`)
+    svg.select('title').text('')  // Keep element for a11y tree but clear text to avoid browser hover tooltip
     if (svg.select('desc').empty()) {
       svg.insert('desc', 'title + *').raise()
       // Ensure desc follows title
@@ -6026,6 +6030,11 @@ function App() {
 
   // Auto-zoom on expand/collapse
   useEffect(() => {
+    const logCamera = (...args: unknown[]) => {
+      if (!import.meta.env.DEV) return
+      console.log('[Camera]', ...args)
+    }
+
     if (!pendingZoomRef.current || !zoomRef.current || !svgRef.current || visibleNodes.length === 0) return
 
     const runToken = ++autoZoomRunTokenRef.current
@@ -6045,13 +6054,23 @@ function App() {
     }
 
     const { nodeId, action } = pendingZoomRef.current
+    logCamera('start', {
+      action,
+      nodeId,
+      visibleNodeCount: visibleNodes.length,
+      expandedNodeCount: expandedNodes.size,
+    })
 
     // Find the node that was expanded/collapsed
     const targetNode = visibleNodes.find(n => n.id === nodeId)
-    if (!targetNode) return
+    if (!targetNode) {
+      logCamera('abort: target node not visible yet', { nodeId, action })
+      return
+    }
 
     // No camera change when expanding root (ring 0)
     if (action === 'expand' && targetNode.ring === 0) {
+      logCamera('skip: root expand', { nodeId })
       pendingZoomRef.current = null
       return
     }
@@ -6061,6 +6080,7 @@ function App() {
       const directChildren = visibleNodes.filter(n => n.parentId === nodeId)
       if (targetNode.hasChildren && directChildren.length === 0) {
         // Children not yet in visibleNodes, wait for next update
+        logCamera('wait: expand children not visible yet', { nodeId })
         return
       }
     }
@@ -6075,10 +6095,11 @@ function App() {
     const height = window.innerHeight
     const currentTransform = currentTransformRef.current || d3.zoomIdentity
 
-    // Delay to let render complete
-    autoZoomDelayTimerRef.current = window.setTimeout(() => {
-      autoZoomDelayTimerRef.current = null
-      if (runToken !== autoZoomRunTokenRef.current) return
+    const runCameraComputation = () => {
+      if (runToken !== autoZoomRunTokenRef.current) {
+        logCamera('skip: stale run token', { runToken, latest: autoZoomRunTokenRef.current, action, nodeId })
+        return
+      }
 
       /**
        * Find the Ring 1 ancestor of a node (walk up the tree)
@@ -6115,107 +6136,174 @@ function App() {
         return result
       }
 
-      let centerX: number
-      let centerY: number
-
-      if (action === 'expand') {
-        // EXPAND: Center between root (0,0) and the ENTIRE branch from Ring 1 forward
-        // Find the Ring 1 ancestor first, then get all its descendants
-        const clickedNode = visibleNodes.find(n => n.id === nodeId)
-        if (!clickedNode) return
-
-        const ring1Ancestor = getRing1Ancestor(clickedNode)
-        const branchRootId = ring1Ancestor ? ring1Ancestor.id : nodeId
-
-        // Get all nodes in the entire branch from Ring 1 forward
-        const branchNodes = getSubtreeNodes(branchRootId)
-        if (branchNodes.length === 0) return
-
-        const allXs = branchNodes.map(n => n.x)
-        const allYs = branchNodes.map(n => n.y)
-
-        // Find the bounding box of entire branch
-        const branchMinX = Math.min(...allXs)
-        const branchMaxX = Math.max(...allXs)
-        const branchMinY = Math.min(...allYs)
-        const branchMaxY = Math.max(...allYs)
-
-        // Include root (0,0) in bounds to keep QoL visible
-        const boundsMinX = Math.min(0, branchMinX)
-        const boundsMaxX = Math.max(0, branchMaxX)
-        const boundsMinY = Math.min(0, branchMinY)
-        const boundsMaxY = Math.max(0, branchMaxY)
-
-        centerX = (boundsMinX + boundsMaxX) / 2
-        centerY = (boundsMinY + boundsMaxY) / 2
-      } else {
-        // COLLAPSE: Center between root (0,0) and the collapsed node
-        // The collapsed node is now the "frontier" of that branch
-        const collapsedNode = visibleNodes.find(n => n.id === nodeId)
-        if (!collapsedNode) return
-
-        // Center between root (0,0) and the collapsed node
-        const boundsMinX = Math.min(0, collapsedNode.x)
-        const boundsMaxX = Math.max(0, collapsedNode.x)
-        const boundsMinY = Math.min(0, collapsedNode.y)
-        const boundsMaxY = Math.max(0, collapsedNode.y)
-
-        centerX = (boundsMinX + boundsMaxX) / 2
-        centerY = (boundsMinY + boundsMaxY) / 2
+      const computeBounds = (nodes: ExpandableNode[]) => {
+        if (nodes.length === 0) return null
+        const allXs = nodes.map(n => n.x)
+        const allYs = nodes.map(n => n.y)
+        const minX = Math.min(...allXs)
+        const maxX = Math.max(...allXs)
+        const minY = Math.min(...allYs)
+        const maxY = Math.max(...allYs)
+        return {
+          minX,
+          maxX,
+          minY,
+          maxY,
+          width: Math.max(maxX - minX, 1),
+          height: Math.max(maxY - minY, 1),
+          centerX: (minX + maxX) / 2,
+          centerY: (minY + maxY) / 2,
+        }
       }
 
-      // Calculate zoom to fit entire branch (from Ring 1) with padding
+      const getCollapseFocusNodes = (): ExpandableNode[] => {
+        const focusById = new Map<string, ExpandableNode>()
+        const rootNode = visibleNodes.find(n => n.ring === 0)
+        if (rootNode) {
+          focusById.set(rootNode.id, rootNode)
+        }
+
+        const ring1Nodes = visibleNodes.filter(n => n.ring === 1)
+        const expandedRing1 = ring1Nodes.filter(n => expandedNodes.has(n.id))
+        const ring1Roots = expandedRing1.length > 0 ? expandedRing1 : ring1Nodes
+
+        ring1Roots.forEach(branchRoot => {
+          getSubtreeNodes(branchRoot.id).forEach(node => {
+            focusById.set(node.id, node)
+          })
+        })
+
+        if (focusById.size === 0) {
+          focusById.set(targetNode.id, targetNode)
+        }
+
+        return Array.from(focusById.values())
+      }
+
+      let focusNodes: ExpandableNode[] = []
+
+      if (action === 'expand') {
+        // EXPAND: fit root + the active branch being expanded.
+        const ring1Ancestor = getRing1Ancestor(targetNode)
+        const branchRootId = ring1Ancestor ? ring1Ancestor.id : nodeId
+        focusNodes = getSubtreeNodes(branchRootId)
+      } else {
+        // COLLAPSE: fit root + all currently expanded branches that remain visible.
+        focusNodes = getCollapseFocusNodes()
+      }
+
+      const bounds = computeBounds(focusNodes)
+      if (!bounds) {
+        logCamera('abort: no bounds from focus nodes', { action, nodeId, focusCount: focusNodes.length })
+        return
+      }
+
+      let centerX = bounds.centerX
+      let centerY = bounds.centerY
+
+      // Calculate zoom-to-fit with padding.
       const currentScale = currentTransform.k
       let newScale = currentScale
 
-      if (action === 'expand') {
-        // Get the bounding box dimensions of entire branch from Ring 1 (including root at 0,0)
-        const clickedNode = visibleNodes.find(n => n.id === nodeId)
-        if (clickedNode) {
-          const ring1Ancestor = getRing1Ancestor(clickedNode)
-          const branchRootId = ring1Ancestor ? ring1Ancestor.id : nodeId
-          const branchNodes = getSubtreeNodes(branchRootId)
+      const padding = 0.1
+      const scaleX = width * (1 - 2 * padding) / bounds.width
+      const scaleY = height * (1 - 2 * padding) / bounds.height
+      const fitScale = Math.min(scaleX, scaleY)
 
-          const allXs = branchNodes.map(n => n.x)
-          const allYs = branchNodes.map(n => n.y)
-
-          const boundsMinX = Math.min(0, ...allXs)
-          const boundsMaxX = Math.max(0, ...allXs)
-          const boundsMinY = Math.min(0, ...allYs)
-          const boundsMaxY = Math.max(0, ...allYs)
-
-          const boundsWidth = boundsMaxX - boundsMinX
-          const boundsHeight = boundsMaxY - boundsMinY
-
-          // Calculate scale needed to fit with padding (10% margin on each side)
-          const padding = 0.1
-          const scaleX = width * (1 - 2 * padding) / Math.max(boundsWidth, 1)
-          const scaleY = height * (1 - 2 * padding) / Math.max(boundsHeight, 1)
-          const fitScale = Math.min(scaleX, scaleY)
-
-          // Use the smaller of current scale or fit scale (zoom out if needed to fit)
-          // But don't zoom in beyond current scale just to fit
-          if (fitScale < currentScale) {
-            newScale = fitScale
-          } else if (currentScale < 0.8) {
-            // If very zoomed out, zoom in a bit to see detail
-            newScale = Math.min(0.8, fitScale)
-          }
+      // Always zoom out if content won't fit.
+      if (fitScale < currentScale) {
+        newScale = fitScale
+      } else if (action === 'expand' && currentScale < 0.8) {
+        // Expand keeps previous behavior: gently zoom in only when very zoomed out.
+        newScale = Math.min(0.8, fitScale)
+      } else if (action === 'collapse') {
+        // Collapse: allow a small zoom-in step so recentering remains perceptible.
+        const collapseZoomInCap = Math.min(fitScale, currentScale * 1.12)
+        if (collapseZoomInCap > currentScale + 0.01) {
+          newScale = collapseZoomInCap
         }
       }
+
       // Cap at reasonable bounds
       newScale = Math.max(0.1, Math.min(newScale, 3))
 
+      // On collapse, bias camera toward QoL center when current scale has spare room.
+      // Clamp to the feasible center range so active branches remain fully visible.
+      let collapseCenterRange: {
+        minCenterX: number
+        maxCenterX: number
+        minCenterY: number
+        maxCenterY: number
+      } | null = null
+      if (action === 'collapse') {
+        const halfVisibleWidth = (width * (1 - 2 * padding)) / (2 * newScale)
+        const halfVisibleHeight = (height * (1 - 2 * padding)) / (2 * newScale)
+
+        const minCenterX = bounds.maxX - halfVisibleWidth
+        const maxCenterX = bounds.minX + halfVisibleWidth
+        const minCenterY = bounds.maxY - halfVisibleHeight
+        const maxCenterY = bounds.minY + halfVisibleHeight
+        collapseCenterRange = { minCenterX, maxCenterX, minCenterY, maxCenterY }
+
+        const clamp = (value: number, minValue: number, maxValue: number) =>
+          Math.min(maxValue, Math.max(minValue, value))
+
+        centerX = clamp(0, minCenterX, maxCenterX)
+        centerY = clamp(0, minCenterY, maxCenterY)
+      }
+
       // Calculate translation to center the relevant content
-      const newX = width / 2 - centerX * newScale
-      const newY = height / 2 - centerY * newScale
+      let newX = width / 2 - centerX * newScale
+      let newY = height / 2 - centerY * newScale
+
+      if (action === 'collapse' && collapseCenterRange) {
+        const deltaX = Math.abs(newX - currentTransform.x)
+        const deltaY = Math.abs(newY - currentTransform.y)
+        const deltaScale = Math.abs(newScale - currentScale)
+
+        // If computed collapse transform is nearly unchanged, nudge toward QoL center.
+        if (deltaX < 10 && deltaY < 10 && deltaScale < 0.015) {
+          const clamp = (value: number, minValue: number, maxValue: number) =>
+            Math.min(maxValue, Math.max(minValue, value))
+
+          const recenteredX = clamp(centerX * 0.72, collapseCenterRange.minCenterX, collapseCenterRange.maxCenterX)
+          const recenteredY = clamp(centerY * 0.72, collapseCenterRange.minCenterY, collapseCenterRange.maxCenterY)
+          newX = width / 2 - recenteredX * newScale
+          newY = height / 2 - recenteredY * newScale
+          logCamera('collapse nudge applied', {
+            centerBefore: { x: centerX, y: centerY },
+            centerAfter: { x: recenteredX, y: recenteredY },
+            deltaBefore: { x: deltaX, y: deltaY, scale: deltaScale },
+          })
+        }
+      }
 
       const newTransform = d3.zoomIdentity.translate(newX, newY).scale(newScale)
+      logCamera('target computed', {
+        action,
+        nodeId,
+        focusCount: focusNodes.length,
+        bounds,
+        scale: { currentScale, fitScale, newScale },
+        translation: {
+          current: { x: currentTransform.x, y: currentTransform.y },
+          next: { x: newX, y: newY },
+          delta: {
+            x: newX - currentTransform.x,
+            y: newY - currentTransform.y,
+            scale: newScale - currentScale,
+          },
+        },
+        collapseCenterRange,
+      })
 
       // Animate using manual interpolation for smoother results
       isAnimatingZoomRef.current = true
       const startTransform = currentTransform
-      const duration = activeLayoutBudgetRef.current?.cameraMs ?? 400
+      const baseDuration = activeLayoutBudgetRef.current?.cameraMs ?? 400
+      const duration = action === 'collapse'
+        ? Math.round(baseDuration * 1.22)
+        : baseDuration
       const startTime = performance.now()
 
       const animate = (currentTime: number) => {
@@ -6250,17 +6338,22 @@ function App() {
       }
 
       autoZoomRafRef.current = requestAnimationFrame(animate)
-    }, 100)  // Delay to let render complete
+    }
 
-    return () => {
-      if (autoZoomDelayTimerRef.current !== null) {
-        clearTimeout(autoZoomDelayTimerRef.current)
-        autoZoomDelayTimerRef.current = null
-      }
-      if (autoZoomRafRef.current !== null) {
-        cancelAnimationFrame(autoZoomRafRef.current)
+    if (action === 'collapse') {
+      // Collapse should react immediately; delaying this often gets canceled by rerender churn.
+      autoZoomRafRef.current = requestAnimationFrame(() => {
         autoZoomRafRef.current = null
-      }
+        runCameraComputation()
+      })
+      logCamera('schedule: collapse on next animation frame', { nodeId })
+    } else {
+      // Expand waits briefly so newly-entering children are laid out before framing.
+      autoZoomDelayTimerRef.current = window.setTimeout(() => {
+        autoZoomDelayTimerRef.current = null
+        runCameraComputation()
+      }, 100)
+      logCamera('schedule: expand after delay', { nodeId, delayMs: 100 })
     }
   }, [visibleNodes, expandedNodes, viewMode, splitRatio, noteStructuralZoomOverlap])
 
