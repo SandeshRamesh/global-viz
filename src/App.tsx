@@ -1841,12 +1841,14 @@ function App() {
 
     const pins = new Set<string>()
 
-    // Always pin root + ring 1
+    // Always pin root (ring 0 only — ring 1 domains are pinned via
+    // ancestor-walking from interventions/effects, so unaffected domains
+    // are hidden during simulation for a cleaner focused view)
     for (const n of rawDataRef.nodes) {
-      if (n.layer <= 1) pins.add(String(n.id))
+      if (n.layer === 0) pins.add(String(n.id))
     }
 
-    // Pin interventions + ancestors
+    // Pin interventions + ancestors (this naturally pins their ring 1 domain parents)
     for (const intv of interventions) {
       if (intv.indicator) {
         pins.add(intv.indicator)
