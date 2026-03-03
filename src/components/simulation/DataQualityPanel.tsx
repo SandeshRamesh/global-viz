@@ -43,6 +43,9 @@ interface DataQualityPanelProps {
   isLocalView?: boolean
 }
 
+const DQ_MAX_WIDTH = 360
+const DQ_HEADER_HEIGHT = 44
+
 // Default position (bottom-left, above PlayBar)
 const DEFAULT_POSITION = { x: 10, y: window.innerHeight - 70 - 450 }
 
@@ -98,6 +101,9 @@ export function DataQualityPanel({
 }: DataQualityPanelProps) {
   const { isMounted, isVisible } = usePresence(isOpen, PANEL_EXIT_MS)
   const { selectedCountry, selectedStratum, historicalTimeline, currentYearIndex } = useSimulationStore()
+
+  // Collapse state (local, not persisted)
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Compute actual year from timeline
   const timelineYear = historicalTimeline?.years?.[currentYearIndex] ?? DATA_YEAR_MAX
@@ -512,8 +518,8 @@ export function DataQualityPanel({
         position: 'fixed',
         top: position.y,
         left: position.x,
-        width: 360,
-        maxHeight: '80vh',
+        width: Math.min(DQ_MAX_WIDTH, window.innerWidth - 40),
+        maxHeight: isCollapsed ? DQ_HEADER_HEIGHT : '80vh',
         background: 'white',
         borderRadius: 12,
         boxShadow: isDragging
@@ -523,7 +529,7 @@ export function DataQualityPanel({
         overflow: 'hidden',
         transition: isDragging
           ? 'none'
-          : `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease, box-shadow 0.2s ease`,
+          : `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease, box-shadow 0.2s ease, max-height 0.2s ease`,
         userSelect: isDragging ? 'none' : 'auto',
         display: 'flex',
         flexDirection: 'column',
@@ -537,16 +543,17 @@ export function DataQualityPanel({
         onMouseDown={handleMouseDown}
         style={{
           padding: '12px 16px',
-          borderBottom: '1px solid #eee',
+          borderBottom: isCollapsed ? 'none' : '1px solid #eee',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           background: '#f8f9fa',
           cursor: isDragging ? 'grabbing' : 'grab',
-          flexShrink: 0
+          flexShrink: 0,
+          minHeight: DQ_HEADER_HEIGHT
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             {/* Erlenmeyer flask */}
             <path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 2.9H6.8A2 2 0 0 1 5 17l4-9V3z" />
@@ -554,28 +561,57 @@ export function DataQualityPanel({
             <path d="M8 14h8" />
           </svg>
           <span style={{ fontWeight: 600, fontSize: 13, color: '#333' }}>Data Quality</span>
+          {isCollapsed && activePage !== 'quality' && (
+            <span style={{ fontSize: 11, color: '#767676' }}>
+              {activePage === 'distribution' ? '· Distribution' : '· CI Stats'}
+            </span>
+          )}
         </div>
-        <button
-          className="touch-target-44"
-          onClick={onClose}
-          aria-label="Close data quality panel"
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 4,
-            display: 'flex',
-            alignItems: 'center',
-            color: '#767676'
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            className="touch-target-44"
+            onClick={() => setIsCollapsed(prev => !prev)}
+            title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
+            aria-label={isCollapsed ? 'Expand data quality panel' : 'Collapse data quality panel'}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#767676',
+              fontSize: 18,
+              cursor: 'pointer',
+              padding: '4px 6px',
+              lineHeight: 1,
+              transition: 'transform 0.2s ease',
+              transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+              display: 'flex',
+              alignItems: 'center'
+            }}
+          >
+            ▾
+          </button>
+          <button
+            className="touch-target-44"
+            onClick={onClose}
+            aria-label="Close data quality panel"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center',
+              color: '#767676'
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
       </div>
 
+      <div style={{ display: isCollapsed ? 'none' : 'contents' }}>
       {/* Tab navigation */}
       {showTabs && (
         <div style={{
@@ -898,6 +934,7 @@ export function DataQualityPanel({
             nodeById={nodeById}
           />
         )}
+      </div>
       </div>
     </div>
   )

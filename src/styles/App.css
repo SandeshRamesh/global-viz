@@ -55,10 +55,18 @@ textarea:focus-visible,
 }
 
 /* SVG nodes that receive keyboard focus */
+circle.node:focus {
+  outline: none;
+}
+
+svg[role="img"]:focus {
+  outline: none;
+}
+
 circle.node:focus-visible {
   outline: none;
   stroke: #3B82F6;
-  stroke-width: 3;
+  stroke-width: var(--kbd-focus-stroke-width, 3px);
 }
 
 /* ─── Touch targets: 44x44px minimum (WCAG 2.1 AA) ─── */

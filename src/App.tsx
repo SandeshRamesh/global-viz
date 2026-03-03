@@ -28,7 +28,19 @@ import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/coun
 import { perfTrace, type StructuralActionName } from './utils/perfTrace'
 import { layoutTrace } from './utils/layoutTrace'
 import { initAnnouncer, announce } from './utils/announce'
+import {
+  buildGraphNavModel,
+  formatAnnouncement,
+  getFallbackFocus,
+  getNextSibling,
+  getParent,
+  getPrevSibling,
+  type GraphNavModel,
+  type GraphNavNode,
+} from './a11y/graphNodeNav'
 import { SIM_MS_PER_YEAR } from './constants/time'
+import { BREAKPOINTS } from './constants/breakpoints'
+import { useViewport } from './hooks/useViewport'
 import { REGION_DISPLAY_NAMES, REGION_TO_ISO3S } from './constants/regions'
 import {
   resolveLayoutBudget,
@@ -74,6 +86,9 @@ const RING_LABELS = [
   'Indicator Groups',
   'Indicators'
 ]
+
+const GRAPH_NAV_INSTRUCTIONS_ID = 'global-graph-kbd-instructions'
+const GRAPH_ANNOUNCE_DEDUPE_MS = 220
 
 /**
  * Loading spinner with delay to avoid flash for fast loads.
@@ -348,14 +363,23 @@ function cancelIdleTask(handle: IdleHandle | null) {
   clearTimeout(handle.id)
 }
 
+/** Compute adaptive split default based on viewport width */
+function getAdaptiveSplitDefault(width: number): number {
+  if (width >= BREAKPOINTS.DESKTOP_XL) return 0.67
+  if (width >= BREAKPOINTS.DESKTOP) return 0.60
+  if (width >= BREAKPOINTS.TABLET_LANDSCAPE) return 0.55
+  return 0.50
+}
+
 function App() {
+  const viewport = useViewport()
   const svgRef = useRef<SVGSVGElement>(null)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const currentTransformRef = useRef<d3.ZoomTransform | null>(null)
   const prevVisibleNodeIdsRef = useRef<Set<string>>(new Set())
   const prevVisibleEdgeIdsRef = useRef<Set<string>>(new Set())
   const prevViewModeForVizRef = useRef<ViewMode>('global')  // Track view mode changes in visualization
-  const prevSplitRatioRef = useRef<number>(0.67)  // Track split ratio changes
+  const prevSplitRatioRef = useRef<number>(getAdaptiveSplitDefault(window.innerWidth))  // Track split ratio changes
   const nodePositionsRef = useRef<Map<string, { x: number; y: number; parentId: string | null }>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -397,7 +421,8 @@ function App() {
   const [localViewBetaThreshold, setLocalViewBetaThreshold] = useState(0.5)  // Synced from LocalView
   const [localViewInputDepth, setLocalViewInputDepth] = useState(1)  // Global depth for causes
   const [localViewOutputDepth, setLocalViewOutputDepth] = useState(1)  // Global depth for effects
-  const [splitRatio, setSplitRatio] = useState(0.67) // 0-1, percentage for left pane (2/3 global, 1/3 local)
+  const [splitRatio, setSplitRatio] = useState(() => getAdaptiveSplitDefault(window.innerWidth))
+  const userAdjustedSplitRef = useRef(false) // Track if user manually dragged the split divider
   const [drillDownHistory, setDrillDownHistory] = useState<{ prevTargets: string[]; prevBeta: number } | null>(null)
   const isDraggingRef = useRef(false)
   const mKeyRef = useRef<{ down: boolean; time: number; origForeground: boolean }>({ down: false, time: 0, origForeground: false })
@@ -425,6 +450,12 @@ function App() {
   const preSimulationExpandedNodesRef = useRef<Set<string>>(new Set())
   const preSimulationPinnedPathsRef = useRef<Set<string>>(new Set())
   const restoreNavAfterClearRef = useRef(false)
+  const focusedGraphNodeIdRef = useRef<string | null>(null)
+  const graphNavActiveRef = useRef(false)
+  const graphNavModelRef = useRef<GraphNavModel | null>(null)
+  const focusGraphNodeByIdRef = useRef<((nodeId: string) => boolean) | null>(null)
+  const pendingExpandedBranchFocusRef = useRef<string | null>(null)
+  const lastGraphAnnounceRef = useRef<{ message: string; at: number }>({ message: '', at: 0 })
 
   // Temporal edges cache for Local View timeline playback
   // Maps year → country edges for the currently selected country/stratum
@@ -483,6 +514,16 @@ function App() {
     const data = (classificationsCache.classifications as any)?.[selectedCountry]
     return data?.iso3 as string | null ?? null
   }, [selectedCountry, classificationsCache])
+
+  const graphNavEnabled = viewMode === 'global' && !mapForeground && !error
+
+  const announceGraphNav = useCallback((message: string) => {
+    const now = performance.now()
+    const { message: lastMessage, at: lastAt } = lastGraphAnnounceRef.current
+    if (lastMessage === message && now - lastAt < GRAPH_ANNOUNCE_DEDUPE_MS) return
+    lastGraphAnnounceRef.current = { message, at: now }
+    announce(message)
+  }, [])
 
   const startStructuralTrace = useCallback((action: StructuralActionName, details?: Record<string, unknown>) => {
     if (!import.meta.env.DEV) return
@@ -625,6 +666,51 @@ function App() {
       setHighlightedIndicator(null)
     }
   }, [isPanelOpen, temporalResults, setHighlightedIndicator])
+
+  useEffect(() => {
+    if (graphNavEnabled) return
+
+    graphNavActiveRef.current = false
+    focusedGraphNodeIdRef.current = null
+    graphNavModelRef.current = null
+    focusGraphNodeByIdRef.current = null
+    pendingExpandedBranchFocusRef.current = null
+    lastGraphAnnounceRef.current = { message: '', at: 0 }
+
+    const activeEl = document.activeElement
+    if (activeEl instanceof SVGCircleElement && activeEl.classList.contains('node')) {
+      activeEl.blur()
+    }
+
+    if (!svgRef.current) return
+    const svg = d3.select(svgRef.current)
+    svg.select<SVGGElement>('g.graph-container')
+      .selectAll<SVGCircleElement, ExpandableNode>('circle.node')
+      .attr('tabindex', -1)
+  }, [graphNavEnabled])
+
+  useEffect(() => {
+    const handleTabIntoGraph = (event: KeyboardEvent) => {
+      if (!graphNavEnabled || event.key !== 'Tab' || event.shiftKey) return
+
+      const activeEl = document.activeElement
+      const noCurrentFocus =
+        activeEl === null
+        || activeEl === document.body
+        || activeEl === document.documentElement
+      if (!noCurrentFocus) return
+
+      const rootId = graphNavModelRef.current?.rootId
+      const focusNode = focusGraphNodeByIdRef.current
+      if (!rootId || !focusNode) return
+
+      event.preventDefault()
+      focusNode(rootId)
+    }
+
+    window.addEventListener('keydown', handleTabIntoGraph, true)
+    return () => window.removeEventListener('keydown', handleTabIntoGraph, true)
+  }, [graphNavEnabled])
 
   // Current year derived from active playback source (historical SHAP vs simulation timeline)
   const mapCurrentYear = useMemo(() => {
@@ -791,6 +877,7 @@ function App() {
       const rect = container.getBoundingClientRect()
       const newRatio = Math.max(0.2, Math.min(0.8, (moveEvent.clientX - rect.left) / rect.width))
       setSplitRatio(newRatio)
+      userAdjustedSplitRef.current = true
     }
 
     const handleMouseUp = () => {
@@ -804,6 +891,13 @@ function App() {
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
   }, [])
+
+  // Update split ratio when viewport changes (only if user hasn't manually dragged)
+  useEffect(() => {
+    if (!userAdjustedSplitRef.current) {
+      setSplitRatio(getAdaptiveSplitDefault(viewport.width))
+    }
+  }, [viewport.width])
 
   // Add a node to Local View targets
   const addToLocalView = useCallback((nodeId: string) => {
@@ -4622,6 +4716,9 @@ function App() {
       const nodeEl = d3.select(this)
       const targetX = d.x
       const targetY = d.y
+      const nodeRadius = getSize(d)
+      const focusStrokeWidth = Math.max(1.5, nodeRadius * 0.06)
+      nodeEl.style('--kbd-focus-stroke-width', `${focusStrokeWidth}px`)
 
       // Compute simulation border for this node
       // During active playback: affected LEAF nodes get no stroke (solid fill only)
@@ -4657,7 +4754,7 @@ function App() {
       if (dotsMode && d.ring >= DEEP_RING_THRESHOLD) {
         nodeEl
           .attr('cx', targetX).attr('cy', targetY)
-          .attr('r', getSize(d))
+          .attr('r', nodeRadius)
           .attr('fill', getColor(d))
           .attr('stroke', strokeColor)
           .attr('stroke-width', strokeWidth)
@@ -4669,7 +4766,7 @@ function App() {
         nodeEl
           .attr('cx', targetX)
           .attr('cy', targetY)
-          .attr('r', getSize(d))
+          .attr('r', nodeRadius)
           .attr('fill', getColor(d))
           .attr('stroke', strokeColor)
           .attr('stroke-width', strokeWidth)
@@ -4701,7 +4798,7 @@ function App() {
             .ease(d3.easeCubicOut)
             .attr('cx', targetX)
             .attr('cy', targetY)
-            .attr('r', getSize(d))
+            .attr('r', nodeRadius)
             .attr('fill', getColor(d))
             .attr('stroke', strokeColor)
             .attr('stroke-width', strokeWidth)
@@ -4714,7 +4811,7 @@ function App() {
             .delay(rotationDelay)
             .duration(rotationDuration)
             .ease(d3.easeCubicOut)
-            .attr('r', getSize(d))
+            .attr('r', nodeRadius)
             .attr('fill', getColor(d))
             .attr('stroke', strokeColor)
             .attr('stroke-width', strokeWidth)
@@ -4794,6 +4891,7 @@ function App() {
         return (!sb && isNodeFloored(d.importance)) ? '2,2' : 'none'
       })
       .style('cursor', d => d.hasChildren ? 'pointer' : 'default')
+      .style('--kbd-focus-stroke-width', d => `${Math.max(1.5, getSize(d) * 0.06)}px`)
 
     // Deep-ring nodes in dots mode: instant placement, full opacity
     enterNodes.filter(d => dotsMode && d.ring >= DEEP_RING_THRESHOLD)
@@ -4858,8 +4956,110 @@ function App() {
     const nodeDataMap = new Map<string, ExpandableNode>()
     visibleNodes.forEach(n => nodeDataMap.set(n.id, n))
 
+    const graphNodeSelection = nodesLayer.selectAll<SVGCircleElement, ExpandableNode>('circle.node')
+
+    const navNodes: GraphNavNode[] = visibleNodes.map(node => ({
+      id: node.id,
+      label: node.label,
+      ring: node.ring,
+      angle: node.angle,
+      parentId: node.parentId,
+      domain: node.semanticPath.domain || '',
+      hasChildren: node.hasChildren,
+    }))
+
+    const navModel = buildGraphNavModel(navNodes)
+    const prevNavModel = graphNavModelRef.current
+    const prevFocusedNodeId = focusedGraphNodeIdRef.current
+    const prevFocusedParentId = prevFocusedNodeId
+      ? prevNavModel?.nodesById.get(prevFocusedNodeId)?.parentId ?? null
+      : null
+
+    if (graphNavEnabled) {
+      const fallback = getFallbackFocus(navModel, {
+        preferredNodeId: prevFocusedNodeId,
+        preferredParentId: prevFocusedParentId,
+      })
+      focusedGraphNodeIdRef.current = fallback?.id ?? null
+      graphNavModelRef.current = navModel
+    } else {
+      focusedGraphNodeIdRef.current = null
+      graphNavActiveRef.current = false
+      graphNavModelRef.current = null
+    }
+
+    const applyGraphRovingTabIndex = (focusedNodeId: string | null) => {
+      graphNodeSelection.attr('tabindex', d => {
+        if (!graphNavEnabled) return -1
+        return focusedNodeId !== null && d.id === focusedNodeId ? 0 : -1
+      })
+    }
+
+    applyGraphRovingTabIndex(focusedGraphNodeIdRef.current)
+
+    graphNodeSelection
+      .attr('focusable', graphNavEnabled ? 'true' : 'false')
+      .attr('role', 'button')
+      .attr('aria-label', d => {
+        const ringLabel = RING_LABELS[d.ring] ?? `Ring ${d.ring}`
+        const domain = d.semanticPath.domain || 'Domain unavailable'
+        return `${d.label}, ${ringLabel}, ${domain}`
+      })
+      .attr('aria-expanded', d => d.hasChildren ? String(expandedNodes.has(d.id)) : null)
+      .attr('aria-disabled', d => d.hasChildren ? null : 'true')
+
+    const focusGraphNodeById = (nodeId: string) => {
+      if (!graphNavEnabled) return false
+      if (!graphNavModelRef.current?.nodesById.has(nodeId)) return false
+
+      focusedGraphNodeIdRef.current = nodeId
+      applyGraphRovingTabIndex(nodeId)
+
+      let focusTarget: SVGCircleElement | null = null
+      graphNodeSelection.each(function(nodeDatum) {
+        if (nodeDatum.id === nodeId) {
+          focusTarget = this as SVGCircleElement
+        }
+      })
+
+      const targetEl = focusTarget
+      if (!targetEl) return false
+      const focusableTarget = targetEl as unknown as { focus: (options?: FocusOptions) => void }
+
+      if (document.activeElement !== targetEl) {
+        try {
+          focusableTarget.focus({ preventScroll: true })
+        } catch {
+          focusableTarget.focus()
+        }
+      }
+
+      return true
+    }
+    focusGraphNodeByIdRef.current = focusGraphNodeById
+
+    if (graphNavEnabled && pendingExpandedBranchFocusRef.current) {
+      const branchParentId = pendingExpandedBranchFocusRef.current
+      const children = visibleNodes
+        .filter(node => node.parentId === branchParentId)
+        .sort((a, b) => a.angle - b.angle)
+
+      if (children.length > 0) {
+        const middleChild = children[Math.floor(children.length / 2)]
+        if (focusGraphNodeById(middleChild.id)) {
+          pendingExpandedBranchFocusRef.current = null
+        }
+      } else if (!graphNavModelRef.current?.nodesById.has(branchParentId)) {
+        pendingExpandedBranchFocusRef.current = null
+      }
+    }
+
     // Remove old handlers and add new ones
-    g.on('click', null).on('dblclick', null).on('mouseenter', null).on('mouseleave', null)
+    g.on('.graphNav', null)
+      .on('click', null)
+      .on('dblclick', null)
+      .on('mouseenter', null)
+      .on('mouseleave', null)
 
     // Delayed single-click to allow time for double-click detection
     // This prevents accidental expand/collapse when user intended to double-click
@@ -4984,6 +5184,122 @@ function App() {
         }
       }
     }, true)
+    .on('focusin.graphNav', (event) => {
+      if (!graphNavEnabled) return
+      const target = event.target as Element
+      if (!target.classList.contains('node')) return
+
+      const nodeId = target.getAttribute('data-id')
+      if (!nodeId) return
+
+      const navModelRef = graphNavModelRef.current
+      const navNode = navModelRef?.nodesById.get(nodeId)
+      if (!navNode) return
+
+      graphNavActiveRef.current = true
+      focusedGraphNodeIdRef.current = nodeId
+      applyGraphRovingTabIndex(nodeId)
+      announceGraphNav(formatAnnouncement(navNode, { ringLabels: RING_LABELS }))
+    })
+    .on('focusout.graphNav', (event) => {
+      const relatedTarget = event.relatedTarget as Element | null
+      if (relatedTarget?.classList?.contains('node')) return
+      graphNavActiveRef.current = false
+    })
+    .on('keydown.graphNav', (event) => {
+      if (!graphNavEnabled) return
+
+      const target = event.target as Element
+      if (!target.classList.contains('node')) return
+
+      const key = event.key
+      const currentNodeId = target.getAttribute('data-id') ?? focusedGraphNodeIdRef.current
+      const navModelRef = graphNavModelRef.current
+      if (!currentNodeId || !navModelRef) return
+
+      const currentNode = nodeDataMap.get(currentNodeId)
+      let handled = false
+
+      if (key === 'ArrowLeft') {
+        const previousNode = getPrevSibling(navModelRef, currentNodeId)
+        if (previousNode && previousNode.id !== currentNodeId) {
+          focusGraphNodeById(previousNode.id)
+        } else if (currentNode?.ring === 0) {
+          const rootChildren = visibleNodes
+            .filter(node => node.parentId === currentNodeId)
+            .sort((a, b) => a.angle - b.angle)
+          if (rootChildren.length > 0) {
+            focusGraphNodeById(rootChildren[rootChildren.length - 1].id)
+          } else {
+            announceGraphNav('Expand Quality of Life to navigate outcomes')
+          }
+        }
+        handled = true
+      } else if (key === 'ArrowRight') {
+        const nextNode = getNextSibling(navModelRef, currentNodeId)
+        if (nextNode && nextNode.id !== currentNodeId) {
+          focusGraphNodeById(nextNode.id)
+        } else if (currentNode?.ring === 0) {
+          const rootChildren = visibleNodes
+            .filter(node => node.parentId === currentNodeId)
+            .sort((a, b) => a.angle - b.angle)
+          if (rootChildren.length > 0) {
+            focusGraphNodeById(rootChildren[0].id)
+          } else {
+            announceGraphNav('Expand Quality of Life to navigate outcomes')
+          }
+        }
+        handled = true
+      } else if (key === 'ArrowUp') {
+        const children = visibleNodes
+          .filter(node => node.parentId === currentNodeId)
+          .sort((a, b) => a.angle - b.angle)
+        if (children.length > 0) {
+          focusGraphNodeById(children[0].id)
+        } else if (currentNode?.hasChildren && !expandedNodes.has(currentNodeId)) {
+          announceGraphNav(`Expand ${currentNode.label} to move deeper`)
+        } else if (currentNode) {
+          announceGraphNav(`${currentNode.label} has no deeper visible nodes`)
+        }
+        handled = true
+      } else if (key === 'ArrowDown') {
+        const parentNode = getParent(navModelRef, currentNodeId)
+        if (parentNode) {
+          focusGraphNodeById(parentNode.id)
+        } else if (navModelRef.rootId) {
+          focusGraphNodeById(navModelRef.rootId)
+        }
+        handled = true
+      } else if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
+        if (currentNode?.hasChildren) {
+          const isCurrentlyExpanded = expandedNodes.has(currentNodeId)
+          const actionLabel = isCurrentlyExpanded ? 'Collapsed' : 'Expanded'
+          pendingExpandedBranchFocusRef.current = isCurrentlyExpanded ? null : currentNodeId
+          toggleExpansion(currentNodeId)
+          announceGraphNav(`${actionLabel} ${currentNode.label}`)
+        } else if (currentNode) {
+          announceGraphNav(`${currentNode.label} has no children to expand`)
+        } else {
+          announceGraphNav('No children to expand')
+        }
+        handled = true
+      } else if (key === 'Escape') {
+        const parentNode = getParent(navModelRef, currentNodeId)
+        if (parentNode) {
+          focusGraphNodeById(parentNode.id)
+          announceGraphNav(`Focused parent ${parentNode.label}`)
+        } else if (navModelRef.rootId) {
+          focusGraphNodeById(navModelRef.rootId)
+          announceGraphNav('Already at root node')
+        }
+        handled = true
+      }
+
+      if (handled) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    })
 
     // === LABELS with enter/update/exit ===
     const labelNodes = visibleNodes.filter(n => {
@@ -5464,7 +5780,7 @@ function App() {
       layoutReadyTimerRef.current = null
     }
 
-  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, qolNodeScoreForTooltip, storeInterventions, finalizeStructuralTrace, setStructuralLock])
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, selectedRegion, selectedStratum, qolNodeScoreForTooltip, storeInterventions, finalizeStructuralTrace, setStructuralLock, graphNavEnabled, announceGraphNav])
 
   // Initialize screen reader live region
   useEffect(() => { initAnnouncer() }, [])
@@ -5950,9 +6266,6 @@ function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#fafafa', position: 'relative' }}>
-      {/* Skip link for keyboard users */}
-      <a href="#main-content" className="skip-link">Skip to main content</a>
-
       {/* World Map - background choropleth layer */}
       <WorldMap
         foreground={mapForeground}
@@ -5995,7 +6308,7 @@ function App() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'white', padding: '10px 12px', borderRadius: 6,
-          boxShadow: '0 2px 6px rgba(0,0,0,0.1)', width: 260, boxSizing: 'border-box'
+          boxShadow: '0 2px 6px rgba(0,0,0,0.1)', width: '100%', boxSizing: 'border-box'
         }}>
           {/* Search icon */}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" aria-hidden="true">
@@ -6155,14 +6468,14 @@ function App() {
                         className="touch-target-44"
                         onClick={() => expandRing(i)}
                         aria-label={`Expand ${ring.label}`}
-                        style={{ padding: '2px 6px', fontSize: 9, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
+                        style={{ padding: '3px 7px', fontSize: 11, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
                         title={`Expand ${ring.label}`}
                       >+</button>
                       <button
                         className="touch-target-44"
                         onClick={() => collapseRing(i)}
                         aria-label={`Collapse ${ring.label}`}
-                        style={{ padding: '2px 6px', fontSize: 9, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
+                        style={{ padding: '3px 7px', fontSize: 11, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
                         title={`Collapse ${ring.label}`}
                       >−</button>
                     </>
@@ -6333,6 +6646,7 @@ function App() {
           }
           onShare={shareCurrentState}
           simMode={localViewSimMode}
+          compact={viewport.isBelow(1200)}
         />
       </div>
 
@@ -6350,6 +6664,7 @@ function App() {
           <StrataTabs
             activeStratum={selectedStratum}
             onStratumChange={setStratum}
+            compact={viewport.isBelow(1200)}
           />
         </div>
       )}
@@ -6381,10 +6696,14 @@ function App() {
             flexShrink: 0
           }}
         >
+          <p id={GRAPH_NAV_INSTRUCTIONS_ID} className="sr-only">
+            In global graph view, tab to a node, use arrow keys to move between sibling nodes, press Enter or Space to expand or collapse, and press Escape to move to the parent node.
+          </p>
           <svg
             ref={svgRef}
             role="img"
             aria-label={`Causal graph visualization for ${selectedCountry || (selectedRegion ? REGION_DISPLAY_NAMES[selectedRegion] : selectedStratum)}`}
+            aria-describedby={GRAPH_NAV_INSTRUCTIONS_ID}
             style={{
               width: '100%',
               height: '100%',

@@ -98,9 +98,14 @@ Development roadmap for the Global Project causal visualization tool.
 
 ---
 
-## Phase 8 — Accessibility (PLANNED)
+## Phase 8 — Accessibility (IN PROGRESS 2026-03-03)
 
 Goal: WCAG 2.1 AA compliance. Keyboard navigation, screen reader support, color contrast, focus management, ARIA attributes across all interactive elements.
+
+- Global mode radial graph keyboard navigation (roving tabindex on SVG nodes)
+- Arrow-key sibling traversal by ring angle order
+- Enter/Space expand-collapse support with live-region action announcements
+- Escape parent-focus navigation with hidden-node fallback recovery
 
 ---
 

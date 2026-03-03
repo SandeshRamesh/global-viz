@@ -9,6 +9,7 @@
     "dev": "vite",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:a11y-nav": "vitest run src/a11y/__tests__/graphNodeNav.test.ts",
     "test:layout": "vitest run src/layouts/__tests__/outcomeAngles.stability.test.ts"
   },
   "dependencies": {

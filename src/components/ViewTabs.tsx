@@ -18,6 +18,8 @@ interface ViewTabsProps {
   canClear?: boolean          // Whether clear action should be enabled
   onShare?: () => Promise<boolean>  // Copy shareable link callback
   simMode?: boolean           // Sim mode enables local/split even without targets
+  /** Hide text labels on action buttons, show icon only */
+  compact?: boolean
 }
 
 /**
@@ -31,7 +33,8 @@ export function ViewTabs({
   onClear,
   canClear,
   onShare,
-  simMode = false
+  simMode = false,
+  compact = false
 }: ViewTabsProps) {
   const hasTargets = localTargetCount > 0 || simMode
   const clearEnabled = canClear ?? hasTargets
@@ -234,7 +237,10 @@ export function ViewTabs({
             background: 'white',
             color: clearEnabled ? '#E53935' : '#ccc',
             transition: 'all 0.2s ease',
-            opacity: clearEnabled ? 1 : 0.4
+            opacity: clearEnabled ? 1 : 0.4,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4
           }}
           onMouseEnter={(e) => {
             if (clearEnabled) e.currentTarget.style.background = '#FFEBEE'
@@ -244,7 +250,12 @@ export function ViewTabs({
           }}
           title={clearEnabled ? "Clear working context in current scope (C)" : "Nothing to clear"}
         >
-          Clear (C)
+          {compact ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          ) : 'Clear (C)'}
         </button>
 
         {/* Reset button */}
@@ -259,7 +270,10 @@ export function ViewTabs({
             borderLeft: '1px solid #ddd',
             background: 'white',
             color: '#555',
-            transition: 'all 0.15s ease'
+            transition: 'all 0.15s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4
           }}
           title="Reset view to initial state (R or Home)"
           onMouseEnter={(e) => {
@@ -269,7 +283,12 @@ export function ViewTabs({
             e.currentTarget.style.background = 'white'
           }}
         >
-          Reset (R)
+          {compact ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+          ) : 'Reset (R)'}
         </button>
       </div>
 
@@ -322,7 +341,7 @@ export function ViewTabs({
             <line x1="8" y1="2" x2="8" y2="18" />
             <line x1="16" y1="6" x2="16" y2="22" />
           </svg>
-          Map (M)
+          {!compact && 'Map (M)'}
         </button>
       </div>
 
@@ -384,7 +403,10 @@ export function ViewTabs({
             <polyline points="16 6 12 2 8 6" />
             <line x1="12" y1="2" x2="12" y2="15" />
           </svg>
-          {shareStatus === 'copied' ? 'Copied!' : 'Share'}
+          {compact
+            ? (shareStatus === 'copied' ? '✓' : null)
+            : (shareStatus === 'copied' ? 'Copied!' : 'Share')
+          }
         </button>
       </div>
     </div>

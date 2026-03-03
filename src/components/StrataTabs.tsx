@@ -13,45 +13,57 @@ interface StrataTabsProps {
   activeStratum: Stratum
   onStratumChange: (stratum: Stratum) => void
   disabled?: boolean
+  /** Use short labels below 1200px viewport */
+  compact?: boolean
 }
 
 // Stratum configuration
 const STRATA_CONFIG: {
   id: Stratum
   label: string
+  shortLabel: string
   color: string
   minWidth: number
+  compactMinWidth: number
   definition: string
   gdpThreshold?: string
 }[] = [
   {
     id: 'unified',
     label: 'Unified',
+    shortLabel: 'All',
     color: '#3B82F6',
     minWidth: 65,
+    compactMinWidth: 40,
     definition: 'All countries pooled together'
   },
   {
     id: 'developing',
     label: 'Developing',
+    shortLabel: 'Dev',
     color: '#EF5350',
     minWidth: 85,
+    compactMinWidth: 45,
     definition: 'Low + Lower-middle income economies',
     gdpThreshold: 'GNI < $4,500/capita'
   },
   {
     id: 'emerging',
     label: 'Emerging',
+    shortLabel: 'Emrg',
     color: '#FFA726',
     minWidth: 75,
+    compactMinWidth: 50,
     definition: 'Upper-middle income economies',
     gdpThreshold: 'GNI $4,500 - $14,000/capita'
   },
   {
     id: 'advanced',
     label: 'Advanced',
+    shortLabel: 'Adv',
     color: '#66BB6A',
     minWidth: 75,
+    compactMinWidth: 45,
     definition: 'High income economies',
     gdpThreshold: 'GNI > $14,000/capita'
   }
@@ -63,7 +75,8 @@ const STRATA_CONFIG: {
 export function StrataTabs({
   activeStratum,
   onStratumChange,
-  disabled = false
+  disabled = false,
+  compact = false
 }: StrataTabsProps) {
   return (
     <div
@@ -93,7 +106,7 @@ export function StrataTabs({
             disabled={disabled}
             style={{
               position: 'relative',
-              padding: '8px 16px',
+              padding: compact ? '8px 10px' : '8px 16px',
               fontSize: 13,
               fontWeight: isActive ? 600 : 400,
               cursor: disabled ? 'default' : 'pointer',
@@ -102,7 +115,7 @@ export function StrataTabs({
               background: 'white',
               color: '#333',
               transition: 'color 0.15s ease',
-              minWidth: stratum.minWidth,
+              minWidth: compact ? stratum.compactMinWidth : stratum.minWidth,
               textAlign: 'center' as const,
               overflow: 'hidden',
               whiteSpace: 'nowrap'
@@ -126,7 +139,7 @@ export function StrataTabs({
             )}
             {/* Label text */}
             <span style={{ position: 'relative', zIndex: 1 }}>
-              {stratum.label}
+              {compact ? stratum.shortLabel : stratum.label}
             </span>
           </button>
         )
