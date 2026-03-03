@@ -71,13 +71,6 @@ export function SidebarDrawer({
     }
   }, [isMobileLayout, isOpen])
 
-  // Debug: trace hamburger visibility
-  useEffect(() => {
-    if (isMobileLayout) {
-      console.log('[SidebarDrawer] hideHamburger:', hideHamburger, 'isOpen:', isOpen)
-    }
-  }, [isMobileLayout, hideHamburger, isOpen])
-
   // Desktop: pass-through
   if (!isMobileLayout) {
     return <>{children}</>

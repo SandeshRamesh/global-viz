@@ -186,33 +186,6 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isPanelOpen, closePanel])
 
-  // Debug: trace panel state for mobile issues
-  useEffect(() => {
-    if (!isMobileLayout) return
-    console.log('[SimPanel] state:', { isPanelOpen, isMounted, isVisible, isCollapsed, isMobileLayout })
-  }, [isPanelOpen, isMounted, isVisible, isCollapsed, isMobileLayout])
-
-  // Debug: measure content div scroll capability
-  useEffect(() => {
-    if (!isMobileLayout || isCollapsed || !isPanelOpen) return
-    const timer = setTimeout(() => {
-      const panel = panelRef.current
-      if (!panel) return
-      const content = panel.querySelector('[data-scroll-debug]') as HTMLElement
-      if (content) {
-        console.log('[SimPanel] scroll debug:', {
-          scrollHeight: content.scrollHeight,
-          clientHeight: content.clientHeight,
-          offsetHeight: content.offsetHeight,
-          overflowY: getComputedStyle(content).overflowY,
-          canScroll: content.scrollHeight > content.clientHeight,
-        })
-      }
-      console.log('[SimPanel] panel computed z-index:', getComputedStyle(panel).zIndex)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [isMobileLayout, isCollapsed, isPanelOpen])
-
   if (!isMounted) return null
 
   return (
