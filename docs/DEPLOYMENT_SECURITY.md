@@ -13,9 +13,10 @@ Use this runbook when exposing the app publicly through Cloudflare Tunnel.
 | Frontend | https://atlas.argonanalytics.org | 3005 (local) |
 | API | https://api.argonanalytics.org | 8000 (local) |
 
-**Security model:** Rate limiting + CORS (no token auth)
+**Security model:** Rate limiting + CORS + browser-origin guard (no token auth)
 
 - CORS locked to `https://atlas.argonanalytics.org`
+- Simulation endpoints require allowed `Origin` header (`SIMULATION_BROWSER_ORIGIN_REQUIRED=true`)
 - Rate limits: 100 req/min, 1000 req/hr per IP
 - API on localhost only; Cloudflare Tunnel handles external access
 - Swagger docs disabled in production
@@ -40,8 +41,11 @@ Use this runbook when exposing the app publicly through Cloudflare Tunnel.
 API_ENV=production
 CORS_ORIGINS=https://atlas.argonanalytics.org
 CORS_ALLOW_WILDCARD=false
+ENFORCE_PRODUCTION_ENV=true
 API_ENABLE_DOCS=false
 HEALTH_DETAILED_ENABLED=false
+SECURITY_HEADERS_ENABLED=true
+SIMULATION_BROWSER_ORIGIN_REQUIRED=true  # Blocks non-browser requests without valid Origin
 SIMULATION_AUTH_ENABLED=false  # Rate limiting is sufficient for public research tools
 ```
 
@@ -91,3 +95,4 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 - Error responses are now generic on internal failures.
 - `/health/detailed` can be disabled for production to reduce information exposure.
 - If `ENFORCE_PRODUCTION_ENV=true`, startup will fail when unsafe production settings are detected.
+- Browser-origin guard is a lightweight anti-bot filter, not a cryptographic auth boundary.

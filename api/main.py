@@ -14,11 +14,14 @@ import logging
 
 from .config import (
     API_VERSION, API_TITLE, API_DESCRIPTION,
-    CORS_ORIGINS, CORS_ALLOW_CREDENTIALS, RATE_LIMIT_ENABLED, ENV,
+    CORS_ORIGINS, CORS_ALLOW_CREDENTIALS, CORS_METHODS, CORS_HEADERS,
+    CORS_EXPOSE_HEADERS, CORS_MAX_AGE, RATE_LIMIT_ENABLED, ENV,
     CONTACT_NAME, CONTACT_URL, CONTACT_EMAIL,
     LOG_LEVEL, API_ENABLE_DOCS, ENFORCE_PRODUCTION_ENV,
+    SECURITY_HEADERS_ENABLED, SECURITY_HEADER_HSTS_MAX_AGE,
     SIMULATION_AUTH_ENABLED, SIMULATION_AUTH_TOKEN,
-    CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET
+    CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET,
+    SIMULATION_BROWSER_ORIGIN_REQUIRED,
 )
 from .routers import (
     countries_router,
@@ -62,6 +65,42 @@ def _is_local_origin(origin: str) -> bool:
     return origin.startswith(local_prefixes)
 
 
+def _is_simulation_path(path: str) -> bool:
+    return path.startswith("/api/simulate")
+
+
+def _normalize_origin(origin: str) -> str:
+    return origin.strip().rstrip("/")
+
+
+def _is_allowed_origin(origin: str) -> bool:
+    normalized = _normalize_origin(origin)
+    if not normalized:
+        return False
+    if "*" in CORS_ORIGINS:
+        return True
+    allowed = {_normalize_origin(value) for value in CORS_ORIGINS}
+    return normalized in allowed
+
+
+def _is_simulation_request_authorized(request: Request) -> bool:
+    has_service_token = bool(CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET)
+    if has_service_token:
+        req_id = request.headers.get("CF-Access-Client-Id", "")
+        req_secret = request.headers.get("CF-Access-Client-Secret", "")
+        if req_id == CF_ACCESS_CLIENT_ID and req_secret == CF_ACCESS_CLIENT_SECRET:
+            return True
+
+    if SIMULATION_AUTH_TOKEN:
+        api_key = request.headers.get("X-API-Key", "")
+        auth_header = request.headers.get("Authorization", "")
+        bearer = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+        if api_key == SIMULATION_AUTH_TOKEN or bearer == SIMULATION_AUTH_TOKEN:
+            return True
+
+    return False
+
+
 def _validate_security_config() -> None:
     if ENFORCE_PRODUCTION_ENV and ENV != "production":
         raise RuntimeError("ENFORCE_PRODUCTION_ENV is enabled but API_ENV is not 'production'.")
@@ -89,14 +128,39 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=CORS_ALLOW_CREDENTIALS,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=CORS_METHODS,
+    allow_headers=CORS_HEADERS,
+    expose_headers=CORS_EXPOSE_HEADERS,
+    max_age=CORS_MAX_AGE,
 )
 
 # GZip compression middleware
 # Compresses responses > 1KB, typically 75-90% reduction for JSON
 # Order matters: GZip runs AFTER CORS (middleware stack is LIFO)
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Apply standard response security headers (production by default)."""
+    response = await call_next(request)
+
+    if not SECURITY_HEADERS_ENABLED:
+        return response
+
+    response.headers.setdefault(
+        "Strict-Transport-Security",
+        f"max-age={SECURITY_HEADER_HSTS_MAX_AGE}; includeSubDomains"
+    )
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+    )
+    return response
 
 
 # Request logging middleware
@@ -110,25 +174,29 @@ async def logging_middleware(request: Request, call_next):
 async def simulation_auth_middleware(request: Request, call_next):
     """Optional auth gate for simulation endpoints."""
     if (
-        not SIMULATION_AUTH_ENABLED
-        or request.method == "OPTIONS"
-        or not request.url.path.startswith("/api/simulate")
+        request.method == "OPTIONS"
+        or not _is_simulation_path(request.url.path)
     ):
         return await call_next(request)
 
-    has_service_token = bool(CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET)
-    if has_service_token:
-        req_id = request.headers.get("CF-Access-Client-Id", "")
-        req_secret = request.headers.get("CF-Access-Client-Secret", "")
-        if req_id == CF_ACCESS_CLIENT_ID and req_secret == CF_ACCESS_CLIENT_SECRET:
-            return await call_next(request)
+    is_authorized = _is_simulation_request_authorized(request)
 
-    if SIMULATION_AUTH_TOKEN:
-        api_key = request.headers.get("X-API-Key", "")
-        auth_header = request.headers.get("Authorization", "")
-        bearer = auth_header[7:] if auth_header.startswith("Bearer ") else ""
-        if api_key == SIMULATION_AUTH_TOKEN or bearer == SIMULATION_AUTH_TOKEN:
-            return await call_next(request)
+    if SIMULATION_BROWSER_ORIGIN_REQUIRED and not is_authorized:
+        request_origin = request.headers.get("Origin", "")
+        if not _is_allowed_origin(request_origin):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "browser_origin_required",
+                    "message": "Simulation endpoints require a browser-origin request from an allowed origin."
+                },
+            )
+
+    if not SIMULATION_AUTH_ENABLED:
+        return await call_next(request)
+
+    if is_authorized:
+        return await call_next(request)
 
     return JSONResponse(
         status_code=401,

@@ -211,6 +211,295 @@ function YearInput({ value, onCommit }: { value: number; onCommit: (year: number
 }
 
 // ============================================
+// Indicator Dropdown — searchable combobox replacing native <select>
+// ============================================
+
+interface IndicatorGroup {
+  domain: string
+  label: string
+  color: string
+  nodes: Array<{ id: string; label: string; domain: string; outEdges: number }>
+}
+
+interface TopIndicator {
+  id: string
+  label: string
+  domain?: string
+  outEdges: number
+}
+
+function IndicatorDropdown({
+  index,
+  value,
+  selectedLabel,
+  selectedDomain,
+  indicatorOptions,
+  topIndicators,
+  onChange,
+}: {
+  index: number
+  value: string
+  selectedLabel: string
+  selectedDomain: string
+  indicatorOptions: IndicatorGroup[]
+  topIndicators: TopIndicator[]
+  onChange: (index: number, indicatorId: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false)
+        setSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [isOpen])
+
+  const lowerSearch = search.toLowerCase()
+
+  // Filter top indicators
+  const filteredTop = lowerSearch
+    ? topIndicators.filter(ind =>
+        (ind.label || ind.id).toLowerCase().includes(lowerSearch) ||
+        (ind.domain || '').toLowerCase().includes(lowerSearch)
+      )
+    : topIndicators.slice(0, 10) // Show top 10 by default
+
+  // Filter grouped indicators
+  const filteredGroups = indicatorOptions
+    .map(group => {
+      if (!lowerSearch) return group
+      const domainMatch = group.domain.toLowerCase().includes(lowerSearch)
+      const filteredNodes = domainMatch
+        ? group.nodes
+        : group.nodes.filter(n => n.label.toLowerCase().includes(lowerSearch))
+      return filteredNodes.length > 0 ? { ...group, nodes: filteredNodes } : null
+    })
+    .filter((g): g is IndicatorGroup => g !== null)
+
+  const handleSelect = (indicatorId: string) => {
+    onChange(index, indicatorId)
+    setIsOpen(false)
+    setSearch('')
+  }
+
+  const domainColor = selectedDomain ? (DOMAIN_COLORS[selectedDomain] || '#9E9E9E') : undefined
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', marginBottom: 8 }}>
+      {/* Trigger button — shows selected indicator or placeholder */}
+      <button
+        type="button"
+        onClick={() => {
+          setIsOpen(prev => !prev)
+          if (!isOpen) {
+            requestAnimationFrame(() => inputRef.current?.focus())
+          }
+        }}
+        aria-label={`Indicator for intervention ${index + 1}`}
+        aria-expanded={isOpen}
+        style={{
+          width: '100%',
+          padding: '6px 28px 6px 8px',
+          borderRadius: 4,
+          border: `1px solid ${isOpen ? '#3B82F6' : '#ddd'}`,
+          background: 'white',
+          color: value ? '#333' : '#767676',
+          fontSize: 12,
+          cursor: 'pointer',
+          textAlign: 'left',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          position: 'relative',
+        }}
+      >
+        {domainColor && (
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            backgroundColor: domainColor, flexShrink: 0,
+            boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
+          }} />
+        )}
+        <span style={{
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+        }}>
+          {value ? selectedLabel : 'Select indicator...'}
+        </span>
+        <svg
+          width="12" height="12" viewBox="0 0 12 12" fill="none"
+          stroke="#767676" strokeWidth="2" strokeLinecap="round"
+          style={{
+            position: 'absolute', right: 8, top: '50%',
+            transform: `translateY(-50%) ${isOpen ? 'rotate(180deg)' : 'rotate(0deg)'}`,
+            transition: 'transform 0.15s ease',
+          }}
+        >
+          <polyline points="2 4 6 8 10 4" />
+        </svg>
+      </button>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          zIndex: 50,
+          background: 'white',
+          border: '1px solid #ddd',
+          borderRadius: 6,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          marginTop: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: 260,
+        }}>
+          {/* Search input */}
+          <div style={{ padding: '6px 8px', borderBottom: '1px solid #eee', flexShrink: 0 }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search indicators..."
+              style={{
+                width: '100%',
+                padding: '5px 8px',
+                border: '1px solid #ddd',
+                borderRadius: 4,
+                fontSize: 12,
+                boxSizing: 'border-box',
+                outline: 'none',
+              }}
+              onFocus={e => e.target.style.borderColor = '#3B82F6'}
+              onBlur={e => e.target.style.borderColor = '#ddd'}
+              onKeyDown={e => {
+                if (e.key === 'Escape') {
+                  setIsOpen(false)
+                  setSearch('')
+                }
+              }}
+            />
+          </div>
+
+          {/* Options list */}
+          <div ref={listRef} style={{ overflowY: 'auto', flex: 1 }}>
+            {/* Top indicators section */}
+            {filteredTop.length > 0 && (
+              <>
+                <div style={{
+                  padding: '6px 10px', fontSize: 10, fontWeight: 600,
+                  color: '#767676', background: '#fafafa',
+                  position: 'sticky', top: 0, zIndex: 1,
+                }}>
+                  ★ Top Indicators (by causal reach)
+                </div>
+                {filteredTop.map(ind => (
+                  <button
+                    key={`top-${ind.id}`}
+                    type="button"
+                    onClick={() => handleSelect(ind.id)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      border: 'none',
+                      background: ind.id === value ? '#EBF5FF' : 'white',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: 12,
+                      color: '#333',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                    onMouseEnter={e => { if (ind.id !== value) e.currentTarget.style.background = '#f5f5f5' }}
+                    onMouseLeave={e => { if (ind.id !== value) e.currentTarget.style.background = 'white' }}
+                  >
+                    <span style={{
+                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                      backgroundColor: DOMAIN_COLORS[ind.domain || ''] || '#9E9E9E',
+                    }} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ind.label || ind.id}
+                    </span>
+                    <span style={{ fontSize: 10, color: '#767676', flexShrink: 0 }}>
+                      {ind.outEdges}
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+
+            {/* Domain-grouped sections */}
+            {filteredGroups.map(group => (
+              <div key={group.domain}>
+                <div style={{
+                  padding: '6px 10px', fontSize: 10, fontWeight: 600,
+                  color: group.color, background: '#fafafa',
+                  position: 'sticky', top: 0, zIndex: 1,
+                  borderTop: '1px solid #eee',
+                }}>
+                  {group.label}
+                </div>
+                {group.nodes.map(node => (
+                  <button
+                    key={node.id}
+                    type="button"
+                    onClick={() => handleSelect(node.id)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px 6px 18px',
+                      border: 'none',
+                      background: node.id === value ? '#EBF5FF' : 'white',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: 12,
+                      color: '#333',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                    onMouseEnter={e => { if (node.id !== value) e.currentTarget.style.background = '#f5f5f5' }}
+                    onMouseLeave={e => { if (node.id !== value) e.currentTarget.style.background = 'white' }}
+                  >
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {node.label}
+                    </span>
+                    {node.outEdges > 0 && (
+                      <span style={{ fontSize: 10, color: '#767676', flexShrink: 0 }}>
+                        {node.outEdges}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
+
+            {/* No results */}
+            {filteredTop.length === 0 && filteredGroups.length === 0 && (
+              <div style={{ padding: '12px 10px', textAlign: 'center', color: '#767676', fontSize: 12 }}>
+                No indicators match "{search}"
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
 // Main Component
 // ============================================
 
@@ -603,53 +892,16 @@ export function InterventionBuilder() {
             </div>
           </div>
 
-          {/* Indicator selector with domain color */}
-          <div className="indicator-select-wrapper">
-            <select
-              id={`intervention-${index}-indicator`}
-              name={`intervention-${index}-indicator`}
-              className="indicator-select"
-              value={intervention.indicator}
-              onChange={(e) => handleIndicatorChange(index, e.target.value)}
-              aria-label={`Indicator for intervention ${index + 1}`}
-            >
-              <option value="">Select indicator...</option>
-              {/* Top indicators by causal connections */}
-              <optgroup label="★ Top Indicators (by causal reach)">
-                {topIndicators.map(ind => (
-                  <option
-                    key={ind.id}
-                    value={ind.id}
-                    data-domain={ind.domain}
-                  >
-                    {ind.label || ind.id} ({ind.outEdges})
-                  </option>
-                ))}
-              </optgroup>
-              {/* Grouped by domain */}
-              {indicatorOptions.map(group => (
-                <optgroup key={group.domain} label={group.label}>
-                  {group.nodes.map(node => (
-                    <option
-                      key={node.id}
-                      value={node.id}
-                      data-domain={node.domain}
-                    >
-                      {node.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            {/* Domain color indicator */}
-            {intervention.domain && (
-              <span
-                className="domain-dot"
-                style={{ backgroundColor: DOMAIN_COLORS[intervention.domain] || '#9E9E9E' }}
-                title={intervention.domain}
-              />
-            )}
-          </div>
+          {/* Indicator selector — searchable dropdown */}
+          <IndicatorDropdown
+            index={index}
+            value={intervention.indicator}
+            selectedLabel={intervention.indicatorLabel || ''}
+            selectedDomain={intervention.domain || ''}
+            indicatorOptions={indicatorOptions}
+            topIndicators={topIndicators}
+            onChange={handleIndicatorChange}
+          />
 
           {/* Temporal edge count badge */}
           {intervention.indicator && (() => {
@@ -766,49 +1018,13 @@ export function InterventionBuilder() {
         </div>
       )}
 
-      {/* Slider thumb styles and indicator select */}
+      {/* Slider thumb styles */}
       <style>{`
-        .indicator-select-wrapper {
-          position: relative;
-          margin-bottom: 8px;
-        }
-
-        .indicator-select {
-          width: 100%;
-          padding: 6px 28px 6px 8px;
-          border-radius: 4px;
-          border: 1px solid #ddd;
-          background: white;
-          color: #333;
-          font-size: 12px;
-          cursor: pointer;
-          outline: none;
-          appearance: none;
-          -webkit-appearance: none;
-        }
-
-        .indicator-select:focus {
-          border-color: #3B82F6;
-        }
-
-        .indicator-select:focus-visible,
         button:focus-visible,
         input[type="text"]:focus-visible,
         input[type="range"]:focus-visible {
           outline: 2px solid #3B82F6;
           outline-offset: 2px;
-        }
-
-        .domain-dot {
-          position: absolute;
-          right: 10px;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          pointer-events: none;
-          box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
         }
 
         input[type="range"]::-webkit-slider-thumb {

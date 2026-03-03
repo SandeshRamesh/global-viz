@@ -98,7 +98,7 @@ Development roadmap for the Global Project causal visualization tool.
 
 ---
 
-## Phase 8 — Accessibility (IN PROGRESS 2026-03-03)
+## Phase 8 — Accessibility (COMPLETE 2026-03-03)
 
 Goal: WCAG 2.1 AA compliance. Keyboard navigation, screen reader support, color contrast, focus management, ARIA attributes across all interactive elements.
 
@@ -106,12 +106,30 @@ Goal: WCAG 2.1 AA compliance. Keyboard navigation, screen reader support, color 
 - Arrow-key sibling traversal by ring angle order
 - Enter/Space expand-collapse support with live-region action announcements
 - Escape parent-focus navigation with hidden-node fallback recovery
+- Focus indicators, touch targets, form labels, results table accessibility
+- Skip link, ARIA live regions, screen reader announcements
 
 ---
 
-## Phase 9 — Mobile & Responsive (PLANNED)
+## Phase 9A — Desktop Adaptive Layout (COMPLETE 2026-03-03)
 
-Goal: Full screen size support from phone to ultrawide. Responsive layout, touch interactions, simplified views for small screens, adaptive UI panels.
+Goal: Make all UI chrome adapt gracefully from 1024px to ultrawide. Panel collapse states, adaptive split ratio, responsive tab labels.
+
+- Breakpoint constants + `useViewport` hook (debounced resize tracking)
+- SimulationPanel responsive sizing + collapsible header (country name + intervention count badge)
+- DataQualityPanel responsive sizing + collapsible header (active page indicator)
+- Adaptive split ratio: viewport-aware default (0.67/0.60/0.55/0.50) with user-override tracking
+- Search input overflow fix (`width: 100%` respects container)
+- Ring button font size floor (9px → 11px)
+- StrataTabs compact mode: short labels (All/Dev/Emrg/Adv) below 1200px
+- ViewTabs compact mode: icon-only action buttons below 1200px
+- SVG title tooltip removal (was showing "Causal graph: unified" on hover)
+
+---
+
+## Phase 9B/C — Tablet & Mobile (PLANNED)
+
+Goal: Full screen size support from phone to ultrawide. Touch interactions, simplified views for small screens.
 
 ---
 

@@ -88,6 +88,10 @@ Deprecated alias responses include:
 | `API_ENV` | development | Environment mode |
 | `CORS_ORIGINS` | localhost:3000,5173,5174 | Allowed CORS origins |
 | `CORS_ALLOW_WILDCARD` | false | Allow `*` origins (non-production recommended only) |
+| `CORS_METHODS` | GET,POST,OPTIONS | Allowed CORS methods |
+| `CORS_HEADERS` | Accept,Authorization,Content-Type,... | Allowed CORS request headers |
+| `CORS_EXPOSE_HEADERS` | Retry-After,X-RateLimit-...,X-Process-Time | CORS-exposed response headers |
+| `CORS_MAX_AGE` | 600 | CORS preflight cache duration (seconds) |
 | `TRUST_PROXY_IPS` | 127.0.0.1,::1 | Upstream proxies allowed to supply forwarding IP headers |
 | `RATE_LIMIT_ENABLED` | true | Enable rate limiting |
 | `RATE_LIMIT_PER_MINUTE` | 100 | Requests per minute |
@@ -101,8 +105,11 @@ Deprecated alias responses include:
 | `TEMPORAL_SERVICE_CLUSTER_CACHE_MAX` | 128 | Max cached cluster/feedback payloads |
 | `API_ENABLE_DOCS` | true (dev), false (prod) | Enable `/docs` and `/redoc` |
 | `HEALTH_DETAILED_ENABLED` | true (dev), false (prod) | Enable `/health/detailed` |
-| `ENFORCE_PRODUCTION_ENV` | false | Fail startup if prod hardening checks fail |
+| `ENFORCE_PRODUCTION_ENV` | false (dev), true (prod) | Fail startup if prod hardening checks fail |
+| `SECURITY_HEADERS_ENABLED` | false (dev), true (prod) | Add HSTS/CSP/frame/sniff/referrer/permissions headers |
+| `SECURITY_HEADER_HSTS_MAX_AGE` | 31536000 | HSTS max-age in seconds |
 | `SIMULATION_AUTH_ENABLED` | false (dev), true (prod) | Require auth for `/api/simulate*` |
+| `SIMULATION_BROWSER_ORIGIN_REQUIRED` | false (dev), true (prod) | Require allowed `Origin` for simulation requests unless token-auth succeeds |
 | `SIMULATION_AUTH_TOKEN` | empty | Token accepted via `X-API-Key` or `Authorization: Bearer` |
 | `CF_ACCESS_CLIENT_ID` | empty | Cloudflare Access service token ID |
 | `CF_ACCESS_CLIENT_SECRET` | empty | Cloudflare Access service token secret |

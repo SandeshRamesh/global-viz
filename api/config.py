@@ -138,6 +138,36 @@ if "*" in CORS_ORIGINS and ENV == "production" and not CORS_ALLOW_WILDCARD:
         CORS_ORIGINS = DEFAULT_CORS_ORIGINS
 
 CORS_ALLOW_CREDENTIALS = "*" not in CORS_ORIGINS
+CORS_METHODS = [
+    method.strip().upper()
+    for method in os.getenv("CORS_METHODS", "GET,POST,OPTIONS").split(",")
+    if method.strip()
+]
+if not CORS_METHODS:
+    CORS_METHODS = ["GET", "POST", "OPTIONS"]
+
+CORS_HEADERS = [
+    header.strip()
+    for header in os.getenv(
+        "CORS_HEADERS",
+        "Accept,Accept-Language,Authorization,CF-Access-Client-Id,"
+        "CF-Access-Client-Secret,Content-Language,Content-Type,X-API-Key"
+    ).split(",")
+    if header.strip()
+]
+if not CORS_HEADERS:
+    CORS_HEADERS = ["Accept", "Authorization", "Content-Type"]
+
+CORS_EXPOSE_HEADERS = [
+    header.strip()
+    for header in os.getenv(
+        "CORS_EXPOSE_HEADERS",
+        "Retry-After,X-Process-Time,X-RateLimit-Limit-Hour,X-RateLimit-Limit-Minute,"
+        "X-RateLimit-Remaining-Hour,X-RateLimit-Remaining-Minute"
+    ).split(",")
+    if header.strip()
+]
+CORS_MAX_AGE = int(os.getenv("CORS_MAX_AGE", "600"))
 
 # Trusted proxy IPs (used to safely read client IP headers)
 TRUST_PROXY_IPS = [
@@ -165,11 +195,23 @@ HEALTH_DETAILED_ENABLED = os.getenv(
     "HEALTH_DETAILED_ENABLED",
     "false" if ENV == "production" else "true"
 ).lower() == "true"
-ENFORCE_PRODUCTION_ENV = os.getenv("ENFORCE_PRODUCTION_ENV", "false").lower() == "true"
+ENFORCE_PRODUCTION_ENV = os.getenv(
+    "ENFORCE_PRODUCTION_ENV",
+    "true" if ENV == "production" else "false"
+).lower() == "true"
+SECURITY_HEADERS_ENABLED = os.getenv(
+    "SECURITY_HEADERS_ENABLED",
+    "true" if ENV == "production" else "false"
+).lower() == "true"
+SECURITY_HEADER_HSTS_MAX_AGE = int(os.getenv("SECURITY_HEADER_HSTS_MAX_AGE", "31536000"))
 
 # Simulation endpoint authentication (recommended for public exposure)
 SIMULATION_AUTH_ENABLED = os.getenv(
     "SIMULATION_AUTH_ENABLED",
+    "true" if ENV == "production" else "false"
+).lower() == "true"
+SIMULATION_BROWSER_ORIGIN_REQUIRED = os.getenv(
+    "SIMULATION_BROWSER_ORIGIN_REQUIRED",
     "true" if ENV == "production" else "false"
 ).lower() == "true"
 SIMULATION_AUTH_TOKEN = os.getenv("SIMULATION_AUTH_TOKEN", "").strip()

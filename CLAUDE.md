@@ -119,9 +119,9 @@ viz/
 
 See `docs/plans/roadmap.md` for full phase history and feature details.
 
-**Completed**: Phases 2–7.5 (Core Sim → Sim Polish → Sim UX → Pre-Launch → Map → Regional → Polish)
+**Completed**: Phases 2–9A (Core Sim → Sim Polish → Sim UX → Pre-Launch → Map → Regional → Polish → Accessibility → Desktop Adaptive Layout)
 
-**Next**: Phase 8 — Accessibility (WCAG 2.1 AA)
+**Next**: Phase 9B/C — Tablet & Mobile
 
 **Pending fix**: Layout stability on single-node collapse — see `docs/plans/codex-layout-stability-fix.md`
 
