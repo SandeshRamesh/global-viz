@@ -25,8 +25,15 @@ import { useSimulationStore, useIsPanelOpen } from './stores/simulationStore'
 import { simulationAPI, type CountryGraphEdge } from './services/api'
 import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData } from './utils/causalEdges'
 import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
+import { perfTrace, type StructuralActionName } from './utils/perfTrace'
 import { SIM_MS_PER_YEAR } from './constants/time'
 import { REGION_DISPLAY_NAMES, REGION_TO_ISO3S } from './constants/regions'
+import {
+  resolveLayoutBudget,
+  STRUCTURAL_LOCK_FALLBACK_MS,
+  type LayoutAction,
+  type LayoutBudget
+} from './constants/animation'
 import {
   computeRadialLayout,
   detectOverlaps,
@@ -68,31 +75,67 @@ const RING_LABELS = [
  * Loading spinner with delay to avoid flash for fast loads.
  * Positioned at specified x, y coordinates (follows QoL node).
  */
-function LoadingSpinner({ show, delay = 200, posRef, elRef }: {
+function LoadingSpinner({ show, delay = 200, minDisplay = 300, posRef, elRef }: {
   show: boolean
   delay?: number
+  minDisplay?: number
   posRef: React.RefObject<{ x: number; y: number } | null>
   elRef: React.RefObject<HTMLDivElement | null>
 }) {
   const [visible, setVisible] = useState(false)
-  const timeoutRef = useRef<number | null>(null)
+  const showTimerRef = useRef<number | null>(null)
+  const hideTimerRef = useRef<number | null>(null)
+  const shownAtRef = useRef<number>(0)
+  const visibleRef = useRef(false)
+
+  useEffect(() => {
+    visibleRef.current = visible
+  }, [visible])
 
   useEffect(() => {
     if (show) {
-      timeoutRef.current = window.setTimeout(() => {
-        setVisible(true)
-      }, delay)
-    } else {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
+      if (hideTimerRef.current !== null) {
+        clearTimeout(hideTimerRef.current)
+        hideTimerRef.current = null
       }
-      setVisible(false)
+      if (!visibleRef.current && showTimerRef.current === null) {
+        showTimerRef.current = window.setTimeout(() => {
+          showTimerRef.current = null
+          shownAtRef.current = performance.now()
+          setVisible(true)
+        }, delay)
+      }
+    } else {
+      if (showTimerRef.current !== null) {
+        clearTimeout(showTimerRef.current)
+        showTimerRef.current = null
+      }
+      if (!visibleRef.current) {
+        setVisible(false)
+      } else {
+        const elapsed = performance.now() - shownAtRef.current
+        const remaining = Math.max(0, minDisplay - elapsed)
+        if (hideTimerRef.current !== null) {
+          clearTimeout(hideTimerRef.current)
+        }
+        hideTimerRef.current = window.setTimeout(() => {
+          hideTimerRef.current = null
+          shownAtRef.current = 0
+          setVisible(false)
+        }, remaining)
+      }
     }
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (showTimerRef.current !== null) {
+        clearTimeout(showTimerRef.current)
+        showTimerRef.current = null
+      }
+      if (hideTimerRef.current !== null) {
+        clearTimeout(hideTimerRef.current)
+        hideTimerRef.current = null
+      }
     }
-  }, [show, delay])
+  }, [show, delay, minDisplay])
 
   // Sync initial position on mount/visibility change
   const callbackRef = useCallback((node: HTMLDivElement | null) => {
@@ -264,11 +307,34 @@ function interpolateQol(byYear: Record<string, number>, year: number): number | 
   return v0 + t * (v1 - v0)
 }
 
+type IdleHandle = { kind: 'idle' | 'timeout'; id: number }
+
+function scheduleIdleTask(task: () => void, timeoutMs: number): IdleHandle {
+  const win = window as Window & {
+    requestIdleCallback?: (callback: (deadline: IdleDeadline) => void, options?: { timeout: number }) => number
+  }
+  if (typeof win.requestIdleCallback === 'function') {
+    return { kind: 'idle', id: win.requestIdleCallback(() => task(), { timeout: timeoutMs }) }
+  }
+  return { kind: 'timeout', id: window.setTimeout(task, 16) }
+}
+
+function cancelIdleTask(handle: IdleHandle | null) {
+  if (!handle) return
+  if (handle.kind === 'idle') {
+    const win = window as Window & { cancelIdleCallback?: (id: number) => void }
+    win.cancelIdleCallback?.(handle.id)
+    return
+  }
+  clearTimeout(handle.id)
+}
+
 function App() {
   const svgRef = useRef<SVGSVGElement>(null)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const currentTransformRef = useRef<d3.ZoomTransform | null>(null)
   const prevVisibleNodeIdsRef = useRef<Set<string>>(new Set())
+  const prevVisibleEdgeIdsRef = useRef<Set<string>>(new Set())
   const prevViewModeForVizRef = useRef<ViewMode>('global')  // Track view mode changes in visualization
   const prevSplitRatioRef = useRef<number>(0.67)  // Track split ratio changes
   const nodePositionsRef = useRef<Map<string, { x: number; y: number; parentId: string | null }>>(new Map())
@@ -289,6 +355,7 @@ function App() {
   const [dataQualityOpen, setDataQualityOpen] = useState(false)
   const [dataQualityBtnHovered, setDataQualityBtnHovered] = useState(false)
   const tooltipNodeRef = useRef<ExpandableNode | null>(null)  // Caches last hovered node for smooth tooltip fade
+  const tooltipShowTimerRef = useRef<number | null>(null)
   const [ringStats, setRingStats] = useState<Array<{ label: string; count: number; minDistance: number }>>([])
   const [_fps, setFps] = useState<number>(0)
 
@@ -317,9 +384,24 @@ function App() {
   const mKeyRef = useRef<{ down: boolean; time: number; origForeground: boolean }>({ down: false, time: 0, origForeground: false })
   const localViewResetRef = useRef<(() => void) | null>(null)  // Store LocalView's reset function
   const urlStateRestoredRef = useRef(false)  // Track if URL state has been restored
-  const pendingExpandedNodesRef = useRef<string[] | null>(null)  // Expanded nodes from URL, applied after SHAP cache ready
+  const pendingExpandedNodesRef = useRef<string[] | null>(null)  // Expanded nodes from URL, applied after raw data loads
   const clickTimeoutRef = useRef<number | null>(null)  // For delayed single-click to allow double-click
   const layoutReadyTimerRef = useRef<number | null>(null)  // Debounced layout-ready signal timer
+  const resetExpandTimerRef = useRef<number | null>(null)
+  const resetFitTimerRef = useRef<number | null>(null)
+  const structuralTraceIdRef = useRef<number | null>(null)
+  const structuralTraceFinalizeTimerRef = useRef<number | null>(null)
+  const structuralTraceScheduledIdRef = useRef<number | null>(null)
+  const structuralLockUntilRef = useRef(0)
+  const structuralLockTimerRef = useRef<number | null>(null)
+  const queuedStructuralActionRef = useRef<(() => void) | null>(null)
+  const activeLayoutActionRef = useRef<LayoutAction | null>(null)
+  const activeLayoutBudgetRef = useRef<LayoutBudget | null>(null)
+  const activeLayoutRunIdRef = useRef(0)
+  const autoZoomDelayTimerRef = useRef<number | null>(null)
+  const autoZoomRafRef = useRef<number | null>(null)
+  const autoZoomRunTokenRef = useRef(0)
+  const visibleCountsRef = useRef({ nodes: 0, edges: 0 })
 
   // Temporal edges cache for Local View timeline playback
   // Maps year → country edges for the currently selected country/stratum
@@ -376,6 +458,117 @@ function App() {
     const data = (classificationsCache.classifications as any)?.[selectedCountry]
     return data?.iso3 as string | null ?? null
   }, [selectedCountry, classificationsCache])
+
+  const startStructuralTrace = useCallback((action: StructuralActionName, details?: Record<string, unknown>) => {
+    if (!import.meta.env.DEV) return
+    if (structuralTraceFinalizeTimerRef.current !== null) {
+      clearTimeout(structuralTraceFinalizeTimerRef.current)
+      structuralTraceFinalizeTimerRef.current = null
+    }
+
+    const previousId = structuralTraceIdRef.current
+    if (previousId !== null) {
+      perfTrace.finish(previousId, {
+        nodeCountAfter: visibleCountsRef.current.nodes,
+        edgeCountAfter: visibleCountsRef.current.edges,
+        animationWindowMs: 0,
+      })
+      structuralTraceIdRef.current = null
+      structuralTraceScheduledIdRef.current = null
+    }
+
+    structuralTraceIdRef.current = perfTrace.start({
+      action,
+      nodeCountBefore: visibleCountsRef.current.nodes,
+      edgeCountBefore: visibleCountsRef.current.edges,
+      details,
+    })
+    structuralTraceScheduledIdRef.current = null
+  }, [])
+
+  const finalizeStructuralTrace = useCallback((animationWindowMs: number) => {
+    const traceId = structuralTraceIdRef.current
+    if (import.meta.env.DEV && traceId !== null) {
+      perfTrace.finish(traceId, {
+        nodeCountAfter: visibleCountsRef.current.nodes,
+        edgeCountAfter: visibleCountsRef.current.edges,
+        animationWindowMs: Math.max(0, Math.round(animationWindowMs)),
+      })
+    }
+    structuralTraceIdRef.current = null
+    structuralTraceScheduledIdRef.current = null
+    structuralTraceFinalizeTimerRef.current = null
+    activeLayoutActionRef.current = null
+    activeLayoutBudgetRef.current = null
+  }, [])
+
+  const noteStructuralZoomOverlap = useCallback(() => {
+    if (!import.meta.env.DEV) return
+    perfTrace.noteZoomOverlap(structuralTraceIdRef.current)
+  }, [])
+
+  const flushQueuedStructuralAction = useCallback(() => {
+    const queuedAction = queuedStructuralActionRef.current
+    if (!queuedAction) return
+    queuedStructuralActionRef.current = null
+    queuedAction()
+  }, [])
+
+  const setStructuralLock = useCallback((lockMs: number) => {
+    const nextLockMs = Math.max(0, Math.round(lockMs))
+    if (structuralLockTimerRef.current !== null) {
+      clearTimeout(structuralLockTimerRef.current)
+      structuralLockTimerRef.current = null
+    }
+
+    if (nextLockMs === 0) {
+      structuralLockUntilRef.current = 0
+      flushQueuedStructuralAction()
+      return
+    }
+
+    structuralLockUntilRef.current = performance.now() + nextLockMs
+    structuralLockTimerRef.current = window.setTimeout(() => {
+      structuralLockTimerRef.current = null
+      structuralLockUntilRef.current = 0
+      flushQueuedStructuralAction()
+    }, nextLockMs)
+  }, [flushQueuedStructuralAction])
+
+  const runOrQueueStructuralAction = useCallback((runner: () => void) => {
+    if (performance.now() < structuralLockUntilRef.current) {
+      queuedStructuralActionRef.current = runner
+      return false
+    }
+    runner()
+    return true
+  }, [])
+
+  const cancelStructuralTransitions = useCallback(() => {
+    if (!svgRef.current) return
+    const svg = d3.select(svgRef.current)
+    const graphContainer = svg.select<SVGGElement>('g.graph-container')
+    if (graphContainer.empty()) return
+
+    graphContainer.selectAll('circle.node').interrupt('rotation').interrupt('timeline-size')
+    graphContainer.selectAll('line.edge').interrupt('rotation')
+    graphContainer.selectAll('text.node-label').interrupt('rotation')
+    graphContainer.selectAll('circle.glow').interrupt('glow-move').interrupt('glow-show')
+    graphContainer.selectAll('circle.local-glow').interrupt('local-glow-move').interrupt('local-glow-show')
+    graphContainer.selectAll('circle.sim-glow').interrupt('sim-glow-move').interrupt('sim-glow-show')
+  }, [])
+
+  const beginLayoutAction = useCallback(
+    (layoutAction: LayoutAction, traceAction: StructuralActionName, details?: Record<string, unknown>) => {
+      cancelStructuralTransitions()
+      activeLayoutActionRef.current = layoutAction
+      activeLayoutBudgetRef.current = null
+      activeLayoutRunIdRef.current += 1
+      startStructuralTrace(traceAction, { ...details, layoutAction })
+      setStructuralLock(STRUCTURAL_LOCK_FALLBACK_MS)
+    },
+    [cancelStructuralTransitions, startStructuralTrace, setStructuralLock]
+  )
 
   // Sync highlighted indicator from results table → graph highlight (single node, no expansion)
   useEffect(() => {
@@ -519,6 +712,42 @@ function App() {
       if (layoutReadyTimerRef.current !== null) {
         clearTimeout(layoutReadyTimerRef.current)
         layoutReadyTimerRef.current = null
+      }
+      if (structuralTraceFinalizeTimerRef.current !== null) {
+        clearTimeout(structuralTraceFinalizeTimerRef.current)
+        structuralTraceFinalizeTimerRef.current = null
+      }
+      if (structuralLockTimerRef.current !== null) {
+        clearTimeout(structuralLockTimerRef.current)
+        structuralLockTimerRef.current = null
+      }
+      if (autoZoomDelayTimerRef.current !== null) {
+        clearTimeout(autoZoomDelayTimerRef.current)
+        autoZoomDelayTimerRef.current = null
+      }
+      if (autoZoomRafRef.current !== null) {
+        cancelAnimationFrame(autoZoomRafRef.current)
+        autoZoomRafRef.current = null
+      }
+      if (tooltipShowTimerRef.current !== null) {
+        clearTimeout(tooltipShowTimerRef.current)
+        tooltipShowTimerRef.current = null
+      }
+      if (resetExpandTimerRef.current !== null) {
+        clearTimeout(resetExpandTimerRef.current)
+        resetExpandTimerRef.current = null
+      }
+      if (resetFitTimerRef.current !== null) {
+        clearTimeout(resetFitTimerRef.current)
+        resetFitTimerRef.current = null
+      }
+      if (structuralTraceIdRef.current !== null) {
+        perfTrace.finish(structuralTraceIdRef.current, {
+          nodeCountAfter: visibleCountsRef.current.nodes,
+          edgeCountAfter: visibleCountsRef.current.edges,
+          animationWindowMs: 0,
+        })
+        structuralTraceIdRef.current = null
       }
     }
   }, [])
@@ -836,208 +1065,237 @@ function App() {
   ])
 
   /**
-   * Pre-compute aggregated SHAP for ALL years on timeline load.
-   * This runs once when temporalShapTimeline/stratifiedShapTimeline changes.
-   * Returns Map<year, Map<nodeId, normalizedImportance>>
-   *
-   * Uses stratified SHAP when a stratum is selected (and no country),
-   * otherwise uses unified/country temporal SHAP.
+   * Pre-compute SHAP and CI caches after initial paint (idle) to avoid blocking LCP.
+   * When stratum != unified (and no country/region), use stratified timeline.
    */
-  const precomputedShapCache = useMemo((): Map<number, Map<string, number>> => {
-    const cache = new Map<number, Map<string, number>>()
+  const effectiveShapTimeline = useMemo(() => {
+    if (selectedStratum !== 'unified' && !selectedCountry && !selectedRegion && stratifiedShapTimeline) {
+      return stratifiedShapTimeline
+    }
+    return temporalShapTimeline
+  }, [selectedStratum, selectedCountry, selectedRegion, stratifiedShapTimeline, temporalShapTimeline])
 
-    // Choose the right timeline based on stratum selection
-    // When stratum != 'unified' with no country/region selected, use stratified timeline.
-    const effectiveTimeline = (selectedStratum !== 'unified' && !selectedCountry && !selectedRegion && stratifiedShapTimeline)
-      ? stratifiedShapTimeline
-      : temporalShapTimeline
-
-    if (!effectiveTimeline || !rawData) return cache
-
-    // Build parent-child map once (shared across all years)
-    const childrenMap = new Map<string | number, (string | number)[]>()
+  // Build parent-child map once; reused for SHAP and CI precompute.
+  const childrenMap = useMemo(() => {
+    const map = new Map<string | number, string[]>()
+    if (!rawData) return map
     for (const node of rawData.nodes) {
-      if (node.children) {
-        childrenMap.set(node.id, node.children.map(c => String(c)))
-      }
+      if (node.children) map.set(node.id, node.children.map(c => String(c)))
     }
+    return map
+  }, [rawData])
 
-    // Pre-compute for each year in the timeline
-    for (const year of effectiveTimeline.years) {
-      const shapValues = effectiveTimeline.shap_by_year[String(year)]
-      if (!shapValues) continue
+  const rootNodeId = useMemo(() => rawData?.nodes.find(n => n.layer === 0)?.id ?? null, [rawData])
 
-      const yearImportance = new Map<string, number>()
+  const computeYearImportance = useCallback((year: number): Map<string, number> => {
+    const yearImportance = new Map<string, number>()
+    if (!rawData || !effectiveShapTimeline) return yearImportance
 
-      // First pass: assign SHAP to Ring 5 indicators
+      const shapValues = effectiveShapTimeline.shap_by_year[String(year)]
+      if (!shapValues) return yearImportance
+
+      // First pass: assign SHAP to Ring 5 indicators.
       for (const node of rawData.nodes) {
-        if (node.layer === 5) {
-          const shapValue = shapValues[String(node.id)]
-          if (shapValue !== undefined && shapValue !== null) {
-            const importance = typeof shapValue === 'object' && 'mean' in shapValue
-              ? shapValue.mean
-              : shapValue
-            yearImportance.set(String(node.id), importance)
-          }
-        }
+        if (node.layer !== 5) continue
+        const shapValue = shapValues[String(node.id)]
+        if (shapValue === undefined || shapValue === null) continue
+        const rawImportance = typeof shapValue === 'object' && 'mean' in shapValue
+          ? shapValue.mean
+          : shapValue
+        if (!Number.isFinite(rawImportance)) continue
+        yearImportance.set(String(node.id), Math.abs(rawImportance))
       }
 
-      // Second pass: aggregate up the hierarchy (Ring 4 → Ring 0)
-      for (let ring = 4; ring >= 0; ring--) {
-        for (const node of rawData.nodes) {
-          if (node.layer !== ring) continue
-          const childIds = childrenMap.get(node.id) || []
-          const childShaps: number[] = []
-          for (const childId of childIds) {
-            const childShap = yearImportance.get(String(childId))
-            if (childShap !== undefined) {
-              childShaps.push(childShap)
-            }
-          }
-          if (childShaps.length > 0) {
-            const sumShap = childShaps.reduce((a, b) => a + b, 0)
-            yearImportance.set(String(node.id), sumShap)
+    // Aggregate up hierarchy (Ring 4 -> Ring 0) using sums.
+    for (let ring = 4; ring >= 0; ring -= 1) {
+      for (const node of rawData.nodes) {
+        if (node.layer !== ring) continue
+        const childIds = childrenMap.get(node.id) || []
+        let sumShap = 0
+        let hasChildData = false
+        for (const childId of childIds) {
+          const childShap = yearImportance.get(String(childId))
+          if (childShap !== undefined) {
+            sumShap += childShap
+            hasChildData = true
           }
         }
+        if (hasChildData) yearImportance.set(String(node.id), sumShap)
       }
-
-      // Third pass: normalize so root = 1.0
-      const rootNode = rawData.nodes.find(n => n.layer === 0)
-      const rootShap = rootNode ? (yearImportance.get(String(rootNode.id)) || 1) : 1
-      if (rootShap > 0) {
-        for (const [nodeId, shap] of yearImportance.entries()) {
-          yearImportance.set(nodeId, shap / rootShap)
-        }
-      }
-
-      cache.set(year, yearImportance)
     }
 
-    debug.log('cache', `Pre-computed SHAP for ${cache.size} years (stratum: ${selectedStratum})`)
-    return cache
-  }, [temporalShapTimeline, stratifiedShapTimeline, selectedStratum, selectedCountry, selectedRegion, rawData])
+    // Normalize to root mean = 1.0.
+    const rootShap = rootNodeId != null ? (yearImportance.get(String(rootNodeId)) || 1) : 1
+    if (rootShap > 0) {
+      for (const [nodeId, shap] of yearImportance.entries()) {
+        yearImportance.set(nodeId, shap / rootShap)
+      }
+    }
 
-  /**
-   * Pre-compute full CI data (mean, std, ci_lower, ci_upper) for each year in the timeline.
-   * This includes proper uncertainty propagation when aggregating to parent nodes.
-   *
-   * For aggregation: when summing SHAP values, uncertainties propagate as:
-   * - mean_parent = sum(mean_children)
-   * - std_parent = sqrt(sum(std_children^2))  (assuming independence)
-   * - CI computed from propagated mean and std
-   */
+    return yearImportance
+  }, [rawData, effectiveShapTimeline, childrenMap, rootNodeId])
+
   interface NodeCIData {
     mean: number
     std: number
     ci_lower: number
     ci_upper: number
-    n_children?: number  // For aggregated nodes
-    child_coverage?: number  // Fraction of children with data
+    n_children?: number
+    child_coverage?: number
   }
 
-  const precomputedCICache = useMemo((): Map<number, Map<string, NodeCIData>> => {
-    const cache = new Map<number, Map<string, NodeCIData>>()
+  const computeYearCI = useCallback((year: number): Map<string, NodeCIData> => {
+    const yearCI = new Map<string, NodeCIData>()
+    if (!rawData || !effectiveShapTimeline) return yearCI
 
-    const effectiveTimeline = (selectedStratum !== 'unified' && !selectedCountry && !selectedRegion && stratifiedShapTimeline)
-      ? stratifiedShapTimeline
-      : temporalShapTimeline
+    const shapValues = effectiveShapTimeline.shap_by_year[String(year)]
+    if (!shapValues) return yearCI
 
-    if (!effectiveTimeline || !rawData) return cache
-
-    // Build parent-child map
-    const childrenMap = new Map<string | number, (string | number)[]>()
+    // First pass: extract CI values for Ring 5.
     for (const node of rawData.nodes) {
-      if (node.children) {
-        childrenMap.set(node.id, node.children.map(c => String(c)))
+      if (node.layer !== 5) continue
+      const shapValue = shapValues[String(node.id)]
+      if (shapValue === undefined || shapValue === null) continue
+      if (typeof shapValue === 'object' && 'mean' in shapValue) {
+        yearCI.set(String(node.id), {
+          mean: shapValue.mean,
+          std: shapValue.std,
+          ci_lower: shapValue.ci_lower,
+          ci_upper: shapValue.ci_upper
+        })
+      } else {
+        yearCI.set(String(node.id), {
+          mean: shapValue as number,
+          std: 0,
+          ci_lower: shapValue as number,
+          ci_upper: shapValue as number
+        })
       }
     }
 
-    for (const year of effectiveTimeline.years) {
-      const shapValues = effectiveTimeline.shap_by_year[String(year)]
-      if (!shapValues) continue
-
-      const yearCI = new Map<string, NodeCIData>()
-
-      // First pass: extract CI for Ring 5 indicators
+    // Second pass: aggregate uncertainty up hierarchy.
+    for (let ring = 4; ring >= 0; ring -= 1) {
       for (const node of rawData.nodes) {
-        if (node.layer === 5) {
-          const shapValue = shapValues[String(node.id)]
-          if (shapValue !== undefined && shapValue !== null) {
-            if (typeof shapValue === 'object' && 'mean' in shapValue) {
-              yearCI.set(String(node.id), {
-                mean: shapValue.mean,
-                std: shapValue.std,
-                ci_lower: shapValue.ci_lower,
-                ci_upper: shapValue.ci_upper
-              })
-            } else {
-              // Legacy format - no CI
-              yearCI.set(String(node.id), {
-                mean: shapValue as number,
-                std: 0,
-                ci_lower: shapValue as number,
-                ci_upper: shapValue as number
-              })
-            }
-          }
+        if (node.layer !== ring) continue
+        const childIds = childrenMap.get(node.id) || []
+        const childCIs: NodeCIData[] = []
+        for (const childId of childIds) {
+          const childCI = yearCI.get(String(childId))
+          if (childCI) childCIs.push(childCI)
         }
+        if (childCIs.length === 0) continue
+        const sumMean = childCIs.reduce((acc, c) => acc + c.mean, 0)
+        const sumVariance = childCIs.reduce((acc, c) => acc + c.std * c.std, 0)
+        const propagatedStd = Math.sqrt(sumVariance)
+        yearCI.set(String(node.id), {
+          mean: sumMean,
+          std: propagatedStd,
+          ci_lower: sumMean - 1.96 * propagatedStd,
+          ci_upper: sumMean + 1.96 * propagatedStd,
+          n_children: childIds.length,
+          child_coverage: childCIs.length / childIds.length
+        })
       }
-
-      // Second pass: aggregate CI up the hierarchy (Ring 4 → Ring 0)
-      for (let ring = 4; ring >= 0; ring--) {
-        for (const node of rawData.nodes) {
-          if (node.layer !== ring) continue
-          const childIds = childrenMap.get(node.id) || []
-          const childCIs: NodeCIData[] = []
-
-          for (const childId of childIds) {
-            const childCI = yearCI.get(String(childId))
-            if (childCI) {
-              childCIs.push(childCI)
-            }
-          }
-
-          if (childCIs.length > 0) {
-            // Aggregate: sum means, propagate variance (sqrt of sum of squares)
-            const sumMean = childCIs.reduce((acc, c) => acc + c.mean, 0)
-            const sumVariance = childCIs.reduce((acc, c) => acc + c.std * c.std, 0)
-            const propagatedStd = Math.sqrt(sumVariance)
-
-            // 95% CI: mean ± 1.96 * std
-            yearCI.set(String(node.id), {
-              mean: sumMean,
-              std: propagatedStd,
-              ci_lower: sumMean - 1.96 * propagatedStd,
-              ci_upper: sumMean + 1.96 * propagatedStd,
-              n_children: childIds.length,
-              child_coverage: childCIs.length / childIds.length
-            })
-          }
-        }
-      }
-
-      // Third pass: normalize so root mean = 1.0 (same as precomputedShapCache)
-      const rootNode = rawData.nodes.find(n => n.layer === 0)
-      const rootCI = rootNode ? yearCI.get(String(rootNode.id)) : null
-      const rootMean = rootCI?.mean || 1
-
-      if (rootMean > 0) {
-        for (const [nodeId, ci] of yearCI.entries()) {
-          yearCI.set(nodeId, {
-            ...ci,
-            mean: ci.mean / rootMean,
-            std: ci.std / rootMean,
-            ci_lower: ci.ci_lower / rootMean,
-            ci_upper: ci.ci_upper / rootMean
-          })
-        }
-      }
-
-      cache.set(year, yearCI)
     }
 
-    return cache
-  }, [temporalShapTimeline, stratifiedShapTimeline, selectedStratum, selectedCountry, selectedRegion, rawData])
+    // Normalize to root mean = 1.0.
+    const rootMean = rootNodeId != null ? (yearCI.get(String(rootNodeId))?.mean || 1) : 1
+    if (rootMean > 0) {
+      for (const [nodeId, ci] of yearCI.entries()) {
+        yearCI.set(nodeId, {
+          ...ci,
+          mean: ci.mean / rootMean,
+          std: ci.std / rootMean,
+          ci_lower: ci.ci_lower / rootMean,
+          ci_upper: ci.ci_upper / rootMean
+        })
+      }
+    }
+
+    return yearCI
+  }, [rawData, effectiveShapTimeline, childrenMap, rootNodeId])
+
+  const [precomputedShapCache, setPrecomputedShapCache] = useState<Map<number, Map<string, number>>>(new Map())
+  const [precomputedCICache, setPrecomputedCICache] = useState<Map<number, Map<string, NodeCIData>>>(new Map())
+
+  // SHAP cache: seed the first available year quickly, then finish the rest in idle chunks.
+  useEffect(() => {
+    if (!effectiveShapTimeline || !rawData) return
+
+    const years = [...effectiveShapTimeline.years]
+    if (years.length === 0) return
+
+    const cache = new Map<number, Map<string, number>>()
+    let cancelled = false
+    let idleHandle: IdleHandle | null = null
+
+    const primeYear = historicalTimeline?.years?.[currentYearIndex] ?? years[0]
+    const primeIndex = years.indexOf(primeYear)
+    if (primeIndex >= 0) {
+      cache.set(primeYear, computeYearImportance(primeYear))
+      years.splice(primeIndex, 1)
+      setPrecomputedShapCache(new Map(cache))
+    }
+
+    const scheduleNext = () => {
+      idleHandle = scheduleIdleTask(() => {
+        if (cancelled) return
+        let processed = 0
+        while (years.length > 0 && processed < 3) {
+          const nextYear = years.shift()!
+          cache.set(nextYear, computeYearImportance(nextYear))
+          processed += 1
+        }
+        if (years.length > 0) {
+          scheduleNext()
+          return
+        }
+        setPrecomputedShapCache(new Map(cache))
+        debug.log('cache', `Pre-computed SHAP for ${cache.size} years (stratum: ${selectedStratum})`)
+      }, 250)
+    }
+
+    scheduleNext()
+    return () => {
+      cancelled = true
+      cancelIdleTask(idleHandle)
+    }
+  }, [effectiveShapTimeline, rawData, historicalTimeline, currentYearIndex, computeYearImportance, selectedStratum])
+
+  // CI cache: non-critical, fully deferred to idle.
+  useEffect(() => {
+    if (!effectiveShapTimeline || !rawData) return
+
+    const years = [...effectiveShapTimeline.years]
+    if (years.length === 0) return
+
+    const cache = new Map<number, Map<string, NodeCIData>>()
+    let cancelled = false
+    let idleHandle: IdleHandle | null = null
+
+    const scheduleNext = () => {
+      idleHandle = scheduleIdleTask(() => {
+        if (cancelled) return
+        let processed = 0
+        while (years.length > 0 && processed < 2) {
+          const nextYear = years.shift()!
+          cache.set(nextYear, computeYearCI(nextYear))
+          processed += 1
+        }
+        if (years.length > 0) {
+          scheduleNext()
+          return
+        }
+        setPrecomputedCICache(cache)
+      }, 500)
+    }
+
+    scheduleNext()
+    return () => {
+      cancelled = true
+      cancelIdleTask(idleHandle)
+    }
+  }, [effectiveShapTimeline, rawData, computeYearCI])
 
   /**
    * Compute effective nodes with country-specific SHAP importance values.
@@ -1139,7 +1397,7 @@ function App() {
       let importance: number
 
       if (countryImportance !== undefined && !isNaN(countryImportance)) {
-        importance = countryImportance
+        importance = Math.abs(countryImportance)
       } else if (node.layer === 0) {
         // Root always gets max importance
         importance = 1.0
@@ -1245,59 +1503,76 @@ function App() {
   // Toggle expansion of a node
   const toggleExpansion = useCallback((nodeId: string) => {
     if (!rawData) return
-    // Individual node click — disable dots mode (full rendering)
-    dotsModeRef.current = false
-    const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
+    const isCollapsing = expandedNodes.has(nodeId)
+    runOrQueueStructuralAction(() => {
+      beginLayoutAction(
+        isCollapsing ? 'single_collapse' : 'single_expand',
+        'toggleExpansion',
+        {
+          nodeId,
+          mode: isCollapsing ? 'collapse' : 'expand'
+        }
+      )
+      // Individual node click — disable dots mode (full rendering)
+      dotsModeRef.current = false
+      const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
 
-    setPinnedPaths(new Set())  // Clear pinned paths on manual interaction
-    setExpandedNodes(prev => {
-      const next = new Set(prev)
-      const wasExpanded = next.has(nodeId)
+      setPinnedPaths(new Set())  // Clear pinned paths on manual interaction
+      setExpandedNodes(prev => {
+        const next = new Set(prev)
+        const wasExpanded = next.has(nodeId)
 
-      if (wasExpanded) {
-        // Collapse: remove this node and all descendants from expanded set
-        next.delete(nodeId)
-        // Also collapse all descendants (use rawData for full tree)
-        const collapseDescendants = (id: string) => {
-          const node = nodeById.get(id)
-          if (node?.children) {
-            for (const childId of node.children) {
-              const childIdStr = String(childId)
-              next.delete(childIdStr)
-              collapseDescendants(childIdStr)
+        if (wasExpanded) {
+          // Collapse: remove this node and all descendants from expanded set
+          next.delete(nodeId)
+          // Also collapse all descendants (use rawData for full tree)
+          const collapseDescendants = (id: string) => {
+            const node = nodeById.get(id)
+            if (node?.children) {
+              for (const childId of node.children) {
+                const childIdStr = String(childId)
+                next.delete(childIdStr)
+                collapseDescendants(childIdStr)
+              }
             }
           }
+          collapseDescendants(nodeId)
+          // Record collapse for auto-zoom
+          pendingZoomRef.current = { nodeId, action: 'collapse' }
+        } else {
+          next.add(nodeId)
+          // Record expansion for auto-zoom
+          pendingZoomRef.current = { nodeId, action: 'expand' }
         }
-        collapseDescendants(nodeId)
-        // Record collapse for auto-zoom
-        pendingZoomRef.current = { nodeId, action: 'collapse' }
-      } else {
-        next.add(nodeId)
-        // Record expansion for auto-zoom
-        pendingZoomRef.current = { nodeId, action: 'expand' }
-      }
-      return next
+        return next
+      })
     })
-  }, [rawData])
+  }, [rawData, expandedNodes, runOrQueueStructuralAction, beginLayoutAction])
 
   // Expand all nodes
   const expandAll = useCallback(() => {
     if (!rawData) return
-    dotsModeRef.current = true
-    setPinnedPaths(new Set())
-    // Use rawData to get ALL nodes (not just visible ones)
-    const allExpandable = rawData.nodes
-      .filter(n => n.children && n.children.length > 0)
-      .map(n => String(n.id))
-    setExpandedNodes(new Set(allExpandable))
-  }, [rawData])
+    runOrQueueStructuralAction(() => {
+      beginLayoutAction('global_expand', 'expandAll')
+      dotsModeRef.current = true
+      setPinnedPaths(new Set())
+      // Use rawData to get ALL nodes (not just visible ones)
+      const allExpandable = rawData.nodes
+        .filter(n => n.children && n.children.length > 0)
+        .map(n => String(n.id))
+      setExpandedNodes(new Set(allExpandable))
+    })
+  }, [rawData, runOrQueueStructuralAction, beginLayoutAction])
 
   // Collapse all nodes
   const collapseAll = useCallback(() => {
-    dotsModeRef.current = false
-    setPinnedPaths(new Set())
-    setExpandedNodes(new Set())
-  }, [])
+    runOrQueueStructuralAction(() => {
+      beginLayoutAction('global_collapse', 'collapseAll')
+      dotsModeRef.current = false
+      setPinnedPaths(new Set())
+      setExpandedNodes(new Set())
+    })
+  }, [runOrQueueStructuralAction, beginLayoutAction])
 
   // Calculate initial zoom transform to fit content tightly
   const calculateInitialTransform = useCallback((nodes: ExpandableNode[], containerWidth?: number, containerHeight?: number) => {
@@ -1367,55 +1642,61 @@ function App() {
 
   // Expand all nodes in a specific ring (that are currently visible)
   const expandRing = useCallback((ring: number) => {
-    // Bulk expansion — enable dots mode for deep rings
-    if (ring >= 3) dotsModeRef.current = true
-    setPinnedPaths(new Set())
-    setExpandedNodes(prev => {
-      const next = new Set(prev)
-      // Find nodes in this ring that are visible (parent is expanded or is root) and have children
-      allNodes
-        .filter(n => {
-          if (n.ring !== ring || !n.hasChildren) return false
-          // Check if visible: root is always visible, others need parent expanded
-          if (n.ring === 0) return true
-          return n.parentId && prev.has(n.parentId)
-        })
-        .forEach(n => next.add(n.id))
-      return next
+    runOrQueueStructuralAction(() => {
+      beginLayoutAction('ring_expand', 'expandRing', { ring })
+      // Bulk expansion — enable dots mode for deep rings
+      if (ring >= 3) dotsModeRef.current = true
+      setPinnedPaths(new Set())
+      setExpandedNodes(prev => {
+        const next = new Set(prev)
+        // Find nodes in this ring that are visible (parent is expanded or is root) and have children
+        allNodes
+          .filter(n => {
+            if (n.ring !== ring || !n.hasChildren) return false
+            // Check if visible: root is always visible, others need parent expanded
+            if (n.ring === 0) return true
+            return n.parentId && prev.has(n.parentId)
+          })
+          .forEach(n => next.add(n.id))
+        return next
+      })
     })
-  }, [allNodes])
+  }, [allNodes, runOrQueueStructuralAction, beginLayoutAction])
 
   // Collapse all nodes in a specific ring
   const collapseRing = useCallback((ring: number) => {
     if (!rawData) return
-    dotsModeRef.current = false
-    setPinnedPaths(new Set())
-    const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
+    runOrQueueStructuralAction(() => {
+      beginLayoutAction('ring_collapse', 'collapseRing', { ring })
+      dotsModeRef.current = false
+      setPinnedPaths(new Set())
+      const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
 
-    setExpandedNodes(prev => {
-      const next = new Set(prev)
-      // Remove all nodes in this ring and their descendants (use rawData for full tree)
-      rawData.nodes
-        .filter(n => n.layer === ring)
-        .forEach(n => {
-          const nodeId = String(n.id)
-          next.delete(nodeId)
-          // Also collapse descendants
-          const collapseDescendants = (id: string) => {
-            const node = nodeById.get(id)
-            if (node?.children) {
-              for (const childId of node.children) {
-                const childIdStr = String(childId)
-                next.delete(childIdStr)
-                collapseDescendants(childIdStr)
+      setExpandedNodes(prev => {
+        const next = new Set(prev)
+        // Remove all nodes in this ring and their descendants (use rawData for full tree)
+        rawData.nodes
+          .filter(n => n.layer === ring)
+          .forEach(n => {
+            const nodeId = String(n.id)
+            next.delete(nodeId)
+            // Also collapse descendants
+            const collapseDescendants = (id: string) => {
+              const node = nodeById.get(id)
+              if (node?.children) {
+                for (const childId of node.children) {
+                  const childIdStr = String(childId)
+                  next.delete(childIdStr)
+                  collapseDescendants(childIdStr)
+                }
               }
             }
-          }
-          collapseDescendants(nodeId)
-        })
-      return next
+            collapseDescendants(nodeId)
+          })
+        return next
+      })
     })
-  }, [rawData])
+  }, [rawData, runOrQueueStructuralAction, beginLayoutAction])
 
   /**
    * Aggregate simulation effects up the hierarchy.
@@ -1952,6 +2233,13 @@ function App() {
     return edges
   }, [allEdges, visibleNodes, pinnedPaths, rawData])
 
+  useEffect(() => {
+    visibleCountsRef.current = {
+      nodes: visibleNodes.length,
+      edges: visibleEdges.length
+    }
+  }, [visibleNodes.length, visibleEdges.length])
+
   // Memoized map of nodes by ring for percentile calculations (avoids recreation in render)
   const nodesByRingMemo = useMemo(() => {
     const map = new Map<number, ExpandableNode[]>()
@@ -2022,6 +2310,15 @@ function App() {
   // Reset view: handles both Global and Local views based on current viewMode
   // Collapses to QoL root, then after a delay expands ring 1 with animation
   const resetView = useCallback(() => {
+    if (resetExpandTimerRef.current !== null) {
+      clearTimeout(resetExpandTimerRef.current)
+      resetExpandTimerRef.current = null
+    }
+    if (resetFitTimerRef.current !== null) {
+      clearTimeout(resetFitTimerRef.current)
+      resetFitTimerRef.current = null
+    }
+
     // Reset country selection to unified model
     clearCountry()
 
@@ -2049,10 +2346,12 @@ function App() {
       // Phase 2: after delay, expand root to reveal ring 1 and zoom to fit
       const rootNode = allNodes.find(n => n.ring === 0)
       if (rootNode) {
-        setTimeout(() => {
+        resetExpandTimerRef.current = window.setTimeout(() => {
+          resetExpandTimerRef.current = null
           setExpandedNodes(new Set([rootNode.id]))
           // Zoom to fit ring 0 + ring 1 after expansion settles
-          setTimeout(() => {
+          resetFitTimerRef.current = window.setTimeout(() => {
+            resetFitTimerRef.current = null
             if (!zoomRef.current || !svgRef.current) return
             const svgEl = d3.select(svgRef.current)
             const ring01 = allNodes.filter(n => n.ring <= 1)
@@ -2933,53 +3232,70 @@ function App() {
       timelineImportance = lastValidShapRef.current
     }
 
+    const nonNegative = (value: number | undefined, fallback = 0): number => {
+      if (value === undefined || !Number.isFinite(value)) return fallback
+      return Math.max(0, value)
+    }
+
+    const finalizeRadius = (node: ExpandableNode, radius: number): number => {
+      const safeRadius = Number.isFinite(radius) && radius > 0 ? radius : vLayout.getNodeRadius(0.01)
+      // Keep ring-1 outcomes visually stable even if yearly SHAP momentarily drops.
+      if (node.ring === 1) {
+        const ring1Floor = vLayout.getNodeRadius(0.12)
+        return Math.max(safeRadius, ring1Floor)
+      }
+      return safeRadius
+    }
+
     const getSize = (n: ExpandableNode): number => {
       // Ring 0 (QoL): size encodes relative QoL level (0.5–1.0), max in unified mode
       if (n.ring === 0) {
         const sizeImp = qolNodeScore != null ? 0.5 + qolNodeScore * 0.5 : 1.0
-        return vLayout.getNodeRadius(sizeImp)
+        return finalizeRadius(n, vLayout.getNodeRadius(sizeImp))
       }
 
       const nodeId = String(n.id)
 
       // For all other rings, use temporal SHAP (v3.1 data)
-      if (playbackMode === 'historical' && timelineImportance.size > 0) {
-        const historicalImp = timelineImportance.get(nodeId)
-        if (historicalImp !== undefined) {
-          return vLayout.getNodeRadius(historicalImp)
+      if (playbackMode === 'historical') {
+        if (timelineImportance.size > 0) {
+          const historicalImp = timelineImportance.get(nodeId)
+          if (historicalImp !== undefined) {
+            return finalizeRadius(n, vLayout.getNodeRadius(nonNegative(historicalImp, 0)))
+          }
         }
-        // Fallback to cache if node not in current year's data
+
+        // Fallback to cached SHAP, then raw importance so first paint remains meaningful.
         const cachedImp = lastValidShapRef.current.get(nodeId)
-        if (cachedImp !== undefined) {
-          return vLayout.getNodeRadius(cachedImp)
-        }
+        if (cachedImp !== undefined) return finalizeRadius(n, vLayout.getNodeRadius(nonNegative(cachedImp, 0)))
+        const baseFallbackImportance = n.ring <= 1
+          ? Math.max(0.15, nonNegative(n.importance, 0))
+          : Math.max(0.01, nonNegative(n.importance, 0))
+        return finalizeRadius(n, vLayout.getNodeRadius(baseFallbackImportance))
       }
-      // Simulation mode: baseline importance shifted by percent_change
-      else if (playbackMode === 'simulation') {
-        const baseImp = lastValidShapRef.current.get(nodeId) ?? n.importance
+
+      // Simulation mode: baseline importance shifted by percent_change.
+      if (playbackMode === 'simulation') {
+        const baseImp = nonNegative(lastValidShapRef.current.get(nodeId), nonNegative(n.importance, 0.01))
         if (temporalResults) {
           const simYear = temporalResults.base_year + currentYearIndex
           const yearEffects = temporalResults.effects[String(simYear)]
           if (yearEffects && yearEffects[n.id]) {
             const pctChange = yearEffects[n.id].percent_change / 100
-            return vLayout.getNodeRadius(Math.max(0, baseImp * (1 + pctChange)))
+            return finalizeRadius(n, vLayout.getNodeRadius(Math.max(0, baseImp * (1 + pctChange))))
           }
         }
-        return vLayout.getNodeRadius(baseImp)
+        return finalizeRadius(n, vLayout.getNodeRadius(baseImp))
       }
 
-      // Last resort: check cache before using floor
+      // Last resort: prefer cached SHAP, then base importance.
       const cachedImp = lastValidShapRef.current.get(nodeId)
-      if (cachedImp !== undefined) {
-        return vLayout.getNodeRadius(cachedImp)
-      }
-
-      // Absolute fallback - use minimum visible size (smaller than typical SHAP values)
-      return vLayout.getNodeRadius(0.0001)
+      if (cachedImp !== undefined) return finalizeRadius(n, vLayout.getNodeRadius(nonNegative(cachedImp, 0)))
+      return finalizeRadius(n, vLayout.getNodeRadius(Math.max(0.01, nonNegative(n.importance, 0))))
     }
 
     const isNodeFloored = (importance: number): boolean => {
-      return vLayout.isNodeFloored(importance)
+      return vLayout.isNodeFloored(Math.max(0, importance))
     }
 
     const getPercentileInRing = (node: ExpandableNode): number => {
@@ -3106,6 +3422,7 @@ function App() {
     const currentVisibleIds = new Set(visibleNodes.map(n => n.id))
     const newNodeIds = new Set<string>()
     const existingNodeIds = new Set<string>()  // Nodes that existed before and still exist
+
     const actuallyMovingNodeIds = new Set<string>()  // Nodes whose position actually changed
     const exitingNodeIds = new Set<string>()
 
@@ -3140,27 +3457,55 @@ function App() {
       }
     })
 
+    const previousEdgeIds = prevVisibleEdgeIdsRef.current
+    const currentEdgeIds = new Set(visibleEdges.map(e => `${e.sourceId}-${e.targetId}`))
+    let edgeDelta = 0
+    currentEdgeIds.forEach(id => {
+      if (!previousEdgeIds.has(id)) edgeDelta += 1
+    })
+    previousEdgeIds.forEach(id => {
+      if (!currentEdgeIds.has(id)) edgeDelta += 1
+    })
+
     // Determine animation timing based on expand vs collapse:
     // EXPAND sequence: Rotation → Nodes/Edges enter → Text appears
     // COLLAPSE sequence: Text disappears → Nodes/Edges exit → Rotation
     const isCollapsing = exitingNodeIds.size > 0
-    const hasRotation = actuallyMovingNodeIds.size > 0
+    const nodeDelta = newNodeIds.size + exitingNodeIds.size
+    const layoutAction = activeLayoutActionRef.current
+      ?? (isCollapsing ? 'single_collapse' : 'single_expand')
+    const activeBudget = resolveLayoutBudget({
+      action: layoutAction,
+      nodeDelta,
+      edgeDelta
+    })
+    activeLayoutBudgetRef.current = activeBudget
+    if (activeLayoutActionRef.current) {
+      setStructuralLock(activeBudget.structuralLockMs)
+    }
 
-    const rotationDuration = 300
-    const enterExitDuration = 300
-    const textFadeDuration = 150
-    const exitDuration = 200  // Duration for nodes/edges collapsing
+    const isFirstVisibleRender = prevVisibleIds.size === 0 && currentVisibleIds.size > 0
+    const hasRotation = !activeBudget.useFastPath && actuallyMovingNodeIds.size > 0
+
+    const rotationDuration = activeBudget.rotationMs
+    const enterExitDuration = isFirstVisibleRender
+      ? Math.min(activeBudget.enterExitMs, 120)
+      : activeBudget.enterExitMs
+    const textFadeDuration = isFirstVisibleRender
+      ? Math.min(activeBudget.textFadeMs, 90)
+      : activeBudget.textFadeMs
+    const exitDuration = activeBudget.exitMs  // Duration for nodes/edges collapsing
 
     // Timing for EXPAND: rotation first, then enter, then text
-    const expandEnterDelay = hasRotation ? rotationDuration : 0
-    const expandTextDelay = expandEnterDelay + enterExitDuration
+    const expandEnterDelay = isFirstVisibleRender ? 0 : (hasRotation ? rotationDuration : 0)
+    const expandTextDelay = isFirstVisibleRender ? 0 : (expandEnterDelay + enterExitDuration)
 
     // Timing for COLLAPSE: text first, then exit, then rotation
     // Sequence: Text fades (0-150ms) → Nodes collapse (150-350ms) → Rotation starts after collapse complete
     const collapseTextDelay = 0  // Text disappears immediately
     const collapseExitDelay = textFadeDuration  // Exit after text fades (150ms)
     const collapseExitEndTime = collapseExitDelay + exitDuration  // When collapse finishes (350ms)
-    const collapseRotationDelay = collapseExitEndTime + 50  // Start rotation after collapse + buffer (400ms)
+    const collapseRotationDelay = collapseExitEndTime + activeBudget.collapseGapMs
     const rotationDelay = isCollapsing ? collapseRotationDelay : 0
 
     // Build node map
@@ -3220,9 +3565,10 @@ function App() {
     const nodeAnimationEndTime = isCollapsing
       ? (hasRotation ? collapseRotationDelay + rotationDuration : collapseExitEndTime)
       : (hasRotation ? expandEnterDelay + enterExitDuration : enterExitDuration)
+    const structuralAnimationWindowMs = isAnimating ? nodeAnimationEndTime + activeBudget.glowBufferMs : 0
 
     // Glows appear after ALL node animations complete
-    const glowReappearDelay = isAnimating ? nodeAnimationEndTime + 50 : 0
+    const glowReappearDelay = isAnimating ? nodeAnimationEndTime + activeBudget.glowBufferMs : 0
 
     // For collapse: glows follow nodes during rotation phase
     // For expand: glows wait until nodes finish entering before appearing
@@ -3256,7 +3602,7 @@ function App() {
     })
 
     // Moving glows - check actual DOM position vs target to determine if animation needed
-    if (actuallyMovingNodeIds.size > 0) {
+    if (!activeBudget.useFastPath && actuallyMovingNodeIds.size > 0) {
       // Check each glow's node's ACTUAL DOM position vs target
       glowsToAnimate.each(function(d) {
         const glowEl = d3.select(this)
@@ -3306,12 +3652,18 @@ function App() {
           }
         }
       })
+    } else if (activeBudget.useFastPath) {
+      glowsToAnimate
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 3)
+        .attr('opacity', 0.5)
     }
 
     // Add new glows - RED for search (dark red for target, light pink for parents)
     // During collapse: start at OLD position, animate with nodes, then fade in
     // During expand: wait until node finishes entering, then fade in at final position
-    const hasAnyAnimation = isCollapsing || actuallyMovingNodeIds.size > 0 || newNodeIds.size > 0
+    const hasAnyAnimation = !activeBudget.useFastPath && (isCollapsing || actuallyMovingNodeIds.size > 0 || newNodeIds.size > 0)
 
     const newSearchGlows = glowSelection.enter()
       .append('circle')
@@ -3489,7 +3841,7 @@ function App() {
       .attr('stroke', d => LOCAL_GLOW_COLORS[d.glowRole])
 
     // Moving local glows - check actual DOM position vs target to determine if animation needed
-    if (actuallyMovingNodeIds.size > 0) {
+    if (!activeBudget.useFastPath && actuallyMovingNodeIds.size > 0) {
       localGlowsToAnimate.each(function(d) {
         const glowEl = d3.select(this)
         const nodeEl = nodesLayer.select<SVGCircleElement>(`circle.node[data-id="${d.id}"]`)
@@ -3535,6 +3887,12 @@ function App() {
           }
         }
       })
+    } else if (activeBudget.useFastPath) {
+      localGlowsToAnimate
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d) + 3)
+        .attr('opacity', 0.35)
     }
 
     // Add new local glows
@@ -3896,6 +4254,11 @@ function App() {
         const targetRing = parseInt(el.attr('data-target-ring') || '0', 10)
         if (dotsMode && targetRing >= DEEP_RING_THRESHOLD) {
           el.remove()
+        } else if (activeBudget.useFastPath) {
+          el.transition()
+            .duration(exitDuration)
+            .style('opacity', 0)
+            .remove()
         } else {
           el.transition()
             .delay(collapseExitDelay)
@@ -3910,10 +4273,13 @@ function App() {
     // Check if we're in the middle of a collapse animation (from a previous render)
     // IMPORTANT: Check BEFORE setting new animation state
     const now = Date.now()
-    const inCollapseAnimation = collapseAnimationRef.current.inProgress && now < collapseAnimationRef.current.endTime
+    const useCollapseAnimationGuard = !activeBudget.useFastPath
+    const inCollapseAnimation = useCollapseAnimationGuard
+      && collapseAnimationRef.current.inProgress
+      && now < collapseAnimationRef.current.endTime
 
     // Track collapse animation state to prevent re-renders from overriding
-    if (isCollapsing && exitingNodeIds.size > 0) {
+    if (useCollapseAnimationGuard && isCollapsing && exitingNodeIds.size > 0) {
       // Start of collapse animation - mark it and set end time
       const totalCollapseTime = collapseRotationDelay + rotationDuration
       collapseAnimationRef.current = { inProgress: true, endTime: now + totalCollapseTime }
@@ -3921,6 +4287,8 @@ function App() {
       setTimeout(() => {
         collapseAnimationRef.current = { inProgress: false, endTime: 0 }
       }, totalCollapseTime + 50)
+    } else if (!useCollapseAnimationGuard) {
+      collapseAnimationRef.current = { inProgress: false, endTime: 0 }
     }
 
     // Update edges (animate to new positions)
@@ -3939,6 +4307,14 @@ function App() {
         edgeEl
           .attr('x1', targetX1).attr('y1', targetY1)
           .attr('x2', targetX2).attr('y2', targetY2)
+        return
+      }
+      if (activeBudget.useFastPath) {
+        edgeEl
+          .attr('x1', targetX1)
+          .attr('y1', targetY1)
+          .attr('x2', targetX2)
+          .attr('y2', targetY2)
         return
       }
 
@@ -3987,17 +4363,28 @@ function App() {
       .attr('stroke-opacity', d => vLayout.getEdgeOpacity(d.sourceRing))
 
     // Shallow edges (or non-dots-mode): animated enter
-    enterEdges.filter(d => !(dotsMode && d.targetRing >= DEEP_RING_THRESHOLD))
-      .attr('x2', d => nodeMap.get(d.sourceId)?.x || 0)
-      .attr('y2', d => nodeMap.get(d.sourceId)?.y || 0)
-      .attr('stroke-opacity', 0)
-      .transition()
-      .delay(expandEnterDelay)
-      .duration(enterExitDuration)
-      .ease(d3.easeCubicOut)
-      .attr('x2', d => nodeMap.get(d.targetId)?.x || 0)
-      .attr('y2', d => nodeMap.get(d.targetId)?.y || 0)
-      .attr('stroke-opacity', d => vLayout.getEdgeOpacity(d.sourceRing))
+    const shallowEnterEdges = enterEdges.filter(d => !(dotsMode && d.targetRing >= DEEP_RING_THRESHOLD))
+    if (activeBudget.useFastPath) {
+      shallowEnterEdges
+        .attr('x2', d => nodeMap.get(d.targetId)?.x || 0)
+        .attr('y2', d => nodeMap.get(d.targetId)?.y || 0)
+        .attr('stroke-opacity', 0)
+        .transition()
+        .duration(Math.min(enterExitDuration, 100))
+        .attr('stroke-opacity', d => vLayout.getEdgeOpacity(d.sourceRing))
+    } else {
+      shallowEnterEdges
+        .attr('x2', d => nodeMap.get(d.sourceId)?.x || 0)
+        .attr('y2', d => nodeMap.get(d.sourceId)?.y || 0)
+        .attr('stroke-opacity', 0)
+        .transition()
+        .delay(expandEnterDelay)
+        .duration(enterExitDuration)
+        .ease(d3.easeCubicOut)
+        .attr('x2', d => nodeMap.get(d.targetId)?.x || 0)
+        .attr('y2', d => nodeMap.get(d.targetId)?.y || 0)
+        .attr('stroke-opacity', d => vLayout.getEdgeOpacity(d.sourceRing))
+    }
 
     // === SIMULATION EDGE PULSE — cyan ripple along hierarchical edges during playback ===
     {
@@ -4063,6 +4450,22 @@ function App() {
     }
 
     // === NODES with enter/update/exit ===
+    // Fix: remove stale circles that are mid-exit-transition but whose IDs match
+    // incoming visible nodes. Without this, D3 reuses the exiting circle (with its
+    // active exit transition driving opacity→0 + .remove()) instead of creating a
+    // fresh enter node. This happens when resetView's Phase 2 fires while Phase 1's
+    // exit transitions are still pending due to silent D3 re-renders resetting them.
+    if (newNodeIds.size > 0) {
+      nodesLayer.selectAll<SVGCircleElement, ExpandableNode>('circle.node')
+        .each(function() {
+          const el = d3.select(this)
+          const id = el.attr('data-id')
+          if (id && newNodeIds.has(id)) {
+            el.interrupt().remove()
+          }
+        })
+    }
+
     const nodeSelection = nodesLayer.selectAll<SVGCircleElement, ExpandableNode>('circle.node')
       .data(visibleNodes, d => d.id)
 
@@ -4074,6 +4477,13 @@ function App() {
         const ring = parseInt(el.attr('data-ring') || '0', 10)
         if (dotsMode && ring >= DEEP_RING_THRESHOLD) {
           el.remove()
+          return
+        }
+        if (activeBudget.useFastPath) {
+          el.transition()
+            .duration(exitDuration)
+            .style('opacity', 0)
+            .remove()
           return
         }
         const id = el.attr('data-id')
@@ -4138,22 +4548,8 @@ function App() {
           .attr('stroke-dasharray', dashArray)
         return
       }
-
-      const currentCx = parseFloat(nodeEl.attr('cx') || '0')
-      const currentCy = parseFloat(nodeEl.attr('cy') || '0')
-
-      // Check if node actually needs to move
-      const dx = Math.abs(targetX - currentCx)
-      const dy = Math.abs(targetY - currentCy)
-      const needsMove = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
-
-      if (needsMove) {
-        // Node position differs from target - animate to new position
+      if (activeBudget.useFastPath) {
         nodeEl
-          .transition('rotation')
-          .delay(rotationDelay)
-          .duration(rotationDuration)
-          .ease(d3.easeCubicOut)
           .attr('cx', targetX)
           .attr('cy', targetY)
           .attr('r', getSize(d))
@@ -4162,20 +4558,47 @@ function App() {
           .attr('stroke-width', strokeWidth)
           .attr('stroke-opacity', strokeOpacity)
           .attr('stroke-dasharray', dashArray)
-      } else if (!shouldSkipRotation) {
-        // Position matches but may need size/color update
-        nodeEl
-          .transition('rotation')
-          .delay(rotationDelay)
-          .duration(rotationDuration)
-          .ease(d3.easeCubicOut)
-          .attr('r', getSize(d))
-          .attr('fill', getColor(d))
-          .attr('stroke', strokeColor)
-          .attr('stroke-width', strokeWidth)
-          .attr('stroke-opacity', strokeOpacity)
-          .attr('stroke-dasharray', dashArray)
+      } else {
+
+        const currentCx = parseFloat(nodeEl.attr('cx') || '0')
+        const currentCy = parseFloat(nodeEl.attr('cy') || '0')
+
+        // Check if node actually needs to move
+        const dx = Math.abs(targetX - currentCx)
+        const dy = Math.abs(targetY - currentCy)
+        const needsMove = dx > POSITION_CHANGE_THRESHOLD || dy > POSITION_CHANGE_THRESHOLD
+
+        if (needsMove) {
+          // Node position differs from target - animate to new position
+          nodeEl
+            .transition('rotation')
+            .delay(rotationDelay)
+            .duration(rotationDuration)
+            .ease(d3.easeCubicOut)
+            .attr('cx', targetX)
+            .attr('cy', targetY)
+            .attr('r', getSize(d))
+            .attr('fill', getColor(d))
+            .attr('stroke', strokeColor)
+            .attr('stroke-width', strokeWidth)
+            .attr('stroke-opacity', strokeOpacity)
+            .attr('stroke-dasharray', dashArray)
+        } else if (!shouldSkipRotation) {
+          // Position matches but may need size/color update
+          nodeEl
+            .transition('rotation')
+            .delay(rotationDelay)
+            .duration(rotationDuration)
+            .ease(d3.easeCubicOut)
+            .attr('r', getSize(d))
+            .attr('fill', getColor(d))
+            .attr('stroke', strokeColor)
+            .attr('stroke-width', strokeWidth)
+            .attr('stroke-opacity', strokeOpacity)
+            .attr('stroke-dasharray', dashArray)
+        }
       }
+      nodeEl.style('opacity', 1)
 
       // Ring 0 simulation glow: green/red drop-shadow proportional to QoL delta
       if (d.ring === 0 && temporalResults?.qol_timeline) {
@@ -4253,19 +4676,31 @@ function App() {
       .style('opacity', 1)
 
     // Shallow nodes (or non-dots-mode): animated enter from parent position
-    enterNodes.filter(d => !(dotsMode && d.ring >= DEEP_RING_THRESHOLD))
-      .attr('cx', d => getParentPosition(d).x)
-      .attr('cy', d => getParentPosition(d).y)
-      .attr('r', 0)
-      .style('opacity', 0)
-      .transition()
-      .delay(expandEnterDelay)
-      .duration(enterExitDuration)
-      .ease(d3.easeCubicOut)
-      .attr('cx', d => d.x)
-      .attr('cy', d => d.y)
-      .attr('r', d => getSize(d))
-      .style('opacity', 1)
+    const shallowEnterNodes = enterNodes.filter(d => !(dotsMode && d.ring >= DEEP_RING_THRESHOLD))
+    if (activeBudget.useFastPath) {
+      shallowEnterNodes
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d))
+        .style('opacity', 0)
+        .transition()
+        .duration(Math.min(enterExitDuration, 120))
+        .style('opacity', 1)
+    } else {
+      shallowEnterNodes
+        .attr('cx', d => getParentPosition(d).x)
+        .attr('cy', d => getParentPosition(d).y)
+        .attr('r', 0)
+        .style('opacity', 0)
+        .transition()
+        .delay(expandEnterDelay)
+        .duration(enterExitDuration)
+        .ease(d3.easeCubicOut)
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y)
+        .attr('r', d => getSize(d))
+        .style('opacity', 1)
+    }
 
     // === TIMELINE-BASED SIZE UPDATES ===
     // When timeline year changes, update all node radii with smooth transition
@@ -4287,6 +4722,7 @@ function App() {
 
     // Update refs for next render
     prevVisibleNodeIdsRef.current = currentVisibleIds
+    prevVisibleEdgeIdsRef.current = currentEdgeIds
     visibleNodes.forEach(n => {
       nodePositionsRef.current.set(n.id, { x: n.x, y: n.y, parentId: n.parentId })
     })
@@ -4301,6 +4737,7 @@ function App() {
     // Delayed single-click to allow time for double-click detection
     // This prevents accidental expand/collapse when user intended to double-click
     const CLICK_DELAY = 100 // ms - window for double-click
+    const TOOLTIP_SHOW_DELAY = 260
 
     g.on('click', (event) => {
       const target = event.target as Element
@@ -4379,8 +4816,15 @@ function App() {
             d3.select(target)
               .attr('r', radius * 1.3)
               .attr('stroke-width', hoverStroke)
-            setHoveredNode(node)
-            tooltipNodeRef.current = node  // Cache for smooth tooltip fade
+            if (tooltipShowTimerRef.current !== null) {
+              clearTimeout(tooltipShowTimerRef.current)
+              tooltipShowTimerRef.current = null
+            }
+            tooltipShowTimerRef.current = window.setTimeout(() => {
+              setHoveredNode(node)
+              tooltipNodeRef.current = node  // Cache for smooth tooltip fade
+              tooltipShowTimerRef.current = null
+            }, TOOLTIP_SHOW_DELAY)
           }
         }
       }
@@ -4398,6 +4842,10 @@ function App() {
             d3.select(target)
               .attr('r', radius)
               .attr('stroke-width', baseStroke)
+            if (tooltipShowTimerRef.current !== null) {
+              clearTimeout(tooltipShowTimerRef.current)
+              tooltipShowTimerRef.current = null
+            }
             setHoveredNode(null)
           }
         }
@@ -4526,9 +4974,10 @@ function App() {
       const nodeSize = getSize(d)
       // Ring 0 always uses importance=1.0, others use temporal SHAP (with cache fallback)
       const nodeId = String(d.id)
-      const importance = d.ring === 0
+      const rawImportance = d.ring === 0
         ? (qolNodeScore != null ? 0.5 + qolNodeScore * 0.5 : 1.0)
-        : (timelineImportance.get(nodeId) ?? lastValidShapRef.current.get(nodeId) ?? 0.01)
+        : (timelineImportance.get(nodeId) ?? lastValidShapRef.current.get(nodeId) ?? d.importance ?? 0.01)
+      const importance = Math.max(0, Number.isFinite(rawImportance) ? rawImportance : 0.01)
       const label = d.label || ''
 
       // Calculate font size based on ring
@@ -4644,6 +5093,18 @@ function App() {
       })
     }
 
+    // Fix: remove stale labels mid-exit-transition whose IDs match incoming labels
+    if (newNodeIds.size > 0) {
+      labelsLayer.selectAll<SVGTextElement, ExpandableNode>('text.node-label')
+        .each(function() {
+          const el = d3.select(this)
+          const id = el.attr('data-id')
+          if (id && newNodeIds.has(id)) {
+            el.interrupt().remove()
+          }
+        })
+    }
+
     const labelSelection = labelsLayer.selectAll<SVGTextElement, ExpandableNode>('text.node-label')
       .data(labelNodes, d => d.id)
 
@@ -4722,7 +5183,15 @@ function App() {
 
         const newTransform = pos.rotation !== 0 ? `rotate(${pos.rotation}, ${pos.x}, ${pos.y})` : null
 
-        if (isLargeRotationChange) {
+        if (activeBudget.useFastPath) {
+          textEl
+            .attr('x', pos.x)
+            .attr('y', pos.y)
+            .attr('font-size', pos.fontSize)
+            .attr('text-anchor', pos.anchor)
+            .attr('transform', newTransform)
+          textEl.selectAll('tspan').attr('x', pos.x)
+        } else if (isLargeRotationChange) {
           // Large rotation change (text direction flip) - set instantly without animation
           // Must also update text-anchor when direction flips
           textEl
@@ -4810,6 +5279,30 @@ function App() {
         return isLabelVisible(d.ring, pos.fontSize, currentScale) ? 1 : 0
       })
 
+    if (activeLayoutActionRef.current !== null) {
+      const runId = activeLayoutRunIdRef.current
+      if (structuralTraceScheduledIdRef.current !== runId) {
+        structuralTraceScheduledIdRef.current = runId
+        if (structuralTraceFinalizeTimerRef.current !== null) {
+          clearTimeout(structuralTraceFinalizeTimerRef.current)
+          structuralTraceFinalizeTimerRef.current = null
+        }
+        if (structuralAnimationWindowMs <= 0) {
+          finalizeStructuralTrace(0)
+        } else {
+          structuralTraceFinalizeTimerRef.current = window.setTimeout(() => {
+            if (activeLayoutRunIdRef.current === runId && activeLayoutActionRef.current !== null) {
+              finalizeStructuralTrace(structuralAnimationWindowMs)
+            }
+          }, structuralAnimationWindowMs)
+        }
+      }
+    } else if (structuralTraceFinalizeTimerRef.current !== null) {
+      clearTimeout(structuralTraceFinalizeTimerRef.current)
+      structuralTraceFinalizeTimerRef.current = null
+      structuralTraceScheduledIdRef.current = null
+    }
+
     // Signal layout ready after all D3 transitions complete.
     // Keep one timer alive at a time so rapid re-renders don't enqueue stale callbacks.
     if (!layoutReady && playbackMode === 'simulation') {
@@ -4826,7 +5319,7 @@ function App() {
       layoutReadyTimerRef.current = null
     }
 
-  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, qolNodeScoreForTooltip, storeInterventions])
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, qolNodeScoreForTooltip, storeInterventions, finalizeStructuralTrace, setStructuralLock])
 
   // Fetch data once on mount
   useEffect(() => {
@@ -4850,7 +5343,7 @@ function App() {
       setViewMode(urlState.view)
     }
 
-    // Store expanded nodes for later (applied when SHAP cache is ready)
+    // Store expanded nodes for later (applied once raw graph data is mounted)
     if (urlState.expanded && urlState.expanded.length > 0) {
       pendingExpandedNodesRef.current = urlState.expanded
     }
@@ -4942,18 +5435,11 @@ function App() {
     urlStateRestoredRef.current = true
   }, [rawData])
 
-  // Apply expanded nodes only after SHAP data is ready
-  // Unified view: wait for precomputedShapCache
-  // Country view: wait for countryGraph.shap_importance
+  // Apply expanded nodes as soon as raw graph data is ready.
+  // SHAP cache can hydrate later without blocking initial paint.
   useEffect(() => {
     if (!rawData || !urlStateRestoredRef.current || initialExpansionDoneRef.current) return
     if (expandedNodes.size > 0) return  // Already expanded
-
-    // Check if SHAP data is ready based on view type
-    const isUnifiedShapReady = !selectedCountry && precomputedShapCache.size > 0
-    const isCountryShapReady = selectedCountry && countryGraph?.shap_importance && Object.keys(countryGraph.shap_importance).length > 0
-
-    if (!isUnifiedShapReady && !isCountryShapReady) return  // Wait for SHAP
 
     // Use pending expanded nodes from URL if available
     if (pendingExpandedNodesRef.current) {
@@ -4967,7 +5453,7 @@ function App() {
       }
     }
     initialExpansionDoneRef.current = true
-  }, [precomputedShapCache.size, rawData, selectedCountry, countryGraph, expandedNodes.size])
+  }, [rawData, expandedNodes.size])
 
   // Subscribe to simulation store fields for URL sync
   const simCountry = useSimulationStore(s => s.selectedCountry)
@@ -5029,6 +5515,22 @@ function App() {
   useEffect(() => {
     if (!pendingZoomRef.current || !zoomRef.current || !svgRef.current || visibleNodes.length === 0) return
 
+    const runToken = ++autoZoomRunTokenRef.current
+
+    if (autoZoomDelayTimerRef.current !== null) {
+      clearTimeout(autoZoomDelayTimerRef.current)
+      autoZoomDelayTimerRef.current = null
+      noteStructuralZoomOverlap()
+    }
+    if (autoZoomRafRef.current !== null) {
+      cancelAnimationFrame(autoZoomRafRef.current)
+      autoZoomRafRef.current = null
+      noteStructuralZoomOverlap()
+    }
+    if (isAnimatingZoomRef.current) {
+      noteStructuralZoomOverlap()
+    }
+
     const { nodeId, action } = pendingZoomRef.current
 
     // Find the node that was expanded/collapsed
@@ -5061,7 +5563,10 @@ function App() {
     const currentTransform = currentTransformRef.current || d3.zoomIdentity
 
     // Delay to let render complete
-    setTimeout(() => {
+    autoZoomDelayTimerRef.current = window.setTimeout(() => {
+      autoZoomDelayTimerRef.current = null
+      if (runToken !== autoZoomRunTokenRef.current) return
+
       /**
        * Find the Ring 1 ancestor of a node (walk up the tree)
        */
@@ -5197,10 +5702,14 @@ function App() {
       // Animate using manual interpolation for smoother results
       isAnimatingZoomRef.current = true
       const startTransform = currentTransform
-      const duration = 400
+      const duration = activeLayoutBudgetRef.current?.cameraMs ?? 400
       const startTime = performance.now()
 
       const animate = (currentTime: number) => {
+        if (runToken !== autoZoomRunTokenRef.current) {
+          isAnimatingZoomRef.current = false
+          return
+        }
         const elapsed = currentTime - startTime
         const t = Math.min(elapsed / duration, 1)
         // Ease out cubic
@@ -5217,18 +5726,30 @@ function App() {
         currentTransformRef.current = interpolatedTransform
 
         if (t < 1) {
-          requestAnimationFrame(animate)
+          autoZoomRafRef.current = requestAnimationFrame(animate)
         } else {
           // Sync zoom behavior state at the end
           svg.call(zoom.transform, newTransform)
           currentTransformRef.current = newTransform
           isAnimatingZoomRef.current = false
+          autoZoomRafRef.current = null
         }
       }
 
-      requestAnimationFrame(animate)
+      autoZoomRafRef.current = requestAnimationFrame(animate)
     }, 100)  // Delay to let render complete
-  }, [visibleNodes, expandedNodes, viewMode, splitRatio])
+
+    return () => {
+      if (autoZoomDelayTimerRef.current !== null) {
+        clearTimeout(autoZoomDelayTimerRef.current)
+        autoZoomDelayTimerRef.current = null
+      }
+      if (autoZoomRafRef.current !== null) {
+        cancelAnimationFrame(autoZoomRafRef.current)
+        autoZoomRafRef.current = null
+      }
+    }
+  }, [visibleNodes, expandedNodes, viewMode, splitRatio, noteStructuralZoomOverlap])
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#fafafa', position: 'relative' }}>
@@ -5570,6 +6091,7 @@ function App() {
       <LoadingSpinner
         show={loading || shapTimelineLoading || timelineLoading || countryLoading}
         delay={100}
+        minDisplay={300}
         posRef={qolNodePositionRef}
         elRef={spinnerElRef}
       />
@@ -5748,7 +6270,10 @@ function App() {
 
         // Compute ring rank using cached SHAP values
         const ringNodes = allNodes.filter(n => n.ring === displayNode.ring)
-        const getNodeShap = (n: ExpandableNode) => yearShapCache?.get(String(n.id)) ?? lastValidShapRef.current.get(String(n.id)) ?? 0
+        const getNodeShap = (n: ExpandableNode) => {
+          const raw = yearShapCache?.get(String(n.id)) ?? lastValidShapRef.current.get(String(n.id)) ?? n.importance ?? 0
+          return Math.max(0, Number.isFinite(raw) ? raw : 0)
+        }
         const sortedRing = ringNodes.map(getNodeShap).sort((a, b) => b - a)
         const ringRank = sortedRing.findIndex(imp => imp <= (shapValue ?? 0)) + 1
 

@@ -15,6 +15,7 @@ import { useSimulationStore } from '../../stores/simulationStore'
 import { simulationAPI } from '../../services/api'
 import { debug } from '../../utils/debug'
 import { DATA_YEAR_MAX, DATA_YEAR_MIN } from '../../constants/time'
+import { usePresence } from '../../hooks/usePresence'
 import type {
   CountryDataQuality,
   YearDataQuality,
@@ -73,6 +74,7 @@ type QualityData = CountryQualityData | UnifiedQualityData | StratifiedQualityDa
 // Year range for the mini timeline
 const TIMELINE_START = DATA_YEAR_MIN
 const TIMELINE_END = DATA_YEAR_MAX
+const PANEL_EXIT_MS = 180
 
 const isAbortError = (error: unknown): boolean => (
   (error instanceof DOMException && error.name === 'AbortError') ||
@@ -94,6 +96,7 @@ export function DataQualityPanel({
   nodeById,
   isLocalView
 }: DataQualityPanelProps) {
+  const { isMounted, isVisible } = usePresence(isOpen, PANEL_EXIT_MS)
   const { selectedCountry, selectedStratum, historicalTimeline, currentYearIndex } = useSimulationStore()
 
   // Compute actual year from timeline
@@ -216,10 +219,7 @@ export function DataQualityPanel({
 
   // Fetch data quality based on view mode
   useEffect(() => {
-    if (!isOpen) {
-      setQualityData(null)
-      return
-    }
+    if (!isOpen) return
 
     const requestId = ++qualityRequestIdRef.current
     const controller = new AbortController()
@@ -451,13 +451,14 @@ export function DataQualityPanel({
     }
   }
 
-  if (!isOpen) return null
+  if (!isMounted) return null
 
   const displayValues = getDisplayValues()
 
   return (
     <div
       ref={panelRef}
+      aria-hidden={!isOpen}
       style={{
         position: 'fixed',
         top: position.y,
@@ -471,10 +472,15 @@ export function DataQualityPanel({
           : '0 4px 20px rgba(0,0,0,0.15)',
         zIndex: 1001,
         overflow: 'hidden',
-        transition: isDragging ? 'none' : 'box-shadow 0.2s ease',
+        transition: isDragging
+          ? 'none'
+          : `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease, box-shadow 0.2s ease`,
         userSelect: isDragging ? 'none' : 'auto',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? 'translateY(0)' : 'translateY(14px)',
+        pointerEvents: isVisible ? 'auto' : 'none'
       }}
     >
       {/* Header - draggable */}

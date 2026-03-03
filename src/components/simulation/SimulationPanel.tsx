@@ -10,6 +10,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSimulationStore, useIsPanelOpen } from '../../stores/simulationStore'
+import { usePresence } from '../../hooks/usePresence'
 import CountrySelector from './CountrySelector'
 import TemplateSelector from './TemplateSelector'
 import InterventionBuilder from './InterventionBuilder'
@@ -17,6 +18,7 @@ import SimulationRunner from './SimulationRunner'
 
 const PANEL_WIDTH = 380
 const PANEL_HEIGHT = 560
+const PANEL_EXIT_MS = 180
 
 const getDefaultPosition = () => {
   if (typeof window === 'undefined') return { x: 24, y: 24 }
@@ -33,6 +35,7 @@ const getDefaultPosition = () => {
 export function SimulationPanel() {
   const isPanelOpen = useIsPanelOpen()
   const { closePanel } = useSimulationStore()
+  const { isMounted, isVisible } = usePresence(isPanelOpen, PANEL_EXIT_MS)
 
   // Drag state
   const [position, setPosition] = useState(() => getDefaultPosition())
@@ -113,13 +116,14 @@ export function SimulationPanel() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isPanelOpen, closePanel])
 
-  if (!isPanelOpen) return null
+  if (!isMounted) return null
 
   return (
     <div
       ref={panelRef}
       role="dialog"
       aria-modal="false"
+      aria-hidden={!isPanelOpen}
       aria-label="Simulation controls"
       style={{
         position: 'fixed',
@@ -137,7 +141,13 @@ export function SimulationPanel() {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        userSelect: isDragging ? 'none' : 'auto'
+        userSelect: isDragging ? 'none' : 'auto',
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? 'translateY(0)' : 'translateY(14px)',
+        pointerEvents: isVisible ? 'auto' : 'none',
+        transition: isDragging
+          ? 'none'
+          : `opacity ${PANEL_EXIT_MS}ms ease, transform ${PANEL_EXIT_MS}ms ease, box-shadow 0.2s ease`
       }}
     >
       {/* Header - draggable */}

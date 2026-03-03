@@ -661,7 +661,9 @@ export function CountrySelector() {
             aria-label={selectedRegion ? "Clear selected region" : "Clear selected country"}
             style={{
               background: '#FFEBEE',
-              border: '1px solid #FFCDD2',
+              borderWidth: 1,
+              borderStyle: 'solid',
+              borderColor: '#FFCDD2',
               borderRadius: 4,
               cursor: 'pointer',
               fontSize: 11,
@@ -704,13 +706,16 @@ export function CountrySelector() {
           style={{
             width: '100%',
             padding: '8px 32px 8px 12px',
-            border: '1px solid #ddd',
+            borderWidth: 1,
+            borderStyle: 'solid',
+            borderColor: '#ddd',
             borderRadius: 6,
             fontSize: 13,
             outline: 'none',
             boxSizing: 'border-box',
             background: countriesLoading || countryLoading ? '#f5f5f5' : 'white',
             cursor: countriesLoading || countryLoading ? 'wait' : 'text',
+            transition: 'border-color 0.15s ease',
             ...(isFocused && { borderColor: '#3B82F6' })
           }}
         />

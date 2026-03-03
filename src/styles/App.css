@@ -141,7 +141,19 @@
   60% { transform: scale(1.02); }
 }
 
+button:not([disabled]):active {
+  transform: scale(0.98);
+  transition: transform 50ms linear;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
   .share-nudge-active,
   .share-nudge-btn {
     animation: none !important;
