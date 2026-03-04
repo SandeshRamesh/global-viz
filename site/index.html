@@ -166,23 +166,25 @@
     border-bottom: 1px solid var(--border);
     background: rgba(10,18,40,0.6);
     backdrop-filter: blur(8px);
-    overflow: hidden; padding: 14px 0;
+    padding: 16px 0;
   }
   .ticker-track {
-    display: flex; gap: 0;
-    animation: ticker 40s linear infinite;
-    width: max-content;
+    display: flex; align-items: center; justify-content: center;
+    gap: 48px;
+    max-width: 1100px; margin: 0 auto; padding: 0 32px;
   }
   .ticker-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 0 48px; white-space: nowrap;
-    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em;
+    display: flex; align-items: baseline; gap: 10px;
+    white-space: nowrap;
+    font-family: 'DM Mono', monospace; font-size: 13px; letter-spacing: 0.06em;
     color: var(--text-subtle);
   }
   .ticker-item .val {
+    font-size: 20px; letter-spacing: 0.02em;
     color: var(--cyan); font-weight: 500;
   }
-  .ticker-sep { color: var(--border-bright); }
+  .ticker-sep { color: var(--border-bright); font-size: 14px; }
+  .ticker-dupe, .ticker-sep-dupe { display: none; }
 
   /* ── SECTIONS ── */
   section { padding: 120px 48px; max-width: 1200px; margin: 0 auto; }
@@ -555,6 +557,19 @@
     .hero-chevron.pulsing {
       animation: chevronPulse 2.5s ease-in-out infinite;
     }
+    .ticker-bar { overflow: hidden; padding: 14px 0; }
+    .ticker-track {
+      justify-content: flex-start; gap: 0; padding: 0;
+      width: max-content;
+      animation: ticker 20s linear infinite;
+      will-change: transform;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+    }
+    .ticker-item { font-size: 11px; padding: 0 20px; }
+    .ticker-item .val { font-size: 13px; }
+    .ticker-sep { padding: 0; }
+    .ticker-dupe, .ticker-sep-dupe { display: flex; }
     .problem { grid-template-columns: 1fr; gap: 48px; }
     .stats-inner { grid-template-columns: repeat(3, 1fr); gap: 32px; }
     .stat-item { border-right: none; border-bottom: 1px solid var(--border); padding: 0 0 24px; }
@@ -612,28 +627,25 @@
   </div>
 </div>
 
-<!-- TICKER -->
+<!-- STATS BAR -->
 <div class="ticker-bar">
-  <div class="ticker-track" id="ticker">
-    <div class="ticker-item"><span class="val">7,368</span> validated causal edges <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">178</span> countries <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">35</span> years of data · 1990–2024 <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">1,962</span> development indicators <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">100×</span> bootstrap validation per edge <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">20 GB</span> of precomputed causal data <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">9</span> outcome domains <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">11</span> world regions with spillover modeling <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">6</span> years forward projection · 2025–2030 <span class="ticker-sep">·</span></div>
-    <!-- duplicate for seamless loop -->
-    <div class="ticker-item"><span class="val">7,368</span> validated causal edges <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">178</span> countries <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">35</span> years of data · 1990–2024 <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">1,962</span> development indicators <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">100×</span> bootstrap validation per edge <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">20 GB</span> of precomputed causal data <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">9</span> outcome domains <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">11</span> world regions with spillover modeling <span class="ticker-sep">·</span></div>
-    <div class="ticker-item"><span class="val">6</span> years forward projection · 2025–2030 <span class="ticker-sep">·</span></div>
+  <div class="ticker-track">
+    <div class="ticker-item"><span class="val">7,368</span> causal edges discovered</div>
+    <span class="ticker-sep">·</span>
+    <div class="ticker-item"><span class="val">99.62%</span> validation pass rate</div>
+    <span class="ticker-sep">·</span>
+    <div class="ticker-item"><span class="val">7.4 Billion</span> people represented</div>
+    <span class="ticker-sep">·</span>
+    <div class="ticker-item"><span class="val">0/592</span> unstable transitions</div>
+    <!-- duplicate for mobile seamless loop -->
+    <span class="ticker-sep ticker-sep-dupe">·</span>
+    <div class="ticker-item ticker-dupe"><span class="val">7,368</span> causal edges discovered</div>
+    <span class="ticker-sep ticker-sep-dupe">·</span>
+    <div class="ticker-item ticker-dupe"><span class="val">99.62%</span> validation pass rate</div>
+    <span class="ticker-sep ticker-sep-dupe">·</span>
+    <div class="ticker-item ticker-dupe"><span class="val">7.4 Billion</span> people represented</div>
+    <span class="ticker-sep ticker-sep-dupe">·</span>
+    <div class="ticker-item ticker-dupe"><span class="val">0/592</span> unstable transitions</div>
   </div>
 </div>
 
@@ -1120,6 +1132,126 @@ if (chevron) {
       chevronVisible = true; // prevent late show
     }
   }, { passive: true });
+}
+
+// ── MOBILE TICKER: touch drag + flick momentum + auto-resume ──
+if (window.innerWidth <= 900) {
+  const track = document.querySelector('.ticker-track');
+  if (track) {
+    let offset = 0, velocity = 0, amplitude = 0, target = 0;
+    let frame, timestamp, isDragging = false, pendingDx = 0;
+    let resumeTimer, rafId;
+    const TIME_CONST = 325;
+    const half = () => track.scrollWidth / 2;
+
+    function wrap(x) {
+      const h = half();
+      while (x > 0) x -= h;
+      while (x < -h) x += h;
+      return x;
+    }
+
+    function render() {
+      track.style.transform = `translateX(${offset}px)`;
+    }
+
+    function pauseAnim() {
+      clearTimeout(resumeTimer);
+      cancelAnimationFrame(rafId);
+      autoScrolling = false;
+      const m = new DOMMatrix(getComputedStyle(track).transform);
+      track.style.animation = 'none';
+      offset = m.m41;
+      render();
+    }
+
+    // Smooth auto-scroll driven by JS (matches CSS ticker speed)
+    let autoScrolling = false;
+    let lastAutoTime;
+    function autoScroll(now) {
+      if (!autoScrolling) return;
+      if (!lastAutoTime) lastAutoTime = now;
+      const dt = now - lastAutoTime;
+      lastAutoTime = now;
+      // Match CSS: full half-width traversal in 20s
+      const speed = half() / 20000; // px per ms
+      offset = wrap(offset - speed * dt);
+      render();
+      rafId = requestAnimationFrame(autoScroll);
+    }
+
+    function scheduleResume() {
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => {
+        autoScrolling = true;
+        lastAutoTime = null;
+        rafId = requestAnimationFrame(autoScroll);
+      }, 3000);
+    }
+
+    // Smooth drag loop — decouples touch input from rendering
+    function dragLoop() {
+      if (!isDragging) return;
+      if (pendingDx !== 0) {
+        offset = wrap(offset + pendingDx);
+        // Velocity tracking (smoothed)
+        const now = Date.now();
+        const elapsed = now - timestamp;
+        timestamp = now;
+        const v = (1000 * pendingDx) / (1 + elapsed);
+        velocity = 0.8 * v + 0.2 * velocity;
+        pendingDx = 0;
+        render();
+      }
+      rafId = requestAnimationFrame(dragLoop);
+    }
+
+    // Momentum deceleration after flick
+    function momentumScroll() {
+      const elapsed = Date.now() - timestamp;
+      const delta = -amplitude * Math.exp(-elapsed / TIME_CONST);
+      if (Math.abs(delta) > 0.5) {
+        offset = wrap(target + delta);
+        render();
+        rafId = requestAnimationFrame(momentumScroll);
+      } else {
+        offset = wrap(target);
+        render();
+        scheduleResume();
+      }
+    }
+
+    track.addEventListener('touchstart', (e) => {
+      isDragging = true;
+      pauseAnim();
+      pendingDx = 0;
+      velocity = 0;
+      amplitude = 0;
+      timestamp = Date.now();
+      track._lastX = e.touches[0].clientX;
+      rafId = requestAnimationFrame(dragLoop);
+    }, { passive: true });
+
+    track.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      const x = e.touches[0].clientX;
+      pendingDx += x - track._lastX;
+      track._lastX = x;
+    }, { passive: true });
+
+    track.addEventListener('touchend', () => {
+      isDragging = false;
+      cancelAnimationFrame(rafId);
+      if (Math.abs(velocity) > 10) {
+        amplitude = 0.4 * velocity;
+        target = offset + amplitude;
+        timestamp = Date.now();
+        rafId = requestAnimationFrame(momentumScroll);
+      } else {
+        scheduleResume();
+      }
+    }, { passive: true });
+  }
 }
 
 </script>
