@@ -550,7 +550,7 @@ const timelineStyles = `
     align-items: center;
     justify-content: center;
     background: rgba(255, 255, 255, 0.95);
-    border: 1px solid #e0e0e0;
+    border: 1px solid #d0d5e0;
     border-radius: 24px;
     color: #666;
     cursor: pointer;
@@ -597,7 +597,7 @@ const timelineStyles = `
     gap: 12px;
     padding: 8px 16px;
     background: rgba(255, 255, 255, 0.95);
-    border: 1px solid #e0e0e0;
+    border: 1px solid #d0d5e0;
     border-radius: 24px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(8px);
@@ -750,7 +750,7 @@ const timelineStyles = `
     left: 0;
     right: 0;
     height: 4px;
-    background: #e0e0e0;
+    background: #d0d5e0;
     border-radius: 2px;
   }
 

@@ -94,7 +94,7 @@ export function SidebarDrawer({
           alignItems: 'center',
           justifyContent: 'center',
           background: 'rgba(255,255,255,0.95)',
-          border: '1px solid #ddd',
+          border: '1px solid #d0d5e0',
           borderRadius: 8,
           cursor: 'pointer',
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
@@ -151,7 +151,7 @@ export function SidebarDrawer({
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '12px 14px',
-          borderBottom: '1px solid #eee',
+          borderBottom: '1px solid #e2e6ee',
           flexShrink: 0,
         }}>
           <span style={{ fontWeight: 600, fontSize: 14, color: '#333' }}>

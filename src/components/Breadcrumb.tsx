@@ -101,7 +101,7 @@ export function Breadcrumb({ nodeId, nodeMap, onNavigate, domainColors }: Breadc
               {node.label}
             </button>
             {i < displayPath.length - 1 && (
-              <span style={{ color: '#ccc', fontSize: 10 }}>›</span>
+              <span style={{ color: '#bcc3d4', fontSize: 10 }}>›</span>
             )}
           </Fragment>
         )

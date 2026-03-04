@@ -223,7 +223,7 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
         boxShadow: isDragging
           ? '0 8px 24px rgba(0,0,0,0.2)'
           : '0 2px 12px rgba(0,0,0,0.15)',
-        border: '1px solid #ddd',
+        border: '1px solid #d0d5e0',
         zIndex: 200,
         display: 'flex',
         flexDirection: 'column',
@@ -245,8 +245,8 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '10px 14px',
-          borderBottom: isCollapsed ? 'none' : '1px solid #eee',
-          background: '#fafafa',
+          borderBottom: isCollapsed ? 'none' : '1px solid #e2e6ee',
+          background: '#f4f5fa',
           cursor: isMobileLayout ? 'default' : (isDragging ? 'grabbing' : 'grab'),
           flexShrink: 0,
           minHeight: HEADER_HEIGHT,
@@ -327,7 +327,7 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
         }}
       >
         {/* Country Selection — collapsible section */}
-        <div style={{ borderBottom: '1px solid #eee' }}>
+        <div style={{ borderBottom: '1px solid #e2e6ee' }}>
           <button
             onClick={() => setCountryExpanded(prev => !prev)}
             style={{
@@ -370,17 +370,17 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
         </div>
 
         {/* Intervention Builder */}
-        <div style={{ padding: '12px 14px', borderBottom: '1px solid #eee' }}>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid #e2e6ee' }}>
           <InterventionBuilder />
         </div>
 
         {/* Policy Templates */}
-        <div style={{ padding: '12px 14px', borderBottom: '1px solid #eee' }}>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid #e2e6ee' }}>
           <TemplateSelector />
         </div>
 
         {/* Simulation Runner */}
-        <div style={{ padding: '12px 14px', background: '#fafafa' }}>
+        <div style={{ padding: '12px 14px', background: '#f4f5fa' }}>
           <SimulationRunner />
         </div>
 

@@ -566,11 +566,11 @@ export function DataQualityPanel({
         onMouseDown={handleMouseDown}
         style={{
           padding: '12px 16px',
-          borderBottom: isCollapsed ? 'none' : '1px solid #eee',
+          borderBottom: isCollapsed ? 'none' : '1px solid #e2e6ee',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: '#f8f9fa',
+          background: '#f0f2f8',
           cursor: isMobileLayout ? 'default' : (isDragging ? 'grabbing' : 'grab'),
           flexShrink: 0,
           minHeight: DQ_HEADER_HEIGHT,
@@ -639,8 +639,8 @@ export function DataQualityPanel({
       {showTabs && (
         <div style={{
           display: 'flex',
-          borderBottom: '1px solid #eee',
-          background: '#fafafa',
+          borderBottom: '1px solid #e2e6ee',
+          background: '#f4f5fa',
           flexShrink: 0
         }}>
           <button
@@ -712,7 +712,7 @@ export function DataQualityPanel({
                 height: 24,
                 borderWidth: 2,
                 borderStyle: 'solid',
-                borderColor: '#e0e0e0',
+                borderColor: '#d0d5e0',
                 borderTopColor: '#666',
                 borderRadius: '50%',
                 animation: 'spin 0.8s linear infinite'
@@ -780,7 +780,7 @@ export function DataQualityPanel({
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '8px 12px',
-                background: '#f8f9fa',
+                background: '#f0f2f8',
                 borderRadius: 8,
                 marginBottom: 16,
                 fontSize: 12
@@ -839,7 +839,7 @@ export function DataQualityPanel({
                     <span>Sparse (&lt;25%)</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ width: 8, height: 8, background: '#e0e0e0', borderRadius: 1 }} />
+                    <div style={{ width: 8, height: 8, background: '#d0d5e0', borderRadius: 1 }} />
                     <span>No data</span>
                   </div>
                 </div>
@@ -875,7 +875,7 @@ export function DataQualityPanel({
                 height: 24,
                 borderWidth: 2,
                 borderStyle: 'solid',
-                borderColor: '#e0e0e0',
+                borderColor: '#d0d5e0',
                 borderTopColor: '#666',
                 borderRadius: '50%',
                 animation: 'spin 0.8s linear infinite'
@@ -1106,7 +1106,7 @@ function CIStatsContent({ edges, targetIds, nodeById }: CIStatsContentProps) {
             <div
               key={targetId}
               style={{
-                border: '1px solid #e5e7eb',
+                border: '1px solid #dce0ea',
                 borderRadius: 6,
                 overflow: 'hidden'
               }}
@@ -1120,7 +1120,7 @@ function CIStatsContent({ edges, targetIds, nodeById }: CIStatsContentProps) {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '8px 10px',
-                  background: isExpanded ? '#f0f9ff' : '#fafafa',
+                  background: isExpanded ? '#e8f5f7' : '#f4f5fa',
                   border: 'none',
                   cursor: 'pointer',
                   textAlign: 'left'
@@ -1264,7 +1264,7 @@ function StatBox({
 }) {
   return (
     <div style={{
-      background: '#f8f9fa',
+      background: '#f0f2f8',
       borderRadius: 8,
       padding: '8px 10px',
       borderLeft: `3px solid ${color}`
@@ -1302,7 +1302,7 @@ function TimelineCell({
     complete: '#10B981',
     partial: '#F59E0B',
     sparse: '#EF4444',
-    none: '#e0e0e0'
+    none: '#d0d5e0'
   }
 
   const bgColor = qualityColors[quality]
@@ -1406,7 +1406,7 @@ function TransitionRow({ transition }: { transition: { year: number; from: strin
       alignItems: 'center',
       gap: 8,
       padding: '6px 8px',
-      background: '#f8f9fa',
+      background: '#f0f2f8',
       borderRadius: 6,
       fontSize: 11
     }}>
@@ -1584,7 +1584,7 @@ function StratumCountryList({
 
   return (
     <div style={{
-      border: '1px solid #eee',
+      border: '1px solid #e2e6ee',
       borderRadius: 8,
       overflow: 'hidden'
     }}>
@@ -1597,7 +1597,7 @@ function StratumCountryList({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '10px 12px',
-          background: isExpanded ? config.color + '15' : '#fafafa',
+          background: isExpanded ? config.color + '15' : '#f4f5fa',
           border: 'none',
           cursor: 'pointer',
           borderLeft: `4px solid ${config.color}`
@@ -1712,7 +1712,7 @@ function CountryProgressRow({
       alignItems: 'center',
       gap: 8,
       padding: compact ? '4px 0' : '8px 12px',
-      borderBottom: compact ? 'none' : '1px solid #f5f5f5',
+      borderBottom: compact ? 'none' : '1px solid #eef0f6',
       fontSize: compact ? 11 : 12
     }}>
       {/* Country name */}

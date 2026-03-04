@@ -90,7 +90,7 @@ export function ViewTabs({
           background: 'white',
           borderRadius: 6,
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          border: '1px solid #ddd',
+          border: '1px solid #d0d5e0',
           overflow: 'hidden'
         }}
       >
@@ -121,7 +121,7 @@ export function ViewTabs({
                 fontWeight: mapViewMode === 'regional' ? 600 : 400,
                 cursor: 'pointer',
                 border: 'none',
-                borderLeft: '1px solid #ddd',
+                borderLeft: '1px solid #d0d5e0',
                 background: mapViewMode === 'regional' ? '#3B82F6' : 'white',
                 color: mapViewMode === 'regional' ? 'white' : '#555',
                 transition: 'all 0.15s ease'
@@ -163,7 +163,7 @@ export function ViewTabs({
                   fontWeight: activeView === 'split' ? 600 : 400,
                   cursor: !hasTargets && activeView !== 'split' ? 'not-allowed' : 'pointer',
                   border: 'none',
-                  borderLeft: '1px solid #ddd',
+                  borderLeft: '1px solid #d0d5e0',
                   background: activeView === 'split' ? '#3B82F6' : 'white',
                   color: activeView === 'split' ? 'white' : !hasTargets ? '#aaa' : '#555',
                   opacity: !hasTargets && activeView !== 'split' ? 0.6 : 1,
@@ -188,7 +188,7 @@ export function ViewTabs({
                 fontWeight: activeView === 'local' ? 600 : 400,
                 cursor: !hasTargets && activeView !== 'local' ? 'not-allowed' : 'pointer',
                 border: 'none',
-                borderLeft: '1px solid #ddd',
+                borderLeft: '1px solid #d0d5e0',
                 background: activeView === 'local' ? '#3B82F6' : 'white',
                 color: activeView === 'local' ? 'white' : !hasTargets ? '#aaa' : '#555',
                 opacity: !hasTargets && activeView !== 'local' ? 0.6 : 1,
@@ -229,7 +229,7 @@ export function ViewTabs({
           background: 'white',
           borderRadius: 6,
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          border: '1px solid #ddd',
+          border: '1px solid #d0d5e0',
           overflow: 'hidden'
         }}
       >
@@ -244,7 +244,7 @@ export function ViewTabs({
             cursor: clearEnabled ? 'pointer' : 'default',
             border: 'none',
             background: 'white',
-            color: clearEnabled ? '#E53935' : '#ccc',
+            color: clearEnabled ? '#E53935' : '#bcc3d4',
             transition: 'all 0.2s ease',
             opacity: clearEnabled ? 1 : 0.4,
             display: 'flex',
@@ -276,7 +276,7 @@ export function ViewTabs({
             fontWeight: 500,
             cursor: 'pointer',
             border: 'none',
-            borderLeft: '1px solid #ddd',
+            borderLeft: '1px solid #d0d5e0',
             background: 'white',
             color: '#555',
             transition: 'all 0.15s ease',
@@ -286,7 +286,7 @@ export function ViewTabs({
           }}
           title="Reset view to initial state (R or Home)"
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#f5f5f5'
+            e.currentTarget.style.background = '#eef0f6'
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'white'
@@ -309,7 +309,7 @@ export function ViewTabs({
             background: 'white',
             borderRadius: 6,
             boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            border: '1px solid #ddd',
+            border: '1px solid #d0d5e0',
             overflow: 'hidden'
           }}
         >
@@ -331,7 +331,7 @@ export function ViewTabs({
             }}
             title={mapForeground ? 'Send map to background (M)' : 'Bring map forward (M)'}
             onMouseEnter={(e) => {
-              if (!mapForeground) e.currentTarget.style.background = '#f5f5f5'
+              if (!mapForeground) e.currentTarget.style.background = '#eef0f6'
             }}
             onMouseLeave={(e) => {
               if (!mapForeground) e.currentTarget.style.background = 'white'
@@ -364,7 +364,7 @@ export function ViewTabs({
           background: 'white',
           borderRadius: 6,
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          border: '1px solid #ddd',
+          border: '1px solid #d0d5e0',
           overflow: 'visible',
           position: 'relative'
         }}
@@ -391,7 +391,7 @@ export function ViewTabs({
           title="Copy shareable link to clipboard"
           onMouseEnter={(e) => {
             if (shareStatus !== 'copied') {
-              e.currentTarget.style.background = '#f5f5f5'
+              e.currentTarget.style.background = '#eef0f6'
             }
           }}
           onMouseLeave={(e) => {
@@ -442,7 +442,7 @@ export function ViewTabs({
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            border: mapForeground ? '1px solid #3B82F6' : '1px solid #e0e0e0',
+            border: mapForeground ? '1px solid #3B82F6' : '1px solid #d0d5e0',
             borderRadius: 24,
             background: mapForeground ? '#3B82F6' : 'rgba(255,255,255,0.95)',
             color: mapForeground ? 'white' : '#666',

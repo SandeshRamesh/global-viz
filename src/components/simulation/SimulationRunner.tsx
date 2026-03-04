@@ -498,7 +498,7 @@ export function SimulationRunner() {
         }
 
         .clear-btn:hover {
-          background: #f5f5f5;
+          background: #eef0f6;
           border-color: #A5D6A7;
         }
 
@@ -726,7 +726,7 @@ export function SimulationRunner() {
         .scenario-name-input {
           flex: 1;
           padding: 4px 8px;
-          border: 1px solid #ddd;
+          border: 1px solid #d0d5e0;
           border-radius: 4px;
           font-size: 11px;
           /* outline handled by :focus-visible */
@@ -738,9 +738,9 @@ export function SimulationRunner() {
 
         .scenario-btn {
           padding: 4px 10px;
-          border: 1px solid #ddd;
+          border: 1px solid #d0d5e0;
           border-radius: 4px;
-          background: #f8f8f8;
+          background: #f0f2f8;
           font-size: 11px;
           cursor: pointer;
           white-space: nowrap;
@@ -748,7 +748,7 @@ export function SimulationRunner() {
         }
 
         .scenario-btn:hover {
-          background: #eee;
+          background: #e2e6ee;
           border-color: #bbb;
         }
 
@@ -781,7 +781,7 @@ export function SimulationRunner() {
           max-height: 200px;
           overflow-y: auto;
           background: white;
-          border: 1px solid #ddd;
+          border: 1px solid #d0d5e0;
           border-radius: 6px;
           box-shadow: 0 -4px 16px rgba(0,0,0,0.12);
           z-index: 300;
@@ -834,7 +834,7 @@ export function SimulationRunner() {
         .scenario-delete-btn {
           background: none;
           border: none;
-          color: #ccc;
+          color: #bcc3d4;
           font-size: 16px;
           padding: 4px 8px;
           cursor: pointer;
@@ -1361,7 +1361,7 @@ function TemporalResultsDropdown({ temporalResults, onClear }: TemporalResultsDr
           margin-top: 2px;
           min-width: 160px;
           background: white;
-          border: 1px solid #ddd;
+          border: 1px solid #d0d5e0;
           border-radius: 6px;
           box-shadow: 0 4px 12px rgba(0,0,0,0.12);
           z-index: 300;

@@ -68,7 +68,7 @@ export function SimulateButton({ onClick, isActive = false }: SimulateButtonProp
         alignItems: 'center',
         justifyContent: 'center',
         background: isActive ? '#3B82F6' : 'rgba(255, 255, 255, 0.95)',
-        border: isActive ? '1px solid #3B82F6' : '1px solid #e0e0e0',
+        border: isActive ? '1px solid #3B82F6' : '1px solid #d0d5e0',
         borderRadius: 24,
         color: getColor(),
         cursor: 'pointer',

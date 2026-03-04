@@ -146,7 +146,7 @@ export function TemplateSelector() {
             flex: 1,
             padding: '6px 8px',
             borderRadius: 4,
-            border: '1px solid #ddd',
+            border: '1px solid #d0d5e0',
             background: 'white',
             color: '#333',
             fontSize: 12,
@@ -228,12 +228,12 @@ export function TemplateSelector() {
             <span>{t.source}, {t.year}</span>
             <Badge
               label={t.difficulty}
-              bg={DIFFICULTY_COLORS[t.difficulty]?.bg ?? '#eee'}
+              bg={DIFFICULTY_COLORS[t.difficulty]?.bg ?? '#e2e6ee'}
               text={DIFFICULTY_COLORS[t.difficulty]?.text ?? '#666'}
             />
             <Badge
               label={`${t.political_feasibility} feasibility`}
-              bg={FEASIBILITY_COLORS[t.political_feasibility]?.bg ?? '#eee'}
+              bg={FEASIBILITY_COLORS[t.political_feasibility]?.bg ?? '#e2e6ee'}
               text={FEASIBILITY_COLORS[t.political_feasibility]?.text ?? '#666'}
             />
           </div>
@@ -334,7 +334,7 @@ export function TemplateSelector() {
                 marginTop: 8,
                 padding: '6px 12px',
                 borderRadius: 4,
-                border: '1px dashed #ccc',
+                border: '1px dashed #bcc3d4',
                 background: 'transparent',
                 color: '#666',
                 fontSize: 11,
@@ -347,7 +347,7 @@ export function TemplateSelector() {
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.borderColor = '#ccc'
+                e.currentTarget.style.borderColor = '#bcc3d4'
               }}
             >
               Reset to policy defaults

@@ -4599,7 +4599,7 @@ function App() {
       .attr('data-target-ring', d => d.targetRing)
       .attr('x1', d => nodeMap.get(d.sourceId)?.x || 0)
       .attr('y1', d => nodeMap.get(d.sourceId)?.y || 0)
-      .attr('stroke', '#ccc')
+      .attr('stroke', '#bcc3d4')
       .attr('stroke-width', d => vLayout.getEdgeThickness(d.sourceRing))
       .style('pointer-events', 'none')
 
@@ -6398,7 +6398,7 @@ function App() {
   }, [visibleNodes, expandedNodes, viewMode, splitRatio, noteStructuralZoomOverlap])
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#fafafa', position: 'relative' }}>
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#eef0f6', position: 'relative' }}>
       {/* World Map - background choropleth layer */}
       <WorldMap
         foreground={mapForeground}
@@ -6526,10 +6526,10 @@ function App() {
                 onClick={() => jumpToNode(node)}
                 style={{
                   padding: '10px 14px', cursor: 'pointer',
-                  borderBottom: i < searchResults.length - 1 ? '1px solid #eee' : 'none',
+                  borderBottom: i < searchResults.length - 1 ? '1px solid #e2e6ee' : 'none',
                   display: 'flex', alignItems: 'center', gap: 10
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#eef0f6'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
               >
                 {/* Domain color dot */}
@@ -6579,7 +6579,7 @@ function App() {
                   key={i}
                   onClick={() => handleSearch(term)}
                   style={{
-                    background: '#f5f5f5', border: 'none', borderRadius: 4,
+                    background: '#eef0f6', border: 'none', borderRadius: 4,
                     padding: '4px 8px', fontSize: 11, cursor: 'pointer', color: '#555'
                   }}
                 >
@@ -6592,7 +6592,7 @@ function App() {
         </div>
 
         {/* Country Selector */}
-        <div style={{ background: 'white', padding: viewport.isBelow(768) ? '10px 12px' : '8px 10px', borderRadius: 6, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #ddd', pointerEvents: 'auto' }}>
+        <div style={{ background: 'white', padding: viewport.isBelow(768) ? '10px 12px' : '8px 10px', borderRadius: 6, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', border: '1px solid #d0d5e0', pointerEvents: 'auto' }}>
           <CountrySelector />
         </div>
 
@@ -6601,24 +6601,24 @@ function App() {
           <nav aria-label="Graph controls" style={{ background: 'white', padding: '8px 10px', borderRadius: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', fontSize: 11, pointerEvents: 'auto', maxWidth: viewport.isBelow(768) ? undefined : 180 }}>
             <div style={{ fontWeight: 'bold', marginBottom: 6, fontSize: 11 }}>Rings</div>
             {ringStats.map((ring, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, paddingBottom: 2, borderBottom: i < ringStats.length - 1 ? '1px solid #eee' : 'none' }}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, paddingBottom: 2, borderBottom: i < ringStats.length - 1 ? '1px solid #e2e6ee' : 'none' }}>
                 <span style={{ color: '#555', fontSize: 10 }}>{ring.label}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <span style={{ fontWeight: 'bold', color: '#333', fontSize: 10 }}>{ring.count.toLocaleString()}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontWeight: 'bold', color: '#333', fontSize: 10, marginRight: 2 }}>{ring.count.toLocaleString()}</span>
                   {i < ringStats.length - 1 && (
                     <>
                       <button
                         className="touch-target-44"
                         onClick={() => expandRing(i)}
                         aria-label={`Expand ${ring.label}`}
-                        style={{ padding: '3px 7px', fontSize: 11, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
+                        style={{ padding: '3px 7px', fontSize: 11, cursor: 'pointer', border: '1px solid #bcc3d4', borderRadius: 2, background: '#eef0f6', lineHeight: 1.2 }}
                         title={`Expand ${ring.label}`}
                       >+</button>
                       <button
                         className="touch-target-44"
                         onClick={() => collapseRing(i)}
                         aria-label={`Collapse ${ring.label}`}
-                        style={{ padding: '3px 7px', fontSize: 11, cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2, background: '#f5f5f5', lineHeight: 1.2 }}
+                        style={{ padding: '3px 7px', fontSize: 11, cursor: 'pointer', border: '1px solid #bcc3d4', borderRadius: 2, background: '#eef0f6', lineHeight: 1.2 }}
                         title={`Collapse ${ring.label}`}
                       >−</button>
                     </>
@@ -6672,7 +6672,7 @@ function App() {
               alignItems: 'center',
               justifyContent: 'center',
               background: dataQualityOpen ? '#10B981' : dataQualityBtnHovered ? '#f0f0f0' : 'rgba(255, 255, 255, 0.95)',
-              border: dataQualityOpen ? '1px solid #10B981' : '1px solid #e0e0e0',
+              border: dataQualityOpen ? '1px solid #10B981' : '1px solid #d0d5e0',
               borderRadius: 24,
               color: dataQualityOpen ? 'white' : dataQualityBtnHovered ? '#333' : '#666',
               cursor: 'pointer',
@@ -6702,7 +6702,7 @@ function App() {
               alignItems: 'center',
               justifyContent: 'center',
               background: isPanelOpen ? '#3B82F6' : simulateBtnHovered ? '#f0f0f0' : 'rgba(255, 255, 255, 0.95)',
-              border: isPanelOpen ? '1px solid #3B82F6' : '1px solid #e0e0e0',
+              border: isPanelOpen ? '1px solid #3B82F6' : '1px solid #d0d5e0',
               borderRadius: 24,
               color: isPanelOpen ? 'white' : simulateBtnHovered ? '#333' : '#666',
               cursor: 'pointer',
@@ -6753,7 +6753,7 @@ function App() {
               alignItems: 'center',
               justifyContent: 'center',
               background: dataQualityOpen ? '#10B981' : 'rgba(255, 255, 255, 0.95)',
-              border: dataQualityOpen ? '1px solid #10B981' : '1px solid #e0e0e0',
+              border: dataQualityOpen ? '1px solid #10B981' : '1px solid #d0d5e0',
               borderRadius: 24,
               color: dataQualityOpen ? 'white' : '#666',
               cursor: 'pointer',
@@ -6782,7 +6782,7 @@ function App() {
               alignItems: 'center',
               justifyContent: 'center',
               background: isPanelOpen ? '#3B82F6' : 'rgba(255, 255, 255, 0.95)',
-              border: isPanelOpen ? '1px solid #3B82F6' : '1px solid #e0e0e0',
+              border: isPanelOpen ? '1px solid #3B82F6' : '1px solid #d0d5e0',
               borderRadius: 24,
               color: isPanelOpen ? 'white' : '#666',
               cursor: 'pointer',
@@ -6956,7 +6956,7 @@ function App() {
             style={{
               width: 6,
               height: '100%',
-              background: '#e0e0e0',
+              background: '#d0d5e0',
               cursor: 'col-resize',
               flexShrink: 0,
               display: 'flex',
@@ -6965,7 +6965,7 @@ function App() {
               zIndex: 60
             }}
             onMouseEnter={(e) => e.currentTarget.style.background = '#bbb'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#e0e0e0'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#d0d5e0'}
           >
             <div style={{
               width: 2,
@@ -7114,7 +7114,7 @@ function App() {
 
             {/* Badge row: ring + domain */}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-              <span style={{ padding: '2px 6px', borderRadius: 4, backgroundColor: '#eee', fontSize: 10 }}>
+              <span style={{ padding: '2px 6px', borderRadius: 4, backgroundColor: '#e2e6ee', fontSize: 10 }}>
                 {ringConfigs[displayNode.ring]?.label || `Ring ${displayNode.ring}`}
               </span>
               {displayNode.semanticPath.domain && (

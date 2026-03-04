@@ -48,10 +48,10 @@ function LayoutControls({
                 width: '100%',
                 padding: '2px 4px',
                 fontSize: 10,
-                border: '1px solid #ccc',
+                border: '1px solid #bcc3d4',
                 borderRadius: 2,
                 textAlign: 'right',
-                background: ring === 0 ? '#f5f5f5' : 'white'
+                background: ring === 0 ? '#eef0f6' : 'white'
               }}
             />
           </React.Fragment>
@@ -72,9 +72,9 @@ function LayoutControls({
           marginTop: 8,
           fontSize: 10,
           cursor: 'pointer',
-          border: '1px solid #ccc',
+          border: '1px solid #bcc3d4',
           borderRadius: 2,
-          background: '#f5f5f5'
+          background: '#eef0f6'
         }}
       >
         Reset (150px gaps)

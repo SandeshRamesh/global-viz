@@ -609,7 +609,7 @@ export function CountrySelector() {
           style={{
             width: 40,
             height: 3,
-            background: '#e0e0e0',
+            background: '#d0d5e0',
             borderRadius: 2,
             overflow: 'hidden'
           }}
@@ -645,7 +645,7 @@ export function CountrySelector() {
       onClick={() => handleSelect(country)}
       onMouseEnter={(e) => {
         setActiveIndex(idx)
-        e.currentTarget.style.background = isMapHovered ? '#bbdefb' : '#f5f5f5'
+        e.currentTarget.style.background = isMapHovered ? '#bbdefb' : '#eef0f6'
       }}
       onMouseLeave={(e) => { e.currentTarget.style.background = isMapHovered ? '#e3f2fd' : 'white' }}
       role="option"
@@ -654,7 +654,7 @@ export function CountrySelector() {
       style={{
         padding: '8px 12px',
         cursor: 'pointer',
-        borderBottom: '1px solid #f5f5f5',
+        borderBottom: '1px solid #e8e8e8',
         transition: 'background 0.1s ease',
         display: 'flex',
         alignItems: 'center',
@@ -689,7 +689,7 @@ export function CountrySelector() {
   // Determine header content
   const renderHeader = () => {
     if (countryLoading) {
-      return <span style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>
+      return <span style={{ fontSize: 12, fontWeight: 600, color: '#666' }}>
         {selectedRegion ? 'Loading regional graph...' : 'Loading country graph...'}
       </span>
     }
@@ -801,11 +801,11 @@ export function CountrySelector() {
             padding: '8px 32px 8px 12px',
             borderWidth: 1,
             borderStyle: 'solid',
-            borderColor: '#ddd',
+            borderColor: '#d0d5e0',
             borderRadius: 6,
             fontSize: 13,
             boxSizing: 'border-box',
-            background: countriesLoading || countryLoading ? '#f5f5f5' : 'white',
+            background: countriesLoading || countryLoading ? '#eef0f6' : 'white',
             cursor: countriesLoading || countryLoading ? 'wait' : 'text',
             transition: 'border-color 0.15s ease',
             ...(isFocused && { borderColor: '#3B82F6' })
@@ -863,7 +863,7 @@ export function CountrySelector() {
             right: 0,
             marginTop: 4,
             background: 'white',
-            border: '1px solid #ddd',
+            border: '1px solid #d0d5e0',
             borderRadius: 6,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             zIndex: 1000,
@@ -1003,11 +1003,11 @@ export function CountrySelector() {
                     {regionKey === 'other' && (
                       <div style={{
                         padding: '6px 12px',
-                        background: '#f5f5f5',
+                        background: '#f4f5fa',
                         fontSize: 11,
                         fontWeight: 600,
                         color: '#666',
-                        borderBottom: '1px solid #e0e0e0',
+                        borderBottom: '1px solid #d0d5e0',
                       }}>
                         {displayName} ({countries.length})
                       </div>
@@ -1022,8 +1022,8 @@ export function CountrySelector() {
           {/* Footer */}
           <div style={{
             padding: '8px 12px',
-            borderTop: '1px solid #eee',
-            background: '#fafafa',
+            borderTop: '1px solid #e2e6ee',
+            background: '#f4f5fa',
             fontSize: 11,
             color: '#767676'
           }}>

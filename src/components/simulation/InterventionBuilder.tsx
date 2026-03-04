@@ -63,11 +63,11 @@ const styles = {
     fontSize: 11
   },
   interventionCard: {
-    background: '#f8f8f8',
+    background: '#f0f2f8',
     borderRadius: 6,
     padding: 10,
     marginBottom: 8,
-    border: '1px solid #eee'
+    border: '1px solid #e2e6ee'
   },
   cardHeader: {
     display: 'flex',
@@ -97,7 +97,7 @@ const styles = {
     width: '100%',
     padding: '6px 8px',
     borderRadius: 4,
-    border: '1px solid #ddd',
+    border: '1px solid #d0d5e0',
     background: 'white',
     color: '#333',
     fontSize: 12,
@@ -128,7 +128,7 @@ const styles = {
     width: '100%',
     height: 4,
     WebkitAppearance: 'none' as const,
-    background: '#e0e0e0',
+    background: '#d0d5e0',
     borderRadius: 2,
     cursor: 'pointer'
   },
@@ -136,7 +136,7 @@ const styles = {
     width: '100%',
     padding: '8px 12px',
     borderRadius: 4,
-    border: '1px dashed #ccc',
+    border: '1px dashed #bcc3d4',
     background: 'transparent',
     color: '#666',
     fontSize: 12,
@@ -199,7 +199,7 @@ function YearInput({ value, onCommit }: { value: number; onCommit: (year: number
         width: 46,
         padding: '2px 4px',
         borderRadius: 3,
-        border: '1px solid #ddd',
+        border: '1px solid #d0d5e0',
         background: 'white',
         color: '#555',
         fontSize: 11,
@@ -311,7 +311,7 @@ function IndicatorDropdown({
           width: '100%',
           padding: '6px 28px 6px 8px',
           borderRadius: 4,
-          border: `1px solid ${isOpen ? '#3B82F6' : '#ddd'}`,
+          border: `1px solid ${isOpen ? '#3B82F6' : '#d0d5e0'}`,
           background: 'white',
           color: value ? '#333' : '#767676',
           fontSize: 12,
@@ -357,7 +357,7 @@ function IndicatorDropdown({
           right: 0,
           zIndex: 50,
           background: 'white',
-          border: '1px solid #ddd',
+          border: '1px solid #d0d5e0',
           borderRadius: 6,
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           marginTop: 2,
@@ -366,7 +366,7 @@ function IndicatorDropdown({
           maxHeight: 260,
         }}>
           {/* Search input */}
-          <div style={{ padding: '6px 8px', borderBottom: '1px solid #eee', flexShrink: 0 }}>
+          <div style={{ padding: '6px 8px', borderBottom: '1px solid #e2e6ee', flexShrink: 0 }}>
             <input
               ref={inputRef}
               type="text"
@@ -376,14 +376,14 @@ function IndicatorDropdown({
               style={{
                 width: '100%',
                 padding: '5px 8px',
-                border: '1px solid #ddd',
+                border: '1px solid #d0d5e0',
                 borderRadius: 4,
                 fontSize: 12,
                 boxSizing: 'border-box',
                 outline: 'none',
               }}
               onFocus={e => e.target.style.borderColor = '#3B82F6'}
-              onBlur={e => e.target.style.borderColor = '#ddd'}
+              onBlur={e => e.target.style.borderColor = '#d0d5e0'}
               onKeyDown={e => {
                 if (e.key === 'Escape') {
                   setIsOpen(false)
@@ -400,7 +400,7 @@ function IndicatorDropdown({
               <>
                 <div style={{
                   padding: '6px 10px', fontSize: 10, fontWeight: 600,
-                  color: '#767676', background: '#fafafa',
+                  color: '#767676', background: '#f4f5fa',
                   position: 'sticky', top: 0, zIndex: 1,
                 }}>
                   ★ Top Indicators (by causal reach)
@@ -423,7 +423,7 @@ function IndicatorDropdown({
                       alignItems: 'center',
                       gap: 6,
                     }}
-                    onMouseEnter={e => { if (ind.id !== value) e.currentTarget.style.background = '#f5f5f5' }}
+                    onMouseEnter={e => { if (ind.id !== value) e.currentTarget.style.background = '#eef0f6' }}
                     onMouseLeave={e => { if (ind.id !== value) e.currentTarget.style.background = 'white' }}
                   >
                     <span style={{
@@ -446,9 +446,9 @@ function IndicatorDropdown({
               <div key={group.domain}>
                 <div style={{
                   padding: '6px 10px', fontSize: 10, fontWeight: 600,
-                  color: group.color, background: '#fafafa',
+                  color: group.color, background: '#f4f5fa',
                   position: 'sticky', top: 0, zIndex: 1,
-                  borderTop: '1px solid #eee',
+                  borderTop: '1px solid #e2e6ee',
                 }}>
                   {group.label}
                 </div>
@@ -470,7 +470,7 @@ function IndicatorDropdown({
                       alignItems: 'center',
                       gap: 6,
                     }}
-                    onMouseEnter={e => { if (node.id !== value) e.currentTarget.style.background = '#f5f5f5' }}
+                    onMouseEnter={e => { if (node.id !== value) e.currentTarget.style.background = '#eef0f6' }}
                     onMouseLeave={e => { if (node.id !== value) e.currentTarget.style.background = 'white' }}
                   >
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -998,12 +998,12 @@ export function InterventionBuilder() {
           style={styles.addButton}
           onClick={handleAddIntervention}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#f5f5f5'
+            e.currentTarget.style.background = '#eef0f6'
             e.currentTarget.style.borderColor = '#999'
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'transparent'
-            e.currentTarget.style.borderColor = '#ccc'
+            e.currentTarget.style.borderColor = '#bcc3d4'
           }}
         >
           <span style={{ fontSize: 14 }}>+</span>

@@ -1261,7 +1261,7 @@ export function LocalView({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#fafafa'
+          background: '#f4f5fa'
         }}
       >
         <div style={{ textAlign: 'center', color: '#666' }}>
@@ -1310,7 +1310,7 @@ export function LocalView({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#fafafa'
+          background: '#f4f5fa'
         }}
       >
         <div style={{ textAlign: 'center', color: '#666', maxWidth: 500, padding: 20 }}>
@@ -1327,7 +1327,7 @@ export function LocalView({
           <div style={{
             fontSize: 12,
             color: '#666',
-            background: '#f5f5f5',
+            background: '#eef0f6',
             padding: 12,
             borderRadius: 6,
             textAlign: 'left',
@@ -1422,9 +1422,9 @@ export function LocalView({
               style={{
                 width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
                 cursor: sliderMin <= 0 ? 'not-allowed' : 'pointer',
-                border: '1px solid #ccc', borderRadius: 2,
-                background: sliderMin <= 0 ? '#f5f5f5' : 'white',
-                color: sliderMin <= 0 ? '#ccc' : '#666'
+                border: '1px solid #bcc3d4', borderRadius: 2,
+                background: sliderMin <= 0 ? '#eef0f6' : 'white',
+                color: sliderMin <= 0 ? '#bcc3d4' : '#666'
               }}
               title="Decrease min"
             >−</button>
@@ -1448,7 +1448,7 @@ export function LocalView({
               }}
               style={{
                 width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
-                cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+                cursor: 'pointer', border: '1px solid #bcc3d4', borderRadius: 2,
                 background: 'white', color: '#666'
               }}
               title="Increase max"
@@ -1461,7 +1461,7 @@ export function LocalView({
               }}
               style={{
                 width: 14, height: 14, padding: 0, fontSize: 9, lineHeight: 1,
-                cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+                cursor: 'pointer', border: '1px solid #bcc3d4', borderRadius: 2,
                 background: 'white', color: '#767676'
               }}
               title="Reset"
@@ -1474,7 +1474,7 @@ export function LocalView({
               onClick={onClearTargets}
               style={{
                 padding: '2px 8px', fontSize: 10,
-                cursor: 'pointer', border: '1px solid #ccc',
+                cursor: 'pointer', border: '1px solid #bcc3d4',
                 borderRadius: 3, background: 'white', color: '#666'
               }}
             >Clear (C)</button>
@@ -1491,7 +1491,7 @@ export function LocalView({
         width: '100%',
         height: '100%',
         position: 'relative',
-        background: '#fafafa'
+        background: '#f4f5fa'
       }}
     >
       {/* Controls Panel */}
@@ -1544,8 +1544,8 @@ export function LocalView({
                   style={{
                     width: 18, height: 18, padding: 0, fontSize: 14, lineHeight: 1,
                     cursor: !canCollapseInputs ? 'not-allowed' : 'pointer',
-                    border: '1px solid #ccc', borderRadius: 3,
-                    background: !canCollapseInputs ? '#f5f5f5' : 'white',
+                    border: '1px solid #bcc3d4', borderRadius: 3,
+                    background: !canCollapseInputs ? '#eef0f6' : 'white',
                     color: !canCollapseInputs ? '#bbb' : '#666'
                   }}
                   title="Collapse outermost layer"
@@ -1557,8 +1557,8 @@ export function LocalView({
                   style={{
                     width: 18, height: 18, padding: 0, fontSize: 14, lineHeight: 1,
                     cursor: !canExpandInputs ? 'not-allowed' : 'pointer',
-                    border: '1px solid #ccc', borderRadius: 3,
-                    background: !canExpandInputs ? '#f5f5f5' : 'white',
+                    border: '1px solid #bcc3d4', borderRadius: 3,
+                    background: !canExpandInputs ? '#eef0f6' : 'white',
                     color: !canExpandInputs ? '#bbb' : '#666'
                   }}
                   title="Expand all visible nodes"
@@ -1573,8 +1573,8 @@ export function LocalView({
                   style={{
                     width: 18, height: 18, padding: 0, fontSize: 14, lineHeight: 1,
                     cursor: !canCollapseOutputs ? 'not-allowed' : 'pointer',
-                    border: '1px solid #ccc', borderRadius: 3,
-                    background: !canCollapseOutputs ? '#f5f5f5' : 'white',
+                    border: '1px solid #bcc3d4', borderRadius: 3,
+                    background: !canCollapseOutputs ? '#eef0f6' : 'white',
                     color: !canCollapseOutputs ? '#bbb' : '#666'
                   }}
                   title="Collapse outermost layer"
@@ -1586,8 +1586,8 @@ export function LocalView({
                   style={{
                     width: 18, height: 18, padding: 0, fontSize: 14, lineHeight: 1,
                     cursor: !canExpandOutputs ? 'not-allowed' : 'pointer',
-                    border: '1px solid #ccc', borderRadius: 3,
-                    background: !canExpandOutputs ? '#f5f5f5' : 'white',
+                    border: '1px solid #bcc3d4', borderRadius: 3,
+                    background: !canExpandOutputs ? '#eef0f6' : 'white',
                     color: !canExpandOutputs ? '#bbb' : '#666'
                   }}
                   title="Expand all visible nodes"
@@ -1612,9 +1612,9 @@ export function LocalView({
               style={{
                 width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
                 cursor: sliderMin <= 0 ? 'not-allowed' : 'pointer',
-                border: '1px solid #ccc', borderRadius: 2,
-                background: sliderMin <= 0 ? '#f5f5f5' : 'white',
-                color: sliderMin <= 0 ? '#ccc' : '#666'
+                border: '1px solid #bcc3d4', borderRadius: 2,
+                background: sliderMin <= 0 ? '#eef0f6' : 'white',
+                color: sliderMin <= 0 ? '#bcc3d4' : '#666'
               }}
               title="Decrease min"
             >−</button>
@@ -1639,7 +1639,7 @@ export function LocalView({
               }}
               style={{
                 width: 14, height: 14, padding: 0, fontSize: 10, lineHeight: 1,
-                cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+                cursor: 'pointer', border: '1px solid #bcc3d4', borderRadius: 2,
                 background: 'white', color: '#666'
               }}
               title="Increase max"
@@ -1653,7 +1653,7 @@ export function LocalView({
               }}
               style={{
                 width: 14, height: 14, padding: 0, fontSize: 9, lineHeight: 1,
-                cursor: 'pointer', border: '1px solid #ccc', borderRadius: 2,
+                cursor: 'pointer', border: '1px solid #bcc3d4', borderRadius: 2,
                 background: 'white', color: '#767676'
               }}
               title="Reset"
@@ -1672,7 +1672,7 @@ export function LocalView({
             onClick={onClearTargets}
             style={{
               padding: '2px 8px', fontSize: 10,
-              cursor: 'pointer', border: '1px solid #ccc',
+              cursor: 'pointer', border: '1px solid #bcc3d4',
               borderRadius: 3, background: 'white', color: '#666'
             }}
           >Clear (C)</button>
@@ -1764,7 +1764,7 @@ export function LocalView({
                 color: '#666',
                 marginTop: 8,
                 padding: '6px 8px',
-                background: '#f8f9fa',
+                background: '#f0f2f8',
                 borderRadius: 4,
                 borderLeft: '3px solid #3B82F6'
               }}>
@@ -1927,7 +1927,7 @@ export function LocalView({
               }
             </div>
             {isAggregated && fullEdge?.pathways && fullEdge.pathways.length > 0 && (
-              <div style={{ fontSize: 10, color: '#666', marginTop: 8, borderTop: '1px solid #eee', paddingTop: 8 }}>
+              <div style={{ fontSize: 10, color: '#666', marginTop: 8, borderTop: '1px solid #e2e6ee', paddingTop: 8 }}>
                 <div style={{ fontWeight: 500, marginBottom: 4 }}>Top pathways:</div>
                 {fullEdge.pathways.slice(0, 3).map((p, i) => {
                   const srcNode = nodeById.get(p.childSource)

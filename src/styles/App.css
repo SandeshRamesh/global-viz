@@ -1,7 +1,7 @@
 /* Minimal styles for visualization */
 
 /* ─── Accessible color tokens ─── */
-/* Lightest grays that pass WCAG AA 4.5:1 on white (#fff / #fafafa) */
+/* Lightest grays that pass WCAG AA 4.5:1 on white (#fff / #f4f5fa) */
 :root {
   --text-muted: #767676;     /* was #888/#999/#aaa — 4.54:1 on #fff */
   --text-subtle: #6b6b6b;    /* was #777/#888 for slightly bolder muted — 5.0:1 */
@@ -99,7 +99,7 @@ circle.node:focus-visible {
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e0e0e0;
+  border: 3px solid #d0d5e0;
   border-top: 3px solid #2196F3;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -115,7 +115,7 @@ circle.node:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #fafafa;
+  background: #f4f5fa;
   z-index: 1000;
 }
 
