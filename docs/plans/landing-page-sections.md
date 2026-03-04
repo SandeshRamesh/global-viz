@@ -6,11 +6,11 @@ Each section gets its own design + mobile polish pass before moving to the next.
 |---|---------|--------|
 | 1 | Nav | Done |
 | 2 | Hero (radial graph + COBE globe + headline + CTA + chevron) | Done |
-| 3 | Ticker Bar (scrolling stats) | Pending |
-| 4 | Problem Statement ("Data tells us what happened...") | Pending |
-| 5 | Stats Grid (7,368 edges, 178 countries, etc.) | Pending |
-| 6 | Capabilities (Explore / Simulate / Compare) | Pending |
-| 7 | Methodology (5-step pipeline + edge breakdown) | Pending |
+| 3 | Ticker Bar (static stats bar + mobile touch ticker) | Done |
+| 4 | Problem Statement ("Everyone wants to help...") | Done |
+| 5 | ~~Stats Grid~~ (removed — ticker covers it) | Done |
+| 6 | Capabilities (Explore / Simulate / Compare) | Done |
+| 7 | Methodology (5-step pipeline + edge breakdown) | Done |
 | 8 | Findings (4 insight cards) | Pending |
 | 9 | Pull Quote ("Development is not a ladder...") | Pending |
 | 10 | Who It's For (Policymakers / Researchers / Public) | Pending |

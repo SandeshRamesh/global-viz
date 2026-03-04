@@ -4,9 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Atlas — What Actually Drives Human Progress?</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&family=Inter:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -32,7 +33,7 @@
   body {
     background: var(--navy);
     color: var(--text);
-    font-family: 'Syne', sans-serif;
+    font-family: 'Inter', sans-serif;
     overflow-x: hidden;
     cursor: default;
   }
@@ -81,15 +82,19 @@
 
   #globe-canvas {
     position: absolute; inset: 0; width: 100%; height: 100%;
-    opacity: 0.55; z-index: 0;
+    opacity: 0; z-index: 0;
     will-change: transform; transform: translateZ(0);
+    transition: opacity 0.6s ease;
   }
+  #globe-canvas.ready { opacity: 0.55; }
   #cobe-canvas {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%) translateZ(0);
-    opacity: 0.35; z-index: 1;
+    opacity: 0; z-index: 1;
     pointer-events: none; will-change: transform;
+    transition: opacity 0.8s ease;
   }
+  #cobe-canvas.ready { opacity: 0.35; }
 
   .hero-overlay {
     position: absolute; inset: 0;
@@ -123,15 +128,15 @@
   .hero-title {
     font-family: 'Instrument Serif', serif;
     font-size: clamp(42px, 6vw, 82px);
-    line-height: 1.1; letter-spacing: -0.01em;
-    color: var(--text); margin-bottom: 28px;
+    line-height: 1.2; letter-spacing: -0.01em;
+    color: var(--text); margin-bottom: 28px; padding-bottom: 0.05em;
   }
   .hero-title em {
     font-style: italic; color: var(--cyan);
   }
 
   .hero-sub {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Inter', sans-serif;
     font-size: clamp(19px, 2.4vw, 25px); font-weight: 400;
     color: var(--text-muted); line-height: 1.6; letter-spacing: 0.03em;
     max-width: 600px; margin: 0 auto 60px;
@@ -184,7 +189,9 @@
     color: var(--cyan); font-weight: 500;
   }
   .ticker-sep { color: var(--border-bright); font-size: 14px; }
-  .ticker-dupe, .ticker-sep-dupe { display: none; }
+  .ticker-set { display: contents; }
+  /* Hide trailing separator on desktop (last · in the set) */
+  .ticker-set .ticker-sep:last-child { display: none; }
 
   /* ── SECTIONS ── */
   section { padding: 120px 48px; max-width: 1200px; margin: 0 auto; }
@@ -198,33 +205,46 @@
 
   /* ── PROBLEM SECTION ── */
   .problem {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start;
   }
   .problem-left {}
   .problem-title {
     font-family: 'Instrument Serif', serif;
-    font-size: clamp(32px, 3.5vw, 52px); line-height: 1.1;
-    margin-bottom: 28px;
+    font-size: clamp(32px, 3.5vw, 52px); line-height: 1.25;
+    margin-bottom: 32px;
   }
-  .problem-title em { font-style: italic; color: var(--cyan); }
+  .problem-title em { font-style: italic; color: var(--cyan); font-size: 112%; display: inline-block; padding-bottom: 0.05em; }
   .problem-body {
     font-size: 16px; line-height: 1.85; color: var(--text-muted); font-weight: 400;
   }
   .problem-body p + p { margin-top: 18px; }
   .problem-body strong { color: var(--text); font-weight: 600; }
+  .problem-bridge {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(20px, 2vw, 24px); line-height: 1.35;
+    font-style: italic;
+    color: var(--cyan);
+  }
+
+  #problem { padding-top: 100px; padding-bottom: 0; }
 
   .problem-right {
-    display: flex; flex-direction: column; gap: 16px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    gap: 24px;
+    align-self: stretch;
   }
   .question-card {
     background: var(--navy-2);
     border: 1px solid var(--border);
-    border-left: 3px solid var(--cyan);
-    padding: 20px 24px;
+    border-left: 4px solid var(--cyan);
+    padding: 26px 28px;
     border-radius: 2px;
-    font-family: 'Instrument Serif', serif;
-    font-size: 16px; line-height: 1.5;
-    color: var(--text-muted);
+    font-family: 'Inter', sans-serif;
+    font-size: 15px; line-height: 1.6; font-weight: 400;
+    color: var(--text);
     transition: all 0.3s;
     position: relative;
   }
@@ -233,44 +253,6 @@
     background: var(--navy-3);
     color: var(--text);
     transform: translateX(4px);
-  }
-  .question-card::before {
-    content: '"';
-    position: absolute; top: 14px; left: 14px;
-    font-size: 28px; color: var(--cyan-dim);
-    font-family: 'Instrument Serif', serif; line-height: 1;
-  }
-
-  /* ── STATS BAR ── */
-  .stats-section {
-    padding: 80px 48px;
-    background: var(--navy-2);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    max-width: 100%;
-  }
-  .stats-inner {
-    max-width: 1200px; margin: 0 auto;
-    display: grid; grid-template-columns: repeat(5, 1fr);
-    gap: 0;
-  }
-  .stat-item {
-    padding: 0 32px;
-    border-right: 1px solid var(--border);
-    text-align: center;
-  }
-  .stat-item:first-child { padding-left: 0; }
-  .stat-item:last-child { border-right: none; padding-right: 0; }
-  .stat-num {
-    font-family: 'Instrument Serif', serif;
-    font-size: clamp(36px, 3.5vw, 52px); color: var(--cyan);
-    line-height: 1; margin-bottom: 10px;
-    text-shadow: 0 0 40px rgba(0,229,255,0.3);
-  }
-  .stat-label {
-    font-family: 'DM Mono', monospace; font-size: 11px;
-    letter-spacing: 0.15em; text-transform: uppercase;
-    color: var(--text-subtle); line-height: 1.5;
   }
 
   /* ── WHAT IT DOES ── */
@@ -302,7 +284,7 @@
   }
   .cap-title {
     font-family: 'Instrument Serif', serif; font-size: 26px; margin-bottom: 16px;
-    line-height: 1.2;
+    line-height: 1.25;
   }
   .cap-body {
     font-size: 15px; line-height: 1.75; color: var(--text-muted); font-weight: 400;
@@ -331,8 +313,12 @@
   }
   .step-content {}
   .step-title {
-    font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
-    margin-bottom: 8px; color: var(--text);
+    font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 700;
+    margin-bottom: 6px; color: var(--text);
+  }
+  .step-meta {
+    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em;
+    color: var(--text-subtle); margin-bottom: 10px;
   }
   .step-body {
     font-size: 14px; line-height: 1.7; color: var(--text-muted); font-weight: 400;
@@ -370,18 +356,20 @@
     gap: 2px; margin-top: 56px;
   }
   .audience-card {
-    background: var(--navy-2); padding: 48px 36px;
+    background: var(--navy-2); padding: 36px;
     transition: background 0.3s;
     border: 1px solid var(--border);
+    min-height: 340px;
   }
   .audience-card:hover { background: var(--navy-3); }
   .audience-icon {
-    font-size: 28px; margin-bottom: 20px; display: block;
-    filter: grayscale(1); transition: filter 0.3s;
+    width: 32px; height: 32px; margin-bottom: 16px; display: block;
+    opacity: 0.4; transition: opacity 0.3s;
+    overflow: visible;
   }
-  .audience-card:hover .audience-icon { filter: none; }
+  .audience-card:hover .audience-icon { opacity: 0.8; }
   .audience-title {
-    font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700;
+    font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 700;
     margin-bottom: 12px;
   }
   .audience-body {
@@ -423,8 +411,12 @@
   .finding-card:nth-child(3) .finding-tag { background: rgba(0,188,212,0.15); color: #00BCD4; }
   .finding-card:nth-child(4) .finding-tag { background: rgba(76,175,80,0.15); color: #4CAF50; }
   .finding-title {
-    font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700;
+    font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 700;
     margin-bottom: 12px; line-height: 1.35;
+  }
+  .finding-meta {
+    font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.04em;
+    color: var(--text-subtle); margin-bottom: 14px; line-height: 1.5;
   }
   .finding-body { font-size: 14px; line-height: 1.75; color: var(--text-muted); font-weight: 400; }
 
@@ -456,7 +448,7 @@
   }
   .cta-section h2 {
     font-family: 'Instrument Serif', serif;
-    font-size: clamp(36px, 4.5vw, 64px); line-height: 1.1;
+    font-size: clamp(36px, 4.5vw, 64px); line-height: 1.15;
     margin-bottom: 24px;
   }
   .cta-section h2 em { font-style: italic; color: var(--cyan); }
@@ -474,7 +466,7 @@
     max-width: 1200px; margin: 0 auto;
   }
   .footer-logo {
-    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px;
+    font-family: 'Inter', sans-serif; font-weight: 800; font-size: 14px;
     letter-spacing: 0.12em; color: var(--text-muted); text-transform: uppercase;
   }
   .footer-logo span { color: var(--cyan); }
@@ -497,7 +489,7 @@
   }
   @keyframes ticker {
     from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
+    to { transform: translateX(-33.333%); }
   }
   @keyframes countUp {
     from { opacity: 0; transform: translateY(12px); }
@@ -543,8 +535,9 @@
     .hero-sub { font-size: 15px; margin-bottom: 36px; padding: 0 24px; }
     .hero-actions { flex-direction: column; width: 100%; max-width: 260px; margin: 0 auto; gap: 10px; padding: 64px 24px 0; }
     .hero-actions a { width: 100%; text-align: center; padding: 14px 24px; }
-    #cobe-canvas { opacity: 0.45; top: 39%; }
-    #globe-canvas { opacity: 0.55; }
+    #cobe-canvas.ready { opacity: 0.45; }
+    #cobe-canvas { top: 39%; }
+    #globe-canvas.ready { opacity: 0.55; }
     .hero-chevron {
       display: block; position: absolute; bottom: 28px; left: 50%;
       transform: translateX(-50%); z-index: 10;
@@ -560,20 +553,20 @@
     .ticker-bar { overflow: hidden; padding: 14px 0; }
     .ticker-track {
       justify-content: flex-start; gap: 0; padding: 0;
-      width: max-content;
-      animation: ticker 20s linear infinite;
+      max-width: none; width: max-content;
+      animation: none;
       will-change: transform;
       -webkit-backface-visibility: hidden;
       backface-visibility: hidden;
     }
+    .ticker-set { display: flex; align-items: center; }
+    .ticker-set .ticker-sep:last-child { display: inline; }
     .ticker-item { font-size: 11px; padding: 0 20px; }
     .ticker-item .val { font-size: 13px; }
     .ticker-sep { padding: 0; }
-    .ticker-dupe, .ticker-sep-dupe { display: flex; }
-    .problem { grid-template-columns: 1fr; gap: 48px; }
-    .stats-inner { grid-template-columns: repeat(3, 1fr); gap: 32px; }
-    .stat-item { border-right: none; border-bottom: 1px solid var(--border); padding: 0 0 24px; }
-    .capabilities { grid-template-columns: 1fr; }
+    .problem { grid-template-columns: 1fr; gap: 32px; }
+    .problem-bridge { margin-top: 28px; padding-top: 24px; font-size: 19px; }
+.capabilities { grid-template-columns: 1fr; }
     .how-grid { grid-template-columns: 1fr; }
     .how-visual { position: static; }
     .audience-grid { grid-template-columns: 1fr; gap: 2px; }
@@ -593,7 +586,7 @@
     <a href="#what">What It Does</a>
     <a href="#method">Methodology</a>
     <a href="#findings">Findings</a>
-    <a href="/methodology">Research</a>
+    <a href="/research">Research</a>
   </div>
   <a href="/explore" class="nav-cta">Launch Atlas →</a>
 </nav>
@@ -629,23 +622,17 @@
 
 <!-- STATS BAR -->
 <div class="ticker-bar">
-  <div class="ticker-track">
-    <div class="ticker-item"><span class="val">7,368</span> causal edges discovered</div>
-    <span class="ticker-sep">·</span>
-    <div class="ticker-item"><span class="val">99.62%</span> validation pass rate</div>
-    <span class="ticker-sep">·</span>
-    <div class="ticker-item"><span class="val">7.4 Billion</span> people represented</div>
-    <span class="ticker-sep">·</span>
-    <div class="ticker-item"><span class="val">0/592</span> unstable transitions</div>
-    <!-- duplicate for mobile seamless loop -->
-    <span class="ticker-sep ticker-sep-dupe">·</span>
-    <div class="ticker-item ticker-dupe"><span class="val">7,368</span> causal edges discovered</div>
-    <span class="ticker-sep ticker-sep-dupe">·</span>
-    <div class="ticker-item ticker-dupe"><span class="val">99.62%</span> validation pass rate</div>
-    <span class="ticker-sep ticker-sep-dupe">·</span>
-    <div class="ticker-item ticker-dupe"><span class="val">7.4 Billion</span> people represented</div>
-    <span class="ticker-sep ticker-sep-dupe">·</span>
-    <div class="ticker-item ticker-dupe"><span class="val">0/592</span> unstable transitions</div>
+  <div class="ticker-track" id="ticker-track">
+    <div class="ticker-set">
+      <div class="ticker-item"><span class="val">7,368</span> causal edges discovered</div>
+      <span class="ticker-sep">·</span>
+      <div class="ticker-item"><span class="val">98.15%</span> validation pass rate</div>
+      <span class="ticker-sep">·</span>
+      <div class="ticker-item"><span class="val">7.4 Billion</span> people represented</div>
+      <span class="ticker-sep">·</span>
+      <div class="ticker-item"><span class="val">0/592</span> unstable transitions</div>
+      <span class="ticker-sep">·</span>
+    </div>
   </div>
 </div>
 
@@ -655,56 +642,28 @@
     <div class="problem-left reveal">
       <div class="section-label">The Problem</div>
       <h2 class="problem-title">
-        Data tells us<br>what happened.<br>
-        <em>We built something<br>that tells you why.</em>
+        Everyone wants to help.<br>
+        <em>No one agrees how.</em>
       </h2>
       <div class="problem-body">
-        <p>Development economics has spent decades accumulating numbers. The World Bank alone tracks thousands of indicators for every country on Earth, every year. These numbers answer one question: <strong>what happened?</strong></p>
-        <p>The question that actually matters — the one governments, NGOs, and international organizations are desperate to answer — is different: <strong>what would happen if we did something?</strong></p>
-        <p>If Rwanda increases its education budget, what changes? If Brazil expands its cash transfer program, does inequality drop, and does that improvement then feed into political stability, then into investment, then into growth? These are causal questions. And until now, answering them required either a team of economists building bespoke models, or intuition.</p>
-        <p>Atlas makes those causal chains visible, explorable, and simulatable — for any country, any indicator, any time period.</p>
+        <p>Now, for the first time, we have a map. Not a theory. Not an opinion. Built from 35 years of evidence, across every country on Earth. We can see what actually drives human progress, and test what changes it.</p>
       </div>
+      <div class="problem-bridge">The world deserves better than guesswork.</div>
     </div>
     <div class="problem-right reveal reveal-delay-2">
-      <div class="question-card">If India invests in renewable energy, what happens to respiratory disease rates — and labor productivity — a decade from now?</div>
-      <div class="question-card">Which indicators have the strongest causal influence on democratic participation in emerging economies?</div>
-      <div class="question-card">How did the causal drivers of quality of life in Sub-Saharan Africa change between 1995 and 2020?</div>
-      <div class="question-card">If we replicate Brazil's Bolsa Família in a different developing country, which effects transfer — and which don't?</div>
+      <div class="question-card">What actually causes a country to become less violent?</div>
+      <div class="question-card">If a country builds more schools, what else gets better?</div>
+      <div class="question-card">Why do the same policies work in some countries but fail in others?</div>
+      <div class="question-card">Which investments ripple outward, and which ones dead-end?</div>
     </div>
   </div>
 </section>
-
-<!-- STATS -->
-<div class="stats-section">
-  <div class="stats-inner">
-    <div class="stat-item reveal">
-      <div class="stat-num" data-target="7368">7,368</div>
-      <div class="stat-label">Causal edges<br>discovered</div>
-    </div>
-    <div class="stat-item reveal reveal-delay-1">
-      <div class="stat-num" data-target="178">178</div>
-      <div class="stat-label">Countries with full<br>causal graphs</div>
-    </div>
-    <div class="stat-item reveal reveal-delay-2">
-      <div class="stat-num" data-target="35">35</div>
-      <div class="stat-label">Years of historical<br>data · 1990–2024</div>
-    </div>
-    <div class="stat-item reveal reveal-delay-3">
-      <div class="stat-num" data-target="1962">1,962</div>
-      <div class="stat-label">Development<br>indicators</div>
-    </div>
-    <div class="stat-item reveal reveal-delay-4">
-      <div class="stat-num">100×</div>
-      <div class="stat-label">Bootstrap validation<br>per edge</div>
-    </div>
-  </div>
-</div>
 
 <!-- WHAT IT DOES -->
 <section id="what">
   <div class="reveal">
     <div class="section-label">What Atlas Does</div>
-    <h2 style="font-family:'Instrument Serif',serif; font-size:clamp(28px,3vw,44px); line-height:1.1; max-width:600px;">
+    <h2 style="font-family:'Instrument Serif',serif; font-size:clamp(28px,3vw,44px); line-height:1.15; max-width:600px;">
       Three capabilities that don't exist anywhere else.
     </h2>
   </div>
@@ -712,17 +671,17 @@
     <div class="cap-card reveal reveal-delay-1">
       <span class="cap-num">01 — EXPLORE</span>
       <h3 class="cap-title">The full causal web, made navigable</h3>
-      <p class="cap-body">A radial graph of 2,583 nodes — from the root "Quality of Life" outward through 9 domains, 45 categories, and 1,763 individual indicators. Every node sized by its measured causal importance. Click to expand any branch. The entire structure of how development works, in a single view.</p>
+      <p class="cap-body">Start at "Quality of Life." Click any branch. Watch 2,583 nodes unfold across 9 domains, every one sized by how much it actually matters.</p>
     </div>
     <div class="cap-card reveal reveal-delay-2">
       <span class="cap-num">02 — SIMULATE</span>
-      <h3 class="cap-title">Run policy interventions in real time</h3>
-      <p class="cap-body">Change an indicator — increase education spending by 20%, reduce carbon emissions by 15% — and watch the effects cascade through the causal graph, hop by hop, year by year. Green glows for improvements, red for tradeoffs. For any of 178 countries, with 6 years of forward projection.</p>
+      <h3 class="cap-title">Change one thing. See what moves.</h3>
+      <p class="cap-body">Increase education spending. Reduce carbon emissions. Watch the effects ripple outward, country by country, year by year, all the way to 2030.</p>
     </div>
     <div class="cap-card reveal reveal-delay-3">
       <span class="cap-num">03 — COMPARE</span>
-      <h3 class="cap-title">Context is not a footnote — it's everything</h3>
-      <p class="cap-body">The same policy produces opposite results in different countries. Filter by income stratum — Developing, Emerging, Advanced — to see how causal structures shift. Trace regional spillovers: a policy change in Washington ripples through trade networks to Sub-Saharan Africa at quantified, modeled strength.</p>
+      <h3 class="cap-title">The same policy. Opposite results.</h3>
+      <p class="cap-body">A policy that works in Brazil may fail in Rwanda. Atlas shows you exactly why: across 178 countries, three income levels, and 11 world regions with modeled spillover effects.</p>
     </div>
   </div>
 </section>
@@ -732,46 +691,51 @@
   <div class="how-grid">
     <div>
       <div class="section-label reveal">The Methodology</div>
-      <h2 class="reveal" style="font-family:'Instrument Serif',serif; font-size:clamp(28px,3vw,44px); line-height:1.1; margin-bottom:16px;">
+      <h2 class="reveal" style="font-family:'Instrument Serif',serif; font-size:clamp(28px,3vw,44px); line-height:1.15; margin-bottom:16px;">
         These are not correlations.
       </h2>
       <p class="reveal" style="font-size:15px; line-height:1.8; color:var(--text-muted); margin-bottom:48px; font-weight:400;">
-        The word "causal" carries a specific meaning here. Every edge in the Atlas graph has survived a rigorous multi-stage pipeline before appearing in the visualization.
+        Every connection in Atlas passed five tests before it was included. Not one. Five. Here's what that means.
       </p>
       <div class="how-steps reveal">
         <div class="how-step">
           <span class="step-num">01</span>
           <div class="step-content">
-            <div class="step-title">Granger Causality Prefiltering</div>
-            <p class="step-body">From ~6.2 million potential variable pairs, Granger tests identify where one variable's past values help predict another's future. Temporal precedence, not coincidence. Reduces candidates to ~200,000.</p>
+            <div class="step-title">We checked if one thing happens before another.</div>
+            <div class="step-meta">Granger Causality Prefiltering · FDR q &lt; 0.05</div>
+            <p class="step-body">We tested 2,159,672 variable pairs across up to 5 years of lag. 564,545 survived. Those are the ones where cause consistently comes before effect.</p>
           </div>
         </div>
         <div class="how-step">
           <span class="step-num">02</span>
           <div class="step-content">
-            <div class="step-title">PC-Stable Algorithm</div>
-            <p class="step-body">Conditional independence testing eliminates spurious correlations that survive because a hidden third variable drives both. Scales to thousands of variables. Establishes the skeleton of the true causal graph.</p>
+            <div class="step-title">We removed false connections.</div>
+            <div class="step-meta">PC-Stable Algorithm + DAG Enforcement · alpha = 0.001</div>
+            <p class="step-body">85,726 edges passed the causality test. We then removed circular logic. If A causes B causes A, neither is trustworthy. 58,837 remained.</p>
           </div>
         </div>
         <div class="how-step">
           <span class="step-num">03</span>
           <div class="step-content">
-            <div class="step-title">Bootstrap Validation</div>
-            <p class="step-body">Every surviving edge is quantified via ridge regression with 100 bootstrap iterations. Each produces a confidence interval, p-value, and standard error. Edges below p &lt; 0.05 are discarded.</p>
+            <div class="step-title">We stress-tested every connection 100 times.</div>
+            <div class="step-meta">LassoCV + OLS Bootstrap Validation · 100 iterations</div>
+            <p class="step-body">Each edge was re-estimated 100 times on different data samples. Only edges with a consistent effect size, every single time, survived. 4,976 out of 58,837 made the cut.</p>
           </div>
         </div>
         <div class="how-step">
           <span class="step-num">04</span>
           <div class="step-content">
-            <div class="step-title">Non-Linear Detection</div>
-            <p class="step-body">Every edge is tested for logarithmic, quadratic, saturation, and threshold patterns. The simulation engine evaluates marginal effects at country-specific percentiles — capturing diminishing returns that linear models miss entirely.</p>
+            <div class="step-title">We looked for curves, not just straight lines.</div>
+            <div class="step-meta">Non-Linear Relationship Detection · AIC + R² Threshold</div>
+            <p class="step-body">Some effects slow down. Some reverse. Some only appear after a tipping point. We tested five relationship types for every edge: linear, logarithmic, quadratic, saturation, and threshold.</p>
           </div>
         </div>
         <div class="how-step">
           <span class="step-num">05</span>
           <div class="step-content">
-            <div class="step-title">Temporal Re-Estimation</div>
-            <p class="step-body">Causal edges are re-estimated for every year from 1990 to 2024. The relationships between indicators in 1995 may differ structurally from those in 2020. Atlas captures that drift.</p>
+            <div class="step-title">We did this for every year, not just once.</div>
+            <div class="step-meta">Temporal Re-Estimation · 1990–2024 · 5,054 Graph Estimations</div>
+            <p class="step-body">The same 7,368 edges are re-estimated for every year, updating their strength, direction, and shape. 35 years. 178 countries. 5,054 total graph snapshots.</p>
           </div>
         </div>
       </div>
@@ -781,28 +745,31 @@
         <h4>Edge Relationship Breakdown · 7,368 Total</h4>
         <div class="method-row">
           <div class="method-badge">Linear</div>
-          <div class="method-text"><strong>4,098 edges</strong> — direct proportional cause-and-effect relationships across the full dataset</div>
+          <div class="method-text"><strong>4,189 edges</strong>: direct proportional cause-and-effect relationships across the full dataset</div>
         </div>
         <div class="method-row">
           <div class="method-badge">Threshold</div>
-          <div class="method-text"><strong>2,456 edges</strong> — relationships that activate or reverse beyond a critical value; common in governance and trade</div>
+          <div class="method-text"><strong>2,387 edges</strong>: relationships that activate or reverse beyond a critical value; common in governance and trade</div>
         </div>
         <div class="method-row">
           <div class="method-badge">Quadratic</div>
-          <div class="method-text"><strong>718 edges</strong> — inverted-U or U-shaped dynamics; peak effects followed by reversal</div>
+          <div class="method-text"><strong>709 edges</strong>: inverted-U or U-shaped dynamics; peak effects followed by reversal</div>
         </div>
         <div class="method-row">
           <div class="method-badge">Logarithmic</div>
-          <div class="method-text"><strong>81 edges</strong> — rapid early effects that plateau; typical in health and literacy gains</div>
+          <div class="method-text"><strong>74 edges</strong>: rapid early effects that plateau; typical in health and literacy gains</div>
         </div>
         <div class="method-row">
           <div class="method-badge">Saturation</div>
-          <div class="method-text"><strong>15 edges</strong> — strong early gains that asymptote toward a physical or social ceiling</div>
+          <div class="method-text"><strong>9 edges</strong>: strong early gains that asymptote toward a physical or social ceiling</div>
         </div>
         <div style="margin-top:28px; padding-top:20px; border-top:1px solid var(--border);">
           <div style="font-family:'DM Mono',monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-subtle); margin-bottom:12px;">Data Sources</div>
           <div style="font-size:13px; color:var(--text-muted); line-height:1.8;">
-            World Bank WDI · V-Dem · UNESCO · WHO · World Inequality Database · and 6 additional authoritative sources
+            World Bank · World Health Organization · UNESCO Institute for Statistics · UNICEF · Varieties of Democracy Institute · Quality of Government Institute · IMF · OECD · Penn World Table · World Inequality Database · Transparency International
+          </div>
+          <div style="margin-top:16px; font-size:13px; color:var(--text-muted); font-style:italic; line-height:1.6;">
+            76 countries changed income classification between 1990 and 2024. Atlas captured every transition.
           </div>
         </div>
       </div>
@@ -814,35 +781,44 @@
 <div class="findings-section" id="findings">
   <div class="findings-inner">
     <div class="findings-header">
-      <h2 class="findings-title reveal">
-        What 35 years of data reveals.
-      </h2>
+      <div>
+        <div class="section-label reveal">What We Found</div>
+        <h2 class="findings-title reveal">
+          35 years of data. Four findings that surprised us.
+        </h2>
+      </div>
       <div class="findings-intro reveal reveal-delay-1">
-        <p>We did not impose a theory about how development works. We let the data reveal the causal structure — and several findings challenge textbook assumptions.</p>
-        <p>These patterns emerge consistently across income groups and time periods, though the strength of each relationship varies by development stage. That variance is itself the insight.</p>
+        <p>We didn't set out to prove a theory. We let the data speak. Some of what it said challenges what development textbooks have taught for decades.</p>
       </div>
     </div>
     <div class="findings-grid">
       <div class="finding-card reveal">
         <span class="finding-tag">Governance</span>
-        <h3 class="finding-title">Education drives GDP through institutions, not directly</h3>
-        <p class="finding-body">Education spending does not affect GDP via a simple human-capital channel. The causal chain runs through governance quality: investment in education builds institutional capacity, which creates the conditions for growth. The link "Education → Governance → GDP" is consistent across income groups — but its strength varies dramatically.</p>
+        <h3 class="finding-title">Education doesn't drive growth directly.</h3>
+        <div class="finding-meta">Secondary Enrollment → Government Spending → GNI · 140/140 graphs</div>
+        <p class="finding-body">Education spending doesn't create economic growth on its own. It works through a middle step: building the institutions that make growth possible. Remove that middle step, and the direct connection disappears entirely. This chain holds across every income group, every year in the dataset.</p>
       </div>
       <div class="finding-card reveal reveal-delay-1">
         <span class="finding-tag">Democracy</span>
-        <h3 class="finding-title">Democracy is not a luxury — but the direction reverses</h3>
-        <p class="finding-body">Civil society participation and media freedom are causally upstream of economic outcomes in emerging economies. In advanced economies, the relationship reverses: economic stability deepens democratic institutions. The same policy implications do not hold across development stages.</p>
+        <h3 class="finding-title">Democracy helps emerging economies. It works differently in advanced ones.</h3>
+        <div class="finding-meta">Free &amp; Fair Elections → Income · Emerging +0.16, Advanced −0.67 · 35/35 years</div>
+        <p class="finding-body">In emerging economies, stronger democratic institutions consistently correlate with rising incomes. In advanced economies, the same relationship runs negative. The same policy. Opposite effects. This reversal is consistent across all 35 years. Not a blip, not a decade. Every year.</p>
       </div>
       <div class="finding-card reveal reveal-delay-2">
         <span class="finding-tag">Environment</span>
-        <h3 class="finding-title">Environmental degradation is a multi-hop economic shock</h3>
-        <p class="finding-body">CO₂ emissions, deforestation, and resource depletion feed through health costs, then into reduced labor productivity, then into economic contraction. These chains span 3–4 causal hops and are invisible to single-variable studies. Atlas traces every step.</p>
+        <h3 class="finding-title">Carbon intensity hits rich countries harder than poor ones.</h3>
+        <div class="finding-meta">CO₂ Intensity → GNI · Developing +0.15, Advanced −0.49 · 140/140 graphs</div>
+        <p class="finding-body">In developing economies, carbon intensity is positively linked to income growth because early industrialization is still paying off. In advanced economies it's a drag. The relationship doesn't just weaken as countries develop. It flips completely.</p>
       </div>
       <div class="finding-card reveal reveal-delay-3">
         <span class="finding-tag">Trade</span>
-        <h3 class="finding-title">Trade openness has a threshold — below it, vulnerability; above it, growth</h3>
-        <p class="finding-body">Below a critical level of institutional quality, increased trade exposure correlates with economic vulnerability. Above that threshold, the relationship turns strongly positive. This explains why identical trade policies produce opposite results in different countries — and why the IMF's one-size prescription has failed.</p>
+        <h3 class="finding-title">Trade has a tipping point.</h3>
+        <div class="finding-meta">Transport Trade Exposure → Private Consumption · Threshold at 29.1 · 30/35 years</div>
+        <p class="finding-body">Below a critical threshold of trade exposure, the relationship with consumption is positive. Above it, it turns negative. This threshold behavior holds across 30 of 35 years in the unified graph. Identical trade policies produce opposite results depending on which side of the line a country sits on.</p>
       </div>
+    </div>
+    <div class="reveal" style="text-align:center; margin-top:48px; font-size:15px; color:var(--text-muted); line-height:1.7;">
+      These aren't opinions. They're edges in a graph, each one validated 100 times across 35 years of real data.
     </div>
   </div>
 </div>
@@ -850,7 +826,7 @@
 <!-- PULL QUOTE -->
 <div class="quote-section reveal">
   <p class="pull-quote">
-    Development is not a ladder. It is a web of interconnected causes and effects, and pulling on one thread moves the entire fabric.
+    Pull one thread. Watch the whole world move.
   </p>
   <div class="quote-attr">Atlas · Causal Discovery in Development Economics</div>
 </div>
@@ -859,25 +835,25 @@
 <section id="audience">
   <div class="reveal">
     <div class="section-label">Who It's For</div>
-    <h2 style="font-family:'Instrument Serif',serif; font-size:clamp(28px,3vw,44px); line-height:1.1; max-width:600px;">
-      Built for anyone who needs to understand what actually works.
+    <h2 style="font-family:'Instrument Serif',serif; font-size:clamp(28px,3vw,44px); line-height:1.15; max-width:600px;">
+      If you want to understand what actually drives human progress, this was built for you.
     </h2>
   </div>
   <div class="audience-grid">
     <div class="audience-card reveal reveal-delay-1">
-      <span class="audience-icon">🏛️</span>
+      <svg class="audience-icon" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.5"><path d="M12 2L2 8v2h20V8L12 2z"/><line x1="5" y1="10" x2="5" y2="20"/><line x1="9" y1="10" x2="9" y2="20"/><line x1="15" y1="10" x2="15" y2="20"/><line x1="19" y1="10" x2="19" y2="20"/><line x1="1" y1="20" x2="23" y2="20"/></svg>
       <h3 class="audience-title">Policymakers & Governments</h3>
-      <p class="audience-body">Test interventions before committing resources. Instead of asking "should we invest in education or health?" — ask "if we increase primary enrollment by 15% in our country, what happens to governance indicators, GDP, and health outcomes over the next five years?" Atlas gives you the causal answer.</p>
+      <p class="audience-body">Test interventions before committing resources. Instead of asking "should we invest in education or health?" and ask "if we increase primary enrollment by 15% in our country, what happens to governance indicators, GDP, and health outcomes over the next five years?" Atlas gives you the causal answer.</p>
     </div>
     <div class="audience-card reveal reveal-delay-2">
-      <span class="audience-icon">🔬</span>
+      <svg class="audience-icon" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.5"><circle cx="12" cy="8" r="6"/><line x1="12" y1="14" x2="12" y2="22"/><line x1="7" y1="22" x2="17" y2="22"/><circle cx="12" cy="8" r="2" fill="var(--cyan)" stroke="none" opacity="0.4"/></svg>
       <h3 class="audience-title">Researchers & Academics</h3>
-      <p class="audience-body">Explore causal hypotheses across 178 countries and 35 years without building your own dataset. The temporal dimension reveals how relationships evolve — critical for understanding development transitions. Full methodology documentation and data provenance at every node.</p>
+      <p class="audience-body">Test your hypotheses against 35 years of causal data across 178 countries. See how relationships between variables shift over time, and whether the mechanisms you study hold across income groups, regions, and decades. Full methodology and source documentation at every node.</p>
     </div>
     <div class="audience-card reveal reveal-delay-3">
-      <span class="audience-icon">🌍</span>
+      <svg class="audience-icon" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
       <h3 class="audience-title">The Curious Public</h3>
-      <p class="audience-body">No economics background required. Atlas is designed to be explored at any depth — from the broad shape of global development to the specific causal pathway between sanitation and school attendance in a single country. The data is for everyone.</p>
+      <p class="audience-body">You don't need a degree to use Atlas. Start anywhere. Follow any thread. See how sanitation connects to school attendance, or how governance shapes growth, in any country, any year.</p>
     </div>
   </div>
 </section>
@@ -886,14 +862,14 @@
 <div style="border-top: 1px solid var(--border);">
   <div class="cta-section reveal">
     <h2>
-      See the web of<br><em>cause and effect.</em>
+      See what was <em>always there.</em>
     </h2>
     <p>
-      178 countries. 35 years. 7,368 causal relationships. Atlas is free, open, and running now.
+      Complexity was never the problem. <em style="color:var(--cyan); font-style:italic;">Clarity</em> was.
     </p>
     <div class="cta-actions">
       <a href="/explore" class="btn-primary">Launch Atlas →</a>
-      <a href="/methodology" class="btn-secondary">Read the Methodology</a>
+      <a href="/research" class="btn-secondary">Read the Research</a>
     </div>
   </div>
 </div>
@@ -903,9 +879,9 @@
   <div class="footer-logo"><span>Atlas</span> · Argon Analytics</div>
   <div class="footer-links">
     <a href="/explore">Launch Tool</a>
-    <a href="/methodology">Methodology</a>
-    <a href="/contact">Contact</a>
-    <a href="mailto:hello@argonanalytics.com">hello@argonanalytics.com</a>
+    <a href="/research">Research</a>
+    <a href="mailto:sandesh@argonanalytics.org">Contact</a>
+    <a href="mailto:sandesh@argonanalytics.org">sandesh@argonanalytics.org</a>
   </div>
   <div class="footer-copy">© 2026 Argon Analytics</div>
 </footer>
@@ -1073,20 +1049,22 @@ function drawRadialGraph(elapsed) {
 
 const prefersStill = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+let radialReady = false;
 function draw(elapsed) {
   ctx.clearRect(0,0,W,H);
   if (!W||!H) { requestAnimationFrame(draw); return; }
   if (prefersStill) {
-    // Static expanded state — no animation
     NODES.forEach(n => { n.progress = (n.r===3 && !n.r3vis) ? 0 : 1; });
     NODES.forEach(n => {
       if (n.r===0){n.x=n.tx;n.y=n.ty;return;}
       n.x=n.tx; n.y=n.ty;
     });
     drawRadialGraph(elapsed);
-    return; // Single frame, no loop
+    if (!radialReady) { radialReady = true; canvas.classList.add('ready'); }
+    return;
   }
   drawRadialGraph(elapsed);
+  if (!radialReady) { radialReady = true; canvas.classList.add('ready'); }
   requestAnimationFrame(draw);
 }
 
@@ -1134,20 +1112,25 @@ if (chevron) {
   }, { passive: true });
 }
 
-// ── MOBILE TICKER: touch drag + flick momentum + auto-resume ──
+// ── MOBILE TICKER: clone sets + touch drag + flick momentum + auto-resume ──
 if (window.innerWidth <= 900) {
-  const track = document.querySelector('.ticker-track');
+  const track = document.getElementById('ticker-track');
   if (track) {
+    // Clone the ticker-set for seamless infinite loop
+    const origSet = track.querySelector('.ticker-set');
+    track.appendChild(origSet.cloneNode(true));
+    track.appendChild(origSet.cloneNode(true));
+    const setWidth = () => origSet.offsetWidth;
+
     let offset = 0, velocity = 0, amplitude = 0, target = 0;
     let frame, timestamp, isDragging = false, pendingDx = 0;
     let resumeTimer, rafId;
     const TIME_CONST = 325;
-    const half = () => track.scrollWidth / 2;
 
     function wrap(x) {
-      const h = half();
-      while (x > 0) x -= h;
-      while (x < -h) x += h;
+      const sw = setWidth();
+      while (x > 0) x -= sw;
+      while (x < -sw) x += sw;
       return x;
     }
 
@@ -1159,13 +1142,9 @@ if (window.innerWidth <= 900) {
       clearTimeout(resumeTimer);
       cancelAnimationFrame(rafId);
       autoScrolling = false;
-      const m = new DOMMatrix(getComputedStyle(track).transform);
-      track.style.animation = 'none';
-      offset = m.m41;
-      render();
     }
 
-    // Smooth auto-scroll driven by JS (matches CSS ticker speed)
+    // JS-driven auto-scroll (pixel-perfect, no CSS animation)
     let autoScrolling = false;
     let lastAutoTime;
     function autoScroll(now) {
@@ -1173,8 +1152,8 @@ if (window.innerWidth <= 900) {
       if (!lastAutoTime) lastAutoTime = now;
       const dt = now - lastAutoTime;
       lastAutoTime = now;
-      // Match CSS: full half-width traversal in 20s
-      const speed = half() / 20000; // px per ms
+      // Match CSS: one set-width traversal in 20s
+      const speed = setWidth() / 20000; // px per ms
       offset = wrap(offset - speed * dt);
       render();
       rafId = requestAnimationFrame(autoScroll);
@@ -1251,6 +1230,11 @@ if (window.innerWidth <= 900) {
         scheduleResume();
       }
     }, { passive: true });
+
+    // Start auto-scroll immediately on mobile
+    autoScrolling = true;
+    lastAutoTime = null;
+    rafId = requestAnimationFrame(autoScroll);
   }
 }
 
@@ -1303,7 +1287,8 @@ function startGlobe() {
       markers: [],
       opacity: 0.85,
       onRender: (state) => {
-        if (prefersStill) { return false; } // Stop animation loop
+        if (!cobeEl.classList.contains('ready')) cobeEl.classList.add('ready');
+        if (prefersStill) { return false; }
         state.phi = phi;
         phi += 0.003;
       }

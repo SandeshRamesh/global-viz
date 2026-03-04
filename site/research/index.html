@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas — Research</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #060b18;
+    --navy-2: #0a1228;
+    --cyan: #00E5FF;
+    --cyan-dim: rgba(0,229,255,0.15);
+    --text: #f0f4ff;
+    --text-muted: #9daac8;
+    --text-subtle: #6678a0;
+    --border: rgba(0,229,255,0.12);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--navy);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 24px;
+  }
+
+  .back {
+    position: absolute;
+    top: 28px;
+    left: 40px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--text-subtle);
+    text-decoration: none;
+    letter-spacing: 0.05em;
+    transition: color 0.2s;
+  }
+  .back:hover { color: var(--cyan); }
+
+  .label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(36px, 5vw, 64px);
+    line-height: 1.15;
+    margin-bottom: 20px;
+  }
+
+  .sub {
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--text-muted);
+    max-width: 480px;
+    margin-bottom: 40px;
+  }
+
+  .cta {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--navy);
+    background: var(--cyan);
+    padding: 12px 28px;
+    border-radius: 2px;
+    text-decoration: none;
+    transition: opacity 0.2s;
+  }
+  .cta:hover { opacity: 0.85; }
+
+  .footer {
+    position: absolute;
+    bottom: 28px;
+    font-size: 12px;
+    color: var(--text-subtle);
+  }
+</style>
+</head>
+<body>
+  <a href="/" class="back">← Atlas</a>
+  <div class="label">Research</div>
+  <h1>Coming soon.</h1>
+  <p class="sub">Full methodology documentation, data provenance, and the research paper behind Atlas are being prepared for publication.</p>
+  <a href="/" class="cta">Back to Atlas</a>
+  <div class="footer">© 2026 Argon Analytics</div>
+</body>
+</html>
