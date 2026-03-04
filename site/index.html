@@ -46,7 +46,7 @@
   nav {
     position: fixed; top: 0; left: 0; right: 0; z-index: 100;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 48px 12px 12px;
+    padding: 14px 40px;
     background: linear-gradient(to bottom, rgba(6,11,24,0.95), transparent);
     backdrop-filter: blur(2px);
   }
@@ -54,9 +54,10 @@
     font-family: 'Inter', sans-serif;
     font-weight: 700; font-size: 18px; letter-spacing: 0.10em;
     color: var(--cyan); text-decoration: none; text-transform: uppercase;
+    display: flex; align-items: center;
   }
   .nav-logo span { color: var(--text-muted); font-weight: 400; letter-spacing: 0.1em; }
-  .nav-links { display: flex; gap: 36px; align-items: center; }
+  .nav-links { display: flex; gap: 36px; align-items: center; margin-left: auto; margin-right: 36px; }
   .nav-links a {
     font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.1em;
     color: var(--text-muted); text-decoration: none; text-transform: uppercase;
@@ -67,25 +68,32 @@
     font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.1em;
     color: var(--navy) !important; background: var(--cyan) !important;
     padding: 9px 20px; border-radius: 2px; text-transform: uppercase;
-    transition: opacity 0.2s !important;
+    text-decoration: none; font-weight: 500; transition: opacity 0.2s !important;
   }
   .nav-cta:hover { opacity: 0.85 !important; color: var(--navy) !important; }
 
   /* ── HERO ── */
   .hero {
-    position: relative; height: 100vh; min-height: 700px;
+    position: relative; min-height: 100vh; min-height: 100dvh;
     display: flex; align-items: center; justify-content: center;
     overflow: hidden;
   }
 
   #globe-canvas {
     position: absolute; inset: 0; width: 100%; height: 100%;
-    opacity: 0.9;
+    opacity: 0.55; z-index: 0;
+    will-change: transform; transform: translateZ(0);
+  }
+  #cobe-canvas {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) translateZ(0);
+    opacity: 0.35; z-index: 1;
+    pointer-events: none; will-change: transform;
   }
 
   .hero-overlay {
     position: absolute; inset: 0;
-    background: radial-gradient(ellipse 60% 70% at 50% 50%, transparent 30%, var(--navy) 80%);
+    background: radial-gradient(ellipse 75% 85% at 50% 50%, transparent 30%, var(--navy) 68%);
     pointer-events: none;
   }
   .hero-overlay-bottom {
@@ -98,6 +106,7 @@
     position: relative; z-index: 10;
     text-align: center;
     max-width: 820px; padding: 0 32px;
+    margin-left: auto; margin-right: auto;
     animation: fadeUp 1.2s cubic-bezier(0.16,1,0.3,1) 0.3s both;
   }
 
@@ -114,7 +123,7 @@
   .hero-title {
     font-family: 'Instrument Serif', serif;
     font-size: clamp(42px, 6vw, 82px);
-    line-height: 1.05; letter-spacing: -0.01em;
+    line-height: 1.1; letter-spacing: -0.01em;
     color: var(--text); margin-bottom: 28px;
   }
   .hero-title em {
@@ -123,12 +132,13 @@
 
   .hero-sub {
     font-family: 'Syne', sans-serif;
-    font-size: clamp(15px, 1.8vw, 18px); font-weight: 400;
-    color: var(--text-muted); line-height: 1.7;
-    max-width: 580px; margin: 0 auto 44px;
+    font-size: clamp(19px, 2.4vw, 25px); font-weight: 400;
+    color: var(--text-muted); line-height: 1.6; letter-spacing: 0.03em;
+    max-width: 600px; margin: 0 auto 60px;
   }
 
   .hero-actions { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+
 
   .btn-primary {
     font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.12em;
@@ -491,6 +501,19 @@
     from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
   }
+  @keyframes chevronFadeIn {
+    from { opacity: 0; }
+    to { opacity: 0.6; }
+  }
+  @keyframes chevronPulse {
+    0%, 100% { opacity: 0.4; transform: translateX(-50%) translateY(0); }
+    50% { opacity: 0.9; transform: translateX(-50%) translateY(6px); }
+  }
+
+  /* ── HERO CHEVRON (hidden by default, shown on mobile) ── */
+  .hero-chevron {
+    display: none;
+  }
 
   .reveal {
     opacity: 0; transform: translateY(24px);
@@ -504,9 +527,34 @@
 
   /* ── RESPONSIVE ── */
   @media (max-width: 900px) {
-    nav { padding: 16px 24px; }
+    body { overscroll-behavior-y: none; }
+    nav { padding: 0 24px; height: 52px; justify-content: center; }
     .nav-links { display: none; }
+    .nav-cta { display: none; }
+    .nav-logo span { display: none; }
     section { padding: 80px 24px; }
+    .hero { height: 100svh; min-height: auto; overscroll-behavior: none; }
+    .hero-content { padding: 0 24px; margin-top: 60px; }
+    .hero-title { font-size: clamp(32px, 9vw, 52px); margin-bottom: 18px; padding: 0 20px; }
+    .hero-eyebrow { font-size: 8.5px; margin-bottom: 18px; letter-spacing: 0.12em; }
+    .hero-eyebrow::before, .hero-eyebrow::after { width: 24px; }
+    .hero-sub { font-size: 15px; margin-bottom: 36px; padding: 0 24px; }
+    .hero-actions { flex-direction: column; width: 100%; max-width: 260px; margin: 0 auto; gap: 10px; padding: 64px 24px 0; }
+    .hero-actions a { width: 100%; text-align: center; padding: 14px 24px; }
+    #cobe-canvas { opacity: 0.45; top: 39%; }
+    #globe-canvas { opacity: 0.55; }
+    .hero-chevron {
+      display: block; position: absolute; bottom: 28px; left: 50%;
+      transform: translateX(-50%); z-index: 10;
+      color: var(--cyan); opacity: 0;
+      transition: opacity 1s ease-out;
+    }
+    .hero-chevron.visible {
+      opacity: 0.6;
+    }
+    .hero-chevron.pulsing {
+      animation: chevronPulse 2.5s ease-in-out infinite;
+    }
     .problem { grid-template-columns: 1fr; gap: 48px; }
     .stats-inner { grid-template-columns: repeat(3, 1fr); gap: 32px; }
     .stat-item { border-right: none; border-bottom: 1px solid var(--border); padding: 0 0 24px; }
@@ -525,34 +573,42 @@
 
 <!-- NAV -->
 <nav>
-  <a href="/" class="nav-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="36" height="36" style="vertical-align:-10px;margin-right:6px;"><line x1="8" y1="8" x2="8" y2="2.5" stroke="#00E5FF" stroke-width="1.2" stroke-linecap="round"/><line x1="8" y1="8" x2="2.8" y2="11.5" stroke="#00E5FF" stroke-width="1.2" stroke-linecap="round"/><line x1="8" y1="8" x2="13.2" y2="11.5" stroke="#00E5FF" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="2.5" r="1.5" fill="#00E5FF"/><circle cx="2.8" cy="11.5" r="1.5" fill="#00E5FF"/><circle cx="13.2" cy="11.5" r="1.5" fill="#00E5FF"/><circle cx="8" cy="8" r="2" fill="none" stroke="#00E5FF" stroke-width="1.2"/><circle cx="8" cy="8" r="0.8" fill="#00E5FF"/></svg>Atlas &nbsp;<span>by Argon Analytics</span></a>
+  <a href="/" class="nav-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="36" height="36" style="margin-right:6px;flex-shrink:0;"><line x1="8" y1="8" x2="8" y2="2.5" stroke="#00E5FF" stroke-width="1.2" stroke-linecap="round"/><line x1="8" y1="8" x2="2.8" y2="11.5" stroke="#00E5FF" stroke-width="1.2" stroke-linecap="round"/><line x1="8" y1="8" x2="13.2" y2="11.5" stroke="#00E5FF" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="2.5" r="1.5" fill="#00E5FF"/><circle cx="2.8" cy="11.5" r="1.5" fill="#00E5FF"/><circle cx="13.2" cy="11.5" r="1.5" fill="#00E5FF"/><circle cx="8" cy="8" r="2" fill="none" stroke="#00E5FF" stroke-width="1.2"/><circle cx="8" cy="8" r="0.8" fill="#00E5FF"/></svg>Atlas &nbsp;<span>by Argon Analytics</span></a>
   <div class="nav-links">
     <a href="#what">What It Does</a>
     <a href="#method">Methodology</a>
     <a href="#findings">Findings</a>
     <a href="/methodology">Research</a>
-    <a href="/explore" class="nav-cta">Launch Atlas →</a>
   </div>
+  <a href="/explore" class="nav-cta">Launch Atlas →</a>
 </nav>
 
 <!-- HERO -->
 <div class="hero">
   <canvas id="globe-canvas"></canvas>
+  <canvas id="cobe-canvas"></canvas>
   <div class="hero-overlay"></div>
   <div class="hero-overlay-bottom"></div>
 
   <div class="hero-content">
-    <div class="hero-eyebrow">Causal Discovery · Development Economics</div>
+    <div class="hero-eyebrow">A New Standard in Development Science</div>
     <h1 class="hero-title">
-      What <em>actually</em> drives<br>human progress?
+      We mapped what moves<br>the <em>world.</em>
     </h1>
     <p class="hero-sub">
-      Atlas maps 7,368 causal relationships across 178 countries and 35 years of history — then lets you simulate what happens when you pull one thread.
+      Not what happened. What causes it.<br>For every country. For the first time.
     </p>
     <div class="hero-actions">
       <a href="/explore" class="btn-primary">Explore Atlas</a>
       <a href="#what" class="btn-secondary">How It Works</a>
     </div>
+  </div>
+
+  <!-- Mobile scroll chevron -->
+  <div class="hero-chevron" aria-hidden="true">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
   </div>
 </div>
 
@@ -843,226 +899,300 @@
 </footer>
 
 <script>
-// ── ANIMATED GLOBE ──
+// ── BREATHING RADIAL GRAPH ──
+
 const canvas = document.getElementById('globe-canvas');
 const ctx = canvas.getContext('2d');
-let W, H, cx, cy, radius;
-let rotation = 0;
-const DOTS = [];
-const EDGES = [];
+let W, H, cx, cy;
 
-function resize() {
+// =============================================
+// RADIAL GRAPH — data, layout, animation
+// =============================================
+
+const NODES = [
+  {id:'root',r:0,p:null},
+  {id:'r1_1',r:1,p:'root'},{id:'r1_2',r:1,p:'root'},{id:'r1_3',r:1,p:'root'},
+  {id:'r1_4',r:1,p:'root'},{id:'r1_5',r:1,p:'root'},{id:'r1_6',r:1,p:'root'},
+  {id:'r1_7',r:1,p:'root'},{id:'r1_8',r:1,p:'root'},{id:'r1_9',r:1,p:'root'},
+  {id:'c1',r:2,p:'r1_1'},{id:'c2',r:2,p:'r1_1'},{id:'c3',r:2,p:'r1_1'},{id:'c4',r:2,p:'r1_1'},{id:'c5',r:2,p:'r1_1'},
+  {id:'c6',r:2,p:'r1_2'},{id:'c7',r:2,p:'r1_2'},{id:'c8',r:2,p:'r1_2'},{id:'c9',r:2,p:'r1_2'},{id:'c10',r:2,p:'r1_2'},
+  {id:'c11',r:2,p:'r1_3'},{id:'c12',r:2,p:'r1_3'},{id:'c13',r:2,p:'r1_3'},{id:'c14',r:2,p:'r1_3'},{id:'c15',r:2,p:'r1_3'},
+  {id:'c16',r:2,p:'r1_4'},{id:'c17',r:2,p:'r1_4'},{id:'c18',r:2,p:'r1_4'},{id:'c19',r:2,p:'r1_4'},{id:'c20',r:2,p:'r1_4'},
+  {id:'c21',r:2,p:'r1_5'},{id:'c22',r:2,p:'r1_5'},{id:'c23',r:2,p:'r1_5'},{id:'c24',r:2,p:'r1_5'},{id:'c25',r:2,p:'r1_5'},
+  {id:'c26',r:2,p:'r1_6'},{id:'c27',r:2,p:'r1_6'},{id:'c28',r:2,p:'r1_6'},{id:'c29',r:2,p:'r1_6'},{id:'c30',r:2,p:'r1_6'},
+  {id:'c31',r:2,p:'r1_7'},{id:'c32',r:2,p:'r1_7'},{id:'c33',r:2,p:'r1_7'},{id:'c34',r:2,p:'r1_7'},{id:'c35',r:2,p:'r1_7'},
+  {id:'c36',r:2,p:'r1_8'},{id:'c37',r:2,p:'r1_8'},{id:'c38',r:2,p:'r1_8'},{id:'c39',r:2,p:'r1_8'},{id:'c40',r:2,p:'r1_8'},
+  {id:'c41',r:2,p:'r1_9'},{id:'c42',r:2,p:'r1_9'},{id:'c43',r:2,p:'r1_9'},{id:'c44',r:2,p:'r1_9'},{id:'c45',r:2,p:'r1_9'},
+  ...(() => {
+    const r3 = [], r2Ids = [];
+    for (let i = 1; i <= 45; i++) r2Ids.push('c' + i);
+    for (let i = 0; i < 196; i++) r3.push({id:'f'+i, r:3, p:r2Ids[i%45]});
+    return r3;
+  })()
+];
+
+const nodeMap = new Map();
+NODES.forEach(n => { n.x=0; n.y=0; n.tx=0; n.ty=0; n.progress=0; nodeMap.set(n.id, n); });
+const childrenMap = new Map();
+NODES.forEach(n => { if (n.p) { if (!childrenMap.has(n.p)) childrenMap.set(n.p,[]); childrenMap.get(n.p).push(n); }});
+
+const R3_MAX = 80;
+let r3i = 0;
+NODES.forEach(n => { if (n.r===3) { n.r3vis = r3i < R3_MAX; r3i++; }});
+
+function computeLayout() {
   W = canvas.width = canvas.offsetWidth;
   H = canvas.height = canvas.offsetHeight;
-  cx = W / 2; cy = H / 2;
-  radius = Math.min(W, H) * 0.38;
+  cx = W/2; cy = (W <= 900) ? H * 0.39 : H/2;
+  const min = Math.min(W,H);
+  const br = min * 0.20;
+  const rr = [0, br, min*0.56, min*0.87];
+  const bu = min * 0.01;
+  const ns = [bu*2.5, bu*1.8, bu*1.2, bu*0.7];
+  const root = nodeMap.get('root');
+  root.tx=cx; root.ty=cy; root.size=ns[0];
+  (function lay(pid, sa, sw) {
+    const kids = childrenMap.get(pid);
+    if (!kids) return;
+    const step = sw/kids.length;
+    kids.forEach((c,i) => {
+      const a = sa + step*(i+0.5);
+      c.tx = cx + rr[c.r]*Math.cos(a);
+      c.ty = cy + rr[c.r]*Math.sin(a);
+      c.size = ns[c.r];
+      lay(c.id, sa+step*i, step);
+    });
+  })('root', 0, Math.PI*2);
 }
 
-// Generate lat/lon dots (countries approximated)
-function genDots() {
-  DOTS.length = 0;
-  const pts = [
-    // North America
-    [45,  -75], [38, -97], [55, -105], [20, -99], [23, -82],
-    // South America
-    [-15, -47], [-34, -58], [4, -74], [-33, -70], [10, -66],
-    // Europe
-    [51, -0.1], [48, 2], [52, 13], [41, 28], [55, 37],
-    [60, 10], [64, 26], [40, -3], [38, 15],
-    // Africa
-    [30, 31], [6, 3], [-26, 28], [0, 37], [14, -14],
-    [33, 13], [-18, 24], [-4, 15], [12, 15],
-    // Asia
-    [35, 139], [31, 121], [28, 77], [1, 103],
-    [39, 116], [37, 127], [13, 100], [24, 54],
-    [33, 44], [35, 51], [23, 90], [15, 44],
-    // Oceania
-    [-33, 151], [-37, 174], [-26, 133],
-    // Russia/Central
-    [56, 60], [43, 76], [55, 83],
-  ];
-  pts.forEach(([lat, lon]) => {
-    DOTS.push({ lat: lat * Math.PI/180, lon: lon * Math.PI/180 });
-  });
+// Animation phases
+const PHASES = [
+  {name:'HOLD_COLLAPSED',dur:2000},{name:'EXPAND_R1',dur:3000},{name:'EXPAND_R2',dur:4000},
+  {name:'EXPAND_R3',dur:5000},{name:'HOLD_EXPANDED',dur:3000},{name:'COLLAPSE',dur:4000}
+];
+const TOTAL = PHASES.reduce((s,p)=>s+p.dur,0);
+
+function easeOut(t){return 1-Math.pow(1-t,3);}
+function easeIn(t){return t*t*t;}
+function clamp(t){return t<0?0:t>1?1:t;}
+
+function getPhase(elapsed) {
+  let t = elapsed % TOTAL;
+  for (const p of PHASES) { if (t<p.dur) return {name:p.name,local:t,frac:t/p.dur}; t-=p.dur; }
+  return {name:'HOLD_COLLAPSED',local:0,frac:0};
 }
 
-// Generate causal edges between nearby countries
-function genEdges() {
-  EDGES.length = 0;
-  const pairs = [
-    [0,1],[0,2],[1,2],[3,4],[5,6],[5,7],[6,8],[6,9],
-    [10,11],[11,12],[12,13],[13,14],[14,15],[15,16],[10,17],[17,18],
-    [19,20],[21,22],[20,23],[24,25],[22,26],[26,27],[23,28],
-    [29,30],[30,31],[31,32],[32,33],[33,34],[34,35],[35,36],[36,37],
-    [38,39],[40,41],[41,42],
-    [43,44],[44,45],
-    [1,10],[10,31],[29,32],[14,43]
-  ];
-  pairs.forEach(([a,b]) => {
-    if (DOTS[a] && DOTS[b]) EDGES.push([a, b, Math.random()]);
-  });
-}
-
-function project(lat, lon, rot) {
-  const x = Math.cos(lat) * Math.sin(lon + rot);
-  const y = Math.sin(lat);
-  const z = Math.cos(lat) * Math.cos(lon + rot);
-  return { x: cx + radius * x, y: cy - radius * y, z };
-}
-
-// Animated arc segments
-const arcParticles = [];
-function spawnParticle() {
-  if (EDGES.length === 0) return;
-  const edge = EDGES[Math.floor(Math.random() * EDGES.length)];
-  arcParticles.push({ edge, t: 0, speed: 0.004 + Math.random() * 0.006 });
-}
-setInterval(spawnParticle, 300);
-
-function drawArcParticle(p, rot) {
-  const [ai, bi] = p.edge;
-  const a = DOTS[ai], b = DOTS[bi];
-  const pa = project(a.lat, a.lon, rot);
-  const pb = project(b.lat, b.lon, rot);
-  if (pa.z < 0 || pb.z < 0) return;
-
-  // Bezier midpoint lifted
-  const mx = (pa.x + pb.x) / 2;
-  const my = (pa.y + pb.y) / 2;
-  const dist = Math.hypot(pb.x - pa.x, pb.y - pa.y);
-  const liftX = mx - (cy - my) * 0.15;
-  const liftY = my - dist * 0.12;
-
-  const t = p.t;
-  const bx = (1-t)*(1-t)*pa.x + 2*(1-t)*t*liftX + t*t*pb.x;
-  const by = (1-t)*(1-t)*pa.y + 2*(1-t)*t*liftY + t*t*pb.y;
-
-  const head = Math.min(t + 0.12, 1);
-  const hx = (1-head)*(1-head)*pa.x + 2*(1-head)*head*liftX + head*head*pb.x;
-  const hy = (1-head)*(1-head)*pa.y + 2*(1-head)*head*liftY + head*head*pb.y;
-
-  const grad = ctx.createLinearGradient(bx, by, hx, hy);
-  grad.addColorStop(0, 'rgba(0,229,255,0)');
-  grad.addColorStop(1, 'rgba(0,229,255,0.85)');
-
-  ctx.beginPath();
-  ctx.moveTo(bx, by);
-  ctx.lineTo(hx, hy);
-  ctx.strokeStyle = grad;
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-
-  // Dot at head
-  ctx.beginPath();
-  ctx.arc(hx, hy, 1.8, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,229,255,0.9)';
-  ctx.fill();
-}
-
-function draw() {
-  ctx.clearRect(0, 0, W, H);
-
-  // Globe atmosphere glow
-  const atmo = ctx.createRadialGradient(cx, cy, radius * 0.85, cx, cy, radius * 1.15);
-  atmo.addColorStop(0, 'rgba(0,229,255,0.04)');
-  atmo.addColorStop(1, 'transparent');
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius * 1.15, 0, Math.PI * 2);
-  ctx.fillStyle = atmo;
-  ctx.fill();
-
-  // Globe circle outline
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(0,229,255,0.08)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Latitude lines
-  for (let lat = -60; lat <= 60; lat += 30) {
-    const latR = lat * Math.PI / 180;
-    ctx.beginPath();
-    let first = true;
-    for (let lon = -180; lon <= 180; lon += 4) {
-      const p = project(latR, lon * Math.PI/180, rotation);
-      if (p.z > 0) {
-        first ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
-        first = false;
-      } else { first = true; }
+function updateProgress(elapsed) {
+  const {name,local,frac} = getPhase(elapsed);
+  NODES.forEach(n => {
+    if (n.r===0){n.progress=1;return;}
+    if (n.r===3&&!n.r3vis){n.progress=0;return;}
+    switch(name){
+      case 'HOLD_COLLAPSED': n.progress=0; break;
+      case 'EXPAND_R1': n.progress = n.r===1 ? easeOut(frac) : 0; break;
+      case 'EXPAND_R2': n.progress = n.r===1?1 : n.r===2?easeOut(frac) : 0; break;
+      case 'EXPAND_R3': n.progress = n.r<=2?1 : easeOut(frac); break;
+      case 'HOLD_EXPANDED': n.progress=1; break;
+      case 'COLLAPSE': {
+        const seg = PHASES[5].dur/3;
+        if (n.r===3) n.progress = 1-easeIn(clamp(local/seg));
+        else if (n.r===2) n.progress = 1-easeIn(clamp((local-seg*0.4)/seg));
+        else if (n.r===1) n.progress = 1-easeIn(clamp((local-seg*0.8)/seg));
+        break;
+      }
     }
-    ctx.strokeStyle = 'rgba(0,229,255,0.05)';
-    ctx.lineWidth = 0.5;
-    ctx.stroke();
-  }
-
-  // Longitude lines
-  for (let lon = 0; lon < 360; lon += 30) {
-    const lonR = lon * Math.PI / 180;
-    ctx.beginPath();
-    let first = true;
-    for (let lat = -90; lat <= 90; lat += 4) {
-      const p = project(lat * Math.PI/180, lonR, rotation);
-      if (p.z > 0) {
-        first ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
-        first = false;
-      } else { first = true; }
-    }
-    ctx.strokeStyle = 'rgba(0,229,255,0.05)';
-    ctx.lineWidth = 0.5;
-    ctx.stroke();
-  }
-
-  // Static causal edge lines (faint)
-  EDGES.forEach(([ai, bi]) => {
-    const a = DOTS[ai], b = DOTS[bi];
-    const pa = project(a.lat, a.lon, rotation);
-    const pb = project(b.lat, b.lon, rotation);
-    if (pa.z < 0.1 || pb.z < 0.1) return;
-    ctx.beginPath();
-    ctx.moveTo(pa.x, pa.y);
-    ctx.lineTo(pb.x, pb.y);
-    ctx.strokeStyle = 'rgba(0,229,255,0.06)';
-    ctx.lineWidth = 0.7;
-    ctx.stroke();
+    n.progress = clamp(n.progress);
   });
+}
 
-  // Arc particles
-  arcParticles.forEach(p => drawArcParticle(p, rotation));
-  for (let i = arcParticles.length - 1; i >= 0; i--) {
-    arcParticles[i].t += arcParticles[i].speed;
-    if (arcParticles[i].t > 1) arcParticles.splice(i, 1);
+function drawRadialGraph(elapsed) {
+  updateProgress(elapsed);
+  const min = Math.min(W,H);
+  const br = min*0.20;
+  const rr = [0, br, min*0.56, min*0.87];
+
+  // Ring outlines
+  for (let ring=1;ring<=3;ring++){
+    ctx.beginPath(); ctx.arc(cx,cy,rr[ring],0,Math.PI*2);
+    ctx.strokeStyle='rgba(0,229,255,0.08)'; ctx.lineWidth=0.7; ctx.stroke();
   }
-
-  // Country dots
-  DOTS.forEach(d => {
-    const p = project(d.lat, d.lon, rotation);
-    if (p.z < 0.05) return;
-    const alpha = Math.min(1, (p.z - 0.05) * 4) * 0.85;
-    const size = 2.4 + p.z * 1.5;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(0,229,255,${alpha * 0.7})`;
-    ctx.fill();
+  // Lerp positions
+  NODES.forEach(n => {
+    if (n.r===0){n.x=n.tx;n.y=n.ty;return;}
+    const p=nodeMap.get(n.p); const px=p?p.x:cx; const py=p?p.y:cy;
+    n.x=px+(n.tx-px)*n.progress; n.y=py+(n.ty-py)*n.progress;
+  });
+  // Edges
+  NODES.forEach(n => {
+    if (n.r===0||n.progress<=0) return;
+    const p=nodeMap.get(n.p); if(!p) return;
+    const a = n.progress*(n.r===1?0.03:n.r===2?0.25:0.12);
+    ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(n.x,n.y);
+    ctx.strokeStyle=`rgba(0,229,255,${a})`; ctx.lineWidth=n.r===1?1.2:0.7; ctx.stroke();
+  });
+  // Nodes + glows
+  NODES.forEach(n => {
+    if (n.progress<=0||n.r===0) return;
+    const na = n.r===1?0.04:n.r===2?0.35:0.18;
+    const a=na*n.progress; const sz=n.size*n.progress;
     // Glow
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, size * 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(0,229,255,${alpha * 0.08})`;
-    ctx.fill();
+    const gr=sz*2.5;
+    const g=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,gr);
+    g.addColorStop(0,`rgba(0,229,255,${0.12*n.progress})`); g.addColorStop(1,'rgba(0,229,255,0)');
+    ctx.beginPath(); ctx.arc(n.x,n.y,gr,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    // Node
+    ctx.beginPath(); ctx.arc(n.x,n.y,sz,0,Math.PI*2);
+    ctx.fillStyle=`rgba(0,229,255,${a})`; ctx.fill();
   });
+  // Root ghost glow
+  const root=nodeMap.get('root');
+  const {name}=getPhase(elapsed);
+  let rp = (name==='HOLD_COLLAPSED'||name==='HOLD_EXPANDED') ? 1+0.3*Math.sin(elapsed*0.003) : 1;
+  const rg=ctx.createRadialGradient(root.x,root.y,0,root.x,root.y,root.size*5);
+  rg.addColorStop(0,`rgba(0,229,255,${0.20*rp})`);
+  rg.addColorStop(0.4,`rgba(0,229,255,${0.08*rp})`);
+  rg.addColorStop(1,'rgba(0,229,255,0)');
+  ctx.beginPath(); ctx.arc(root.x,root.y,root.size*5,0,Math.PI*2); ctx.fillStyle=rg; ctx.fill();
+}
 
-  rotation += 0.0015;
+// =============================================
+// MAIN DRAW LOOP — radial graph only (COBE handles globe)
+// =============================================
+
+const prefersStill = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function draw(elapsed) {
+  ctx.clearRect(0,0,W,H);
+  if (!W||!H) { requestAnimationFrame(draw); return; }
+  if (prefersStill) {
+    // Static expanded state — no animation
+    NODES.forEach(n => { n.progress = (n.r===3 && !n.r3vis) ? 0 : 1; });
+    NODES.forEach(n => {
+      if (n.r===0){n.x=n.tx;n.y=n.ty;return;}
+      n.x=n.tx; n.y=n.ty;
+    });
+    drawRadialGraph(elapsed);
+    return; // Single frame, no loop
+  }
+  drawRadialGraph(elapsed);
   requestAnimationFrame(draw);
 }
 
-window.addEventListener('resize', () => { resize(); genDots(); genEdges(); });
-resize(); genDots(); genEdges();
-draw();
+// Init
+computeLayout();
+// Debounce + ignore mobile toolbar resize (height-only small changes)
+let lastW = W, lastH = H;
+window.addEventListener('resize', () => {
+  const nw = canvas.offsetWidth, nh = canvas.offsetHeight;
+  if (nw === lastW && Math.abs(nh - lastH) < 150) return; // toolbar hide/show
+  lastW = nw; lastH = nh;
+  computeLayout();
+});
+
+requestAnimationFrame(draw);
 
 // ── SCROLL REVEAL ──
 const observer = new IntersectionObserver(entries => {
   entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
 }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ── CHEVRON: delay → fade in → pulse → hide on scroll ──
+const chevron = document.querySelector('.hero-chevron');
+if (chevron) {
+  let chevronVisible = false;
+  // Show after 3.5s delay
+  setTimeout(() => {
+    if (chevronVisible === false && window.scrollY < 30) {
+      chevron.classList.add('visible');
+      // Start pulse after fade-in transition completes (1s)
+      setTimeout(() => { chevron.classList.add('pulsing'); }, 1000);
+      chevronVisible = true;
+    }
+  }, 3500);
+  // Hide on scroll — fade out smoothly
+  window.addEventListener('scroll', function hideChevron() {
+    if (window.scrollY > 30) {
+      chevron.style.transition = 'opacity 0.5s ease-out';
+      chevron.style.opacity = '0';
+      setTimeout(() => { chevron.style.animation = 'none'; }, 500);
+      window.removeEventListener('scroll', hideChevron);
+      chevronVisible = true; // prevent late show
+    }
+  }, { passive: true });
+}
+
+</script>
+<script type="module">
+// ── COBE GLOBE — separate WebGL canvas ──
+import createGlobe from 'https://esm.sh/cobe';
+
+const cobeEl = document.getElementById('cobe-canvas');
+const hero = document.querySelector('.hero');
+const prefersStill = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let phi = 0;
+let globe;
+
+// Adaptive settings based on device
+const isMobile = window.innerWidth < 768;
+const isSmallScreen = window.innerWidth < 1024;
+const dpr = isSmallScreen ? 1 : Math.min(window.devicePixelRatio, 2);
+const samples = isMobile ? 8000 : isSmallScreen ? 14000 : 24000;
+
+function sizeCobeCanvas() {
+  const sz = Math.min(hero.offsetWidth, hero.offsetHeight) * 0.76;
+  cobeEl.width = sz * dpr;
+  cobeEl.height = sz * dpr;
+  cobeEl.style.width = sz + 'px';
+  cobeEl.style.height = sz + 'px';
+  return sz;
+}
+
+function startGlobe() {
+  try {
+    if (globe) globe.destroy();
+    const sz = sizeCobeCanvas();
+    globe = createGlobe(cobeEl, {
+      devicePixelRatio: dpr,
+      width: sz * dpr,
+      height: sz * dpr,
+      phi: 0,
+      theta: 0.15,
+      dark: 1,
+      diffuse: 0.8,
+      mapSamples: samples,
+      mapBrightness: 3,
+      mapBaseBrightness: 0,
+      baseColor: [0, 0.55, 0.62],
+      markerColor: [0, 0.9, 1],
+      glowColor: [0, 0.15, 0.18],
+      scale: 1,
+      offset: [0, 0],
+      markers: [],
+      opacity: 0.85,
+      onRender: (state) => {
+        if (prefersStill) { return false; } // Stop animation loop
+        state.phi = phi;
+        phi += 0.003;
+      }
+    });
+  } catch (e) {
+    // WebGL not available — hide COBE canvas, radial graph still works
+    cobeEl.style.display = 'none';
+  }
+}
+
+startGlobe();
+
+// Debounced resize — ignore mobile toolbar height changes
+let resizeTimer, cobeLastW = hero.offsetWidth, cobeLastH = hero.offsetHeight;
+window.addEventListener('resize', () => {
+  const nw = hero.offsetWidth, nh = hero.offsetHeight;
+  if (nw === cobeLastW && Math.abs(nh - cobeLastH) < 150) return;
+  cobeLastW = nw; cobeLastH = nh;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(startGlobe, 250);
+});
 </script>
 </body>
 </html>
