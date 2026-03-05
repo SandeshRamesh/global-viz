@@ -1,0 +1,189 @@
+{
+  "finding": {
+    "class": "outcome_surprise",
+    "title": "Strong upstream predictor for gdp_income: Average Adult Government Benefits -> Average Accumulated Income Per Person",
+    "variables": {
+      "source": {
+        "code": "agmxhoi992",
+        "label": "Average Adult Government Benefits"
+      },
+      "mediator": null,
+      "target": {
+        "code": "accmhoi999",
+        "label": "Average Accumulated Income Per Person"
+      }
+    },
+    "edge_type": "linear",
+    "availability": {
+      "years_active": "35/35",
+      "graphs_active": "140/140"
+    },
+    "stratum_betas": {
+      "unified": {
+        "beta": 0.984133485461276,
+        "ci_lower": 0.9201213491571344,
+        "ci_upper": 1.0545694666788854,
+        "years_active": 35
+      },
+      "developing": {
+        "beta": 0.9843257287644913,
+        "ci_lower": 0.9309103081987437,
+        "ci_upper": 1.0418340736556573,
+        "years_active": 35
+      },
+      "emerging": {
+        "beta": 0.944641423920972,
+        "ci_lower": 0.8473390006120024,
+        "ci_upper": 1.0504541540095087,
+        "years_active": 35
+      },
+      "advanced": {
+        "beta": 0.9399200178455633,
+        "ci_lower": 0.8434986569562934,
+        "ci_upper": 1.034566205847073,
+        "years_active": 35
+      }
+    },
+    "temporal_profile": {
+      "1990s": {
+        "count": 40,
+        "beta_mean": 0.9768659249676258,
+        "sign": "positive"
+      },
+      "2000s": {
+        "count": 40,
+        "beta_mean": 0.9592073193904396,
+        "sign": "positive"
+      },
+      "2010s": {
+        "count": 40,
+        "beta_mean": 0.9688678631709502,
+        "sign": "positive"
+      },
+      "2020s": {
+        "count": 20,
+        "beta_mean": 0.9329039329284983,
+        "sign": "positive"
+      }
+    },
+    "directionality": {
+      "reversal": false,
+      "reverse_edge_presence": "0/140"
+    },
+    "nonlinearity": {
+      "threshold": null,
+      "beta_low": null,
+      "beta_high": null,
+      "flip_years": 0
+    },
+    "caveats": [
+      "Outcome candidate selected by robustness and effect-size ranking among interpretable incoming edges."
+    ],
+    "plain_language": "Average Adult Government Benefits is one of the strongest consistent upstream predictors of Average Accumulated Income Per Person in this corpus.",
+    "academic_summary": "For outcome concept gdp_income, edge agmxhoi992->accmhoi999 ranks highest by coverage/effect composite (graphs=140/140, min_years=35/35).",
+    "confidence": "medium",
+    "_score_inputs": {
+      "graphs_active": 140,
+      "years_active": 35,
+      "beta_magnitude": 0.9632551639980756,
+      "ci_coverage": 1.0,
+      "reversal_strength": 0.044405710918927976,
+      "class": "outcome_surprise",
+      "decade_consistency": 1.0
+    },
+    "outcome_concept": "gdp_income",
+    "scores": {
+      "robustness": 1.0,
+      "public_clarity": 0.6785714285714286,
+      "academic_weight": 0.9823416848713018,
+      "class_diversity_bonus": 1.0,
+      "total": 0.9312997069321112
+    },
+    "finding_id": "F01",
+    "lineage": {
+      "v2_v21_status": "confirmed_same_edge",
+      "notes": "agmxhoi992->accmhoi999: Exact source/target codes found in v2.1 edge set.",
+      "edge_statuses": [
+        {
+          "source": "agmxhoi992",
+          "target": "accmhoi999",
+          "status": "confirmed_same_edge"
+        }
+      ]
+    },
+    "uncertainty_flags": [],
+    "public_rank": 4
+  },
+  "schema_reference": {
+    "finding_id": "F01",
+    "title": "...",
+    "class": "mediation|reversal|threshold|hub|outcome_surprise",
+    "variables": {
+      "source": {
+        "code": "...",
+        "label": "..."
+      },
+      "mediator": {
+        "code": "...",
+        "label": "..."
+      },
+      "target": {
+        "code": "...",
+        "label": "..."
+      }
+    },
+    "edge_type": "linear|threshold|quadratic|logarithmic|saturation|mixed",
+    "availability": {
+      "years_active": "X/35",
+      "graphs_active": "X/140"
+    },
+    "stratum_betas": {
+      "unified": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "developing": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "emerging": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "advanced": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    "temporal_profile": {
+      "1990s": "...",
+      "2000s": "...",
+      "2010s": "...",
+      "2020s": "..."
+    },
+    "directionality": {
+      "reversal": true,
+      "reverse_edge_presence": "X/140"
+    },
+    "nonlinearity": {
+      "threshold": null,
+      "beta_low": null,
+      "beta_high": null,
+      "flip_years": 0
+    },
+    "lineage": {
+      "v2_v21_status": "...",
+      "notes": "..."
+    },
+    "caveats": [
+      "..."
+    ],
+    "plain_language": "...",
+    "academic_summary": "...",
+    "confidence": "high|medium|low"
+  }
+}

@@ -1,0 +1,282 @@
+{
+  "finding": {
+    "class": "reversal",
+    "title": "Middle Class Income Share changes direction across development strata for Total Economic Output per Person",
+    "variables": {
+      "source": {
+        "code": "mprpfci999",
+        "label": "Middle Class Income Share"
+      },
+      "mediator": null,
+      "target": {
+        "code": "mseccoi999",
+        "label": "Total Economic Output per Person"
+      }
+    },
+    "edge_type": "threshold",
+    "availability": {
+      "years_active": "35/35",
+      "graphs_active": "140/140"
+    },
+    "stratum_betas": {
+      "unified": {
+        "beta": -0.14257828978597392,
+        "ci_lower": -0.4176542167980723,
+        "ci_upper": 0.1218481175278161,
+        "years_active": 35,
+        "pos_years": 13,
+        "neg_years": 22
+      },
+      "developing": {
+        "beta": 0.5884273771162372,
+        "ci_lower": 0.4488080339148128,
+        "ci_upper": 0.7242363857078593,
+        "years_active": 35,
+        "pos_years": 26,
+        "neg_years": 9
+      },
+      "emerging": {
+        "beta": -0.8240496660596126,
+        "ci_lower": -1.0593562232389455,
+        "ci_upper": -0.6293939756855178,
+        "years_active": 35,
+        "pos_years": 0,
+        "neg_years": 35
+      },
+      "advanced": {
+        "beta": -0.48454590590128216,
+        "ci_lower": -0.7776455411836967,
+        "ci_upper": -0.13967158296259663,
+        "years_active": 35,
+        "pos_years": 1,
+        "neg_years": 34
+      }
+    },
+    "temporal_profile": {
+      "unified": {
+        "1990s": {
+          "mean": 0.950552376801866,
+          "pos": 10,
+          "neg": 0,
+          "count": 10
+        },
+        "2000s": {
+          "mean": -0.2669924587145597,
+          "pos": 3,
+          "neg": 7,
+          "count": 10
+        },
+        "2010s": {
+          "mean": -0.8246570853203294,
+          "pos": 0,
+          "neg": 10,
+          "count": 10
+        },
+        "2020s": {
+          "mean": -0.715853694035771,
+          "pos": 0,
+          "neg": 5,
+          "count": 5
+        }
+      },
+      "developing": {
+        "1990s": {
+          "mean": 0.9452472504642888,
+          "pos": 10,
+          "neg": 0,
+          "count": 10
+        },
+        "2000s": {
+          "mean": 0.28471325370535006,
+          "pos": 6,
+          "neg": 4,
+          "count": 10
+        },
+        "2010s": {
+          "mean": 0.987306017613766,
+          "pos": 10,
+          "neg": 0,
+          "count": 10
+        },
+        "2020s": {
+          "mean": -0.31554140375314904,
+          "pos": 0,
+          "neg": 5,
+          "count": 5
+        }
+      },
+      "emerging": {
+        "1990s": {
+          "mean": -0.8815284010474442,
+          "pos": 0,
+          "neg": 10,
+          "count": 10
+        },
+        "2000s": {
+          "mean": -0.8076722485850336,
+          "pos": 0,
+          "neg": 10,
+          "count": 10
+        },
+        "2010s": {
+          "mean": -0.8450641144493476,
+          "pos": 0,
+          "neg": 10,
+          "count": 10
+        },
+        "2020s": {
+          "mean": -0.6998181342536369,
+          "pos": 0,
+          "neg": 5,
+          "count": 5
+        }
+      },
+      "advanced": {
+        "1990s": {
+          "mean": -0.49284292484706144,
+          "pos": 1,
+          "neg": 9,
+          "count": 10
+        },
+        "2000s": {
+          "mean": -0.5148586563211768,
+          "pos": 0,
+          "neg": 10,
+          "count": 10
+        },
+        "2010s": {
+          "mean": -0.48511098169539724,
+          "pos": 0,
+          "neg": 10,
+          "count": 10
+        },
+        "2020s": {
+          "mean": -0.4061962155817043,
+          "pos": 0,
+          "neg": 5,
+          "count": 5
+        }
+      }
+    },
+    "directionality": {
+      "reversal": true,
+      "reverse_edge_presence": "0/140",
+      "beta_spread": 1.4124770431758498
+    },
+    "nonlinearity": {
+      "threshold": null,
+      "beta_low": null,
+      "beta_high": null,
+      "flip_years": 0
+    },
+    "caveats": [
+      "Sign reversal is based on mean yearly beta by stratum; some decades may still show mixed signs."
+    ],
+    "plain_language": "Middle Class Income Share is associated with opposite directional effects on Total Economic Output per Person depending on development stage.",
+    "academic_summary": "Edge mprpfci999->mseccoi999 exhibits cross-strata sign heterogeneity with means {'unified': -0.14257828978597392, 'developing': 0.5884273771162372, 'emerging': -0.8240496660596126, 'advanced': -0.48454590590128216}.",
+    "confidence": "medium",
+    "_score_inputs": {
+      "graphs_active": 140,
+      "years_active": 35,
+      "beta_magnitude": 1.4124770431758498,
+      "ci_coverage": 1.0,
+      "reversal_strength": 1.4124770431758498,
+      "class": "reversal",
+      "decade_consistency": 0.8125
+    },
+    "scores": {
+      "robustness": 1.0,
+      "public_clarity": 0.6785714285714286,
+      "academic_weight": 0.8777098637882766,
+      "class_diversity_bonus": 0.5876412187606984,
+      "total": 0.8020520563515295
+    },
+    "finding_id": "F04",
+    "lineage": {
+      "v2_v21_status": "confirmed_same_edge",
+      "notes": "mprpfci999->mseccoi999: Exact source/target codes found in v2.1 edge set.",
+      "edge_statuses": [
+        {
+          "source": "mprpfci999",
+          "target": "mseccoi999",
+          "status": "confirmed_same_edge"
+        }
+      ]
+    },
+    "uncertainty_flags": [
+      "cross_strata_sign_instability"
+    ]
+  },
+  "schema_reference": {
+    "finding_id": "F01",
+    "title": "...",
+    "class": "mediation|reversal|threshold|hub|outcome_surprise",
+    "variables": {
+      "source": {
+        "code": "...",
+        "label": "..."
+      },
+      "mediator": {
+        "code": "...",
+        "label": "..."
+      },
+      "target": {
+        "code": "...",
+        "label": "..."
+      }
+    },
+    "edge_type": "linear|threshold|quadratic|logarithmic|saturation|mixed",
+    "availability": {
+      "years_active": "X/35",
+      "graphs_active": "X/140"
+    },
+    "stratum_betas": {
+      "unified": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "developing": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "emerging": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "advanced": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    "temporal_profile": {
+      "1990s": "...",
+      "2000s": "...",
+      "2010s": "...",
+      "2020s": "..."
+    },
+    "directionality": {
+      "reversal": true,
+      "reverse_edge_presence": "X/140"
+    },
+    "nonlinearity": {
+      "threshold": null,
+      "beta_low": null,
+      "beta_high": null,
+      "flip_years": 0
+    },
+    "lineage": {
+      "v2_v21_status": "...",
+      "notes": "..."
+    },
+    "caveats": [
+      "..."
+    ],
+    "plain_language": "...",
+    "academic_summary": "...",
+    "confidence": "high|medium|low"
+  }
+}

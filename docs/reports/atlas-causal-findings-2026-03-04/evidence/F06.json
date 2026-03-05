@@ -1,0 +1,428 @@
+{
+  "finding": {
+    "class": "threshold",
+    "title": "Elections: Local Government Power has robust threshold dynamics for Local Election Quality Index",
+    "variables": {
+      "source": {
+        "code": "v2ellocpwr_ord",
+        "label": "Elections: Local Government Power"
+      },
+      "mediator": null,
+      "target": {
+        "code": "e_v2xel_locelec_4C",
+        "label": "Local Election Quality Index"
+      }
+    },
+    "edge_type": "threshold",
+    "availability": {
+      "years_active": "35/35",
+      "graphs_active": "140/140"
+    },
+    "stratum_betas": {
+      "unified": {
+        "beta": 0.8806117971191815,
+        "ci_lower": null,
+        "ci_upper": null,
+        "years_active": 35
+      },
+      "developing": {
+        "beta": 0.8638473237332442,
+        "ci_lower": null,
+        "ci_upper": null,
+        "years_active": 14
+      },
+      "emerging": {
+        "beta": 0.8478376365430251,
+        "ci_lower": null,
+        "ci_upper": null,
+        "years_active": 26
+      },
+      "advanced": {
+        "beta": 0.8504013322948607,
+        "ci_lower": null,
+        "ci_upper": null,
+        "years_active": 35
+      }
+    },
+    "temporal_profile": {
+      "1990s": "active",
+      "2000s": "active",
+      "2010s": "active",
+      "2020s": "active"
+    },
+    "directionality": {
+      "reversal": false,
+      "reverse_edge_presence": "0/140"
+    },
+    "nonlinearity": {
+      "threshold": 3.0,
+      "threshold_latest_year": 2024,
+      "threshold_latest_year_value": 3.0,
+      "beta_low": 0.2187008775621328,
+      "beta_high": 0.08726327695656574,
+      "flip_years": 0,
+      "primary_stratum": "unified",
+      "threshold_years_by_stratum": {
+        "unified": 35,
+        "developing": 14,
+        "emerging": 26,
+        "advanced": 35
+      },
+      "threshold_details_by_stratum": {
+        "unified": {
+          "years_threshold_active": 35,
+          "threshold": 3.0,
+          "beta_low": 0.2187008775621328,
+          "beta_high": 0.08726327695656574,
+          "flip_years": 0
+        },
+        "developing": {
+          "years_threshold_active": 14,
+          "threshold": 3.0,
+          "beta_low": 0.2239771079737955,
+          "beta_high": 0.08525008702591406,
+          "flip_years": 1
+        },
+        "emerging": {
+          "years_threshold_active": 26,
+          "threshold": 2.9524299408797887,
+          "beta_low": 0.25428934815971166,
+          "beta_high": 0.07683383922745834,
+          "flip_years": 1
+        },
+        "advanced": {
+          "years_threshold_active": 35,
+          "threshold": 3.0,
+          "beta_low": 0.05870978575973159,
+          "beta_high": 0.012846379814651372,
+          "flip_years": 15
+        }
+      },
+      "threshold_variable": "v2ellocpwr_ord",
+      "reverted_recently": false,
+      "country_split_latest": {
+        "year": 2024,
+        "threshold_variable": "v2ellocpwr_ord",
+        "threshold_value": 3.0,
+        "coverage_countries": 174,
+        "below_count": 66,
+        "above_count": 108,
+        "missing_count": 4,
+        "below_countries": [
+          "Afghanistan",
+          "Algeria",
+          "Angola",
+          "Armenia",
+          "Azerbaijan",
+          "Bahrain",
+          "Bangladesh",
+          "Belarus",
+          "Botswana",
+          "Burkina Faso",
+          "Burundi",
+          "Cambodia",
+          "Cameroon",
+          "Central African Republic",
+          "China",
+          "Cuba",
+          "Djibouti",
+          "Egypt, Arab Rep.",
+          "Equatorial Guinea",
+          "Eritrea",
+          "Ethiopia",
+          "German Democratic Republic",
+          "Ghana",
+          "Guinea",
+          "Guinea-Bissau",
+          "Guyana",
+          "Iran, Islamic Rep.",
+          "Jordan",
+          "Kazakhstan",
+          "Kenya",
+          "Kyrgyzstan",
+          "Lebanon",
+          "Libya",
+          "Luxembourg",
+          "Madagascar",
+          "Malaysia",
+          "Mali",
+          "Mauritania",
+          "Mongolia",
+          "Morocco",
+          "Namibia",
+          "Nicaragua",
+          "Niger",
+          "North Korea",
+          "Romania",
+          "Russia",
+          "Rwanda",
+          "Saudi Arabia",
+          "Seychelles",
+          "Singapore",
+          "Solomon Islands",
+          "Somalia",
+          "South Yemen",
+          "Sudan",
+          "Suriname",
+          "Swaziland",
+          "Syria",
+          "Tajikistan",
+          "Thailand",
+          "Turkmenistan",
+          "T\u00fcrkiye",
+          "Uganda",
+          "United Arab Emirates",
+          "Uzbekistan",
+          "Yemen",
+          "Zanzibar"
+        ],
+        "above_countries": [
+          "Albania",
+          "Argentina",
+          "Australia",
+          "Austria",
+          "Belgium",
+          "Benin",
+          "Bhutan",
+          "Bolivia",
+          "Bosnia and Herzegovina",
+          "Brazil",
+          "Bulgaria",
+          "Canada",
+          "Cape Verde",
+          "Chad",
+          "Chile",
+          "Colombia",
+          "Comoros",
+          "Congo, Dem. Rep.",
+          "Costa Rica",
+          "Croatia",
+          "Cyprus",
+          "Czech Republic",
+          "Denmark",
+          "Dominican Republic",
+          "Ecuador",
+          "El Salvador",
+          "Estonia",
+          "Fiji",
+          "Finland",
+          "France",
+          "Gabon",
+          "Georgia",
+          "Germany",
+          "Greece",
+          "Guatemala",
+          "Haiti",
+          "Honduras",
+          "Hungary",
+          "Iceland",
+          "India",
+          "Indonesia",
+          "Iraq",
+          "Ireland",
+          "Israel",
+          "Italy",
+          "Ivory Coast",
+          "Jamaica",
+          "Japan",
+          "Korea, Rep.",
+          "Kosovo",
+          "Laos",
+          "Latvia",
+          "Lesotho",
+          "Liberia",
+          "Lithuania",
+          "Malawi",
+          "Maldives",
+          "Malta",
+          "Mauritius",
+          "Mexico",
+          "Moldova",
+          "Montenegro",
+          "Mozambique",
+          "Nepal",
+          "Netherlands",
+          "New Zealand",
+          "Nigeria",
+          "North Macedonia",
+          "Norway",
+          "Oman",
+          "Pakistan",
+          "Panama",
+          "Papua New Guinea",
+          "Paraguay",
+          "Peru",
+          "Philippines",
+          "Poland",
+          "Portugal",
+          "Republic of the Congo",
+          "Sao Tome and Principe",
+          "Senegal",
+          "Serbia",
+          "Sierra Leone",
+          "Slovakia",
+          "Slovenia",
+          "Somaliland",
+          "South Africa",
+          "South Sudan",
+          "Spain",
+          "Sri Lanka",
+          "Sweden",
+          "Switzerland",
+          "Taiwan",
+          "Tanzania",
+          "The Gambia",
+          "Timor-Leste",
+          "Togo",
+          "Trinidad and Tobago",
+          "Tunisia",
+          "Ukraine",
+          "United Kingdom",
+          "United States",
+          "Uruguay",
+          "Vanuatu",
+          "Venezuela, RB",
+          "Vietnam",
+          "Zambia",
+          "Zimbabwe"
+        ],
+        "missing_countries": [
+          "Barbados",
+          "Hong Kong",
+          "Kuwait",
+          "Qatar"
+        ],
+        "below_count_by_income_stratum": {
+          "Advanced": 9,
+          "Developing": 35,
+          "Emerging": 17,
+          "Unknown": 5
+        },
+        "above_count_by_income_stratum": {
+          "Advanced": 42,
+          "Developing": 36,
+          "Emerging": 28,
+          "Unknown": 2
+        }
+      }
+    },
+    "caveats": [
+      "Threshold parameters are edge-level and may vary year-to-year."
+    ],
+    "policy_relevance": {
+      "is_policy_relevant_lever": true,
+      "lever_variable": {
+        "code": "v2ellocpwr_ord",
+        "label": "Elections: Local Government Power"
+      }
+    },
+    "plain_language": "The effect of Elections: Local Government Power on Local Election Quality Index changes by regime around a learned threshold in unified.",
+    "academic_summary": "Edge v2ellocpwr_ord->e_v2xel_locelec_4C is classified as threshold in 35/35 years for unified; beta_low=0.2187008775621328, beta_high=0.08726327695656574.",
+    "confidence": "high",
+    "_score_inputs": {
+      "graphs_active": 140,
+      "years_active": 35,
+      "beta_magnitude": 0.8806117971191815,
+      "ci_coverage": 0.0,
+      "reversal_strength": 0.13143760060556706,
+      "class": "threshold",
+      "decade_consistency": 1.0,
+      "policy_relevance": 1.0
+    },
+    "scores": {
+      "robustness": 1.0,
+      "public_clarity": 0.7142857142857143,
+      "academic_weight": 0.5934822121406349,
+      "class_diversity_bonus": 0.4281068127353646,
+      "total": 0.6982543990761426
+    },
+    "finding_id": "F06",
+    "lineage": {
+      "v2_v21_status": "confirmed_same_edge",
+      "notes": "v2ellocpwr_ord->e_v2xel_locelec_4C: Exact source/target codes found in v2.1 edge set.",
+      "edge_statuses": [
+        {
+          "source": "v2ellocpwr_ord",
+          "target": "e_v2xel_locelec_4C",
+          "status": "confirmed_same_edge"
+        }
+      ]
+    },
+    "uncertainty_flags": [
+      "ci_missing_or_sparse"
+    ],
+    "public_rank": 3
+  },
+  "schema_reference": {
+    "finding_id": "F01",
+    "title": "...",
+    "class": "mediation|reversal|threshold|hub|outcome_surprise",
+    "variables": {
+      "source": {
+        "code": "...",
+        "label": "..."
+      },
+      "mediator": {
+        "code": "...",
+        "label": "..."
+      },
+      "target": {
+        "code": "...",
+        "label": "..."
+      }
+    },
+    "edge_type": "linear|threshold|quadratic|logarithmic|saturation|mixed",
+    "availability": {
+      "years_active": "X/35",
+      "graphs_active": "X/140"
+    },
+    "stratum_betas": {
+      "unified": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "developing": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "emerging": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "advanced": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    "temporal_profile": {
+      "1990s": "...",
+      "2000s": "...",
+      "2010s": "...",
+      "2020s": "..."
+    },
+    "directionality": {
+      "reversal": true,
+      "reverse_edge_presence": "X/140"
+    },
+    "nonlinearity": {
+      "threshold": null,
+      "beta_low": null,
+      "beta_high": null,
+      "flip_years": 0
+    },
+    "lineage": {
+      "v2_v21_status": "...",
+      "notes": "..."
+    },
+    "caveats": [
+      "..."
+    ],
+    "plain_language": "...",
+    "academic_summary": "...",
+    "confidence": "high|medium|low"
+  }
+}

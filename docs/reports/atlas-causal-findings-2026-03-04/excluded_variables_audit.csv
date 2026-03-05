@@ -1,0 +1,2072 @@
+code,label,domain,layer,reason,excluded_edge_count
+1,Health & Longevity,Health,1,non_indicator_hierarchy_node,0
+10403,Spending on Medical Products and Equipment,Economic,5,numeric_category_id,272
+10404,International Price Comparison - Category 10404,Economic,5,numeric_category_id,136
+10405,Recreation and Culture Spending,Economic,4,numeric_category_id,280
+10406,International Price Comparison Category 10406,Economic,5,numeric_category_id,408
+13,Consumer Spending Category 13,Economic,4,numeric_category_id,1044
+2,Education & Knowledge,Education,1,non_indicator_hierarchy_node,0
+200101,Consumer Spending Category 200101,Economic,5,numeric_category_id,1120
+200151,Spending on Restaurant and Hotel Services,Economic,5,numeric_category_id,840
+200343,Consumer Spending Category 200343,Economic,5,numeric_category_id,840
+20064,International Price Comparison - Category 20064,Environment,5,numeric_category_id,140
+20065,Consumer Spending Category 20065,Economic,5,numeric_category_id,560
+20070,Consumer Spending Category,Economic,5,numeric_category_id,1088
+20071,Consumer Spending Category 20071,Economic,5,numeric_category_id,1120
+20076,Consumer Spending Category 20076,Economic,5,numeric_category_id,2007
+20077,International Price Comparison - Category 20077,Economic,5,numeric_category_id,2072
+20082,Consumer Spending Category 20082,Economic,5,numeric_category_id,560
+20083,International Price Comparison Category 20083,Economic,5,numeric_category_id,820
+20162,Recreation and Culture Spending,Environment,5,numeric_category_id,140
+20163,Spending on Insurance Services,Environment,5,numeric_category_id,140
+20164,Spending on Personal Care Services,Environment,5,numeric_category_id,1120
+20165,International Price Comparison Category 20165,Environment,5,numeric_category_id,1120
+20170,20170,unknown,-1,upper_hierarchy_layer,0
+20171,International Price Comparison - Category 20171,Environment,4,numeric_category_id,280
+20176,20176,unknown,-1,upper_hierarchy_layer,0
+20177,Household Spending Category 20177,Environment,4,numeric_category_id,108
+20182,Consumer Spending Category 20182,Environment,5,numeric_category_id,808
+20183,Consumer Spending Category 20183,Environment,5,numeric_category_id,1504
+21500,Consumer Spending Category 21500,Economic,5,numeric_category_id,140
+21501,Consumer Spending Category 21501,Environment,5,numeric_category_id,140
+21502,Consumer Spending Category 21502,Environment,5,numeric_category_id,534
+21503,Spending on Recreational and Cultural Services,Environment,5,numeric_category_id,352
+21504,Consumer Spending Category 21504,Environment,5,numeric_category_id,913
+21505,Household Spending Category 21505,Environment,5,numeric_category_id,256
+21508,21508,unknown,-1,upper_hierarchy_layer,0
+21509,21509,unknown,-1,upper_hierarchy_layer,0
+21510,21510,unknown,-1,upper_hierarchy_layer,0
+21511,Personal Care Spending,Environment,5,numeric_category_id,140
+21514,21514,unknown,-1,upper_hierarchy_layer,0
+21515,21515,unknown,-1,upper_hierarchy_layer,0
+21517,21517,unknown,-1,upper_hierarchy_layer,0
+25001,25001,unknown,-1,upper_hierarchy_layer,0
+25003,Household Spending Category 25003,Economic,5,numeric_category_id,1680
+25005,Consumer Spending Category 25005,Economic,5,numeric_category_id,214
+25007,Consumer Spending Category 25007,Economic,5,numeric_category_id,280
+25051,Consumer Spending Category 25051,Economic,5,numeric_category_id,1620
+25052,25052,unknown,-1,upper_hierarchy_layer,0
+25053,Consumer Spending Category 25053,Economic,5,numeric_category_id,840
+25055,Spending Category 25055,Economic,5,numeric_category_id,756
+25056,Price Comparison Category 25056,Economic,5,numeric_category_id,1698
+25057,International Price Comparison - Category 25057,Economic,5,numeric_category_id,840
+26420,26420,unknown,-1,upper_hierarchy_layer,0
+26421,26421,unknown,-1,upper_hierarchy_layer,0
+26422,26422,unknown,-1,upper_hierarchy_layer,0
+26423,26423,unknown,-1,upper_hierarchy_layer,0
+26424,26424,unknown,-1,upper_hierarchy_layer,0
+26425,26425,unknown,-1,upper_hierarchy_layer,0
+26426,26426,unknown,-1,upper_hierarchy_layer,0
+26427,26427,unknown,-1,upper_hierarchy_layer,0
+26428,26428,unknown,-1,upper_hierarchy_layer,0
+26429,26429,unknown,-1,upper_hierarchy_layer,0
+26430,26430,unknown,-1,upper_hierarchy_layer,0
+26431,26431,unknown,-1,upper_hierarchy_layer,0
+26432,26432,unknown,-1,upper_hierarchy_layer,0
+26433,26433,unknown,-1,upper_hierarchy_layer,0
+26434,26434,unknown,-1,upper_hierarchy_layer,0
+26435,26435,unknown,-1,upper_hierarchy_layer,0
+26436,26436,unknown,-1,upper_hierarchy_layer,0
+26437,26437,unknown,-1,upper_hierarchy_layer,0
+26438,26438,unknown,-1,upper_hierarchy_layer,0
+26439,26439,unknown,-1,upper_hierarchy_layer,0
+26440,26440,unknown,-1,upper_hierarchy_layer,0
+26441,26441,unknown,-1,upper_hierarchy_layer,0
+26442,26442,unknown,-1,upper_hierarchy_layer,0
+26443,26443,unknown,-1,upper_hierarchy_layer,0
+26444,26444,unknown,-1,upper_hierarchy_layer,0
+26445,26445,unknown,-1,upper_hierarchy_layer,0
+26446,26446,unknown,-1,upper_hierarchy_layer,0
+26447,26447,unknown,-1,upper_hierarchy_layer,0
+26448,26448,unknown,-1,upper_hierarchy_layer,0
+26449,26449,unknown,-1,upper_hierarchy_layer,0
+26450,26450,unknown,-1,upper_hierarchy_layer,0
+26451,26451,unknown,-1,upper_hierarchy_layer,0
+26452,26452,unknown,-1,upper_hierarchy_layer,0
+26453,26453,unknown,-1,upper_hierarchy_layer,0
+26454,26454,unknown,-1,upper_hierarchy_layer,0
+26455,26455,unknown,-1,upper_hierarchy_layer,0
+26456,26456,unknown,-1,upper_hierarchy_layer,0
+26457,26457,unknown,-1,upper_hierarchy_layer,0
+26458,26458,unknown,-1,upper_hierarchy_layer,0
+26459,26459,unknown,-1,upper_hierarchy_layer,0
+26460,26460,unknown,-1,upper_hierarchy_layer,0
+26461,26461,unknown,-1,upper_hierarchy_layer,0
+26462,26462,unknown,-1,upper_hierarchy_layer,0
+26463,26463,unknown,-1,upper_hierarchy_layer,0
+26464,26464,unknown,-1,upper_hierarchy_layer,0
+26465,26465,unknown,-1,upper_hierarchy_layer,0
+26467,26467,unknown,-1,upper_hierarchy_layer,0
+26468,26468,unknown,-1,upper_hierarchy_layer,0
+26469,26469,unknown,-1,upper_hierarchy_layer,0
+26470,26470,unknown,-1,upper_hierarchy_layer,0
+26471,26471,unknown,-1,upper_hierarchy_layer,0
+26472,26472,unknown,-1,upper_hierarchy_layer,0
+26473,26473,unknown,-1,upper_hierarchy_layer,0
+26474,26474,unknown,-1,upper_hierarchy_layer,0
+26476,26476,unknown,-1,upper_hierarchy_layer,0
+26477,26477,unknown,-1,upper_hierarchy_layer,0
+26478,26478,unknown,-1,upper_hierarchy_layer,0
+26479,26479,unknown,-1,upper_hierarchy_layer,0
+26480,26480,unknown,-1,upper_hierarchy_layer,0
+26481,26481,unknown,-1,upper_hierarchy_layer,0
+26482,26482,unknown,-1,upper_hierarchy_layer,0
+26483,26483,unknown,-1,upper_hierarchy_layer,0
+26484,26484,unknown,-1,upper_hierarchy_layer,0
+26485,26485,unknown,-1,upper_hierarchy_layer,0
+26486,26486,unknown,-1,upper_hierarchy_layer,0
+26487,26487,unknown,-1,upper_hierarchy_layer,0
+26488,26488,unknown,-1,upper_hierarchy_layer,0
+26489,26489,unknown,-1,upper_hierarchy_layer,0
+26490,26490,unknown,-1,upper_hierarchy_layer,0
+26491,26491,unknown,-1,upper_hierarchy_layer,0
+26492,26492,unknown,-1,upper_hierarchy_layer,0
+26493,26493,unknown,-1,upper_hierarchy_layer,0
+26494,26494,unknown,-1,upper_hierarchy_layer,0
+26496,26496,unknown,-1,upper_hierarchy_layer,0
+26497,26497,unknown,-1,upper_hierarchy_layer,0
+26498,26498,unknown,-1,upper_hierarchy_layer,0
+26499,26499,unknown,-1,upper_hierarchy_layer,0
+26500,26500,unknown,-1,upper_hierarchy_layer,0
+26501,26501,unknown,-1,upper_hierarchy_layer,0
+26502,26502,unknown,-1,upper_hierarchy_layer,0
+26503,26503,unknown,-1,upper_hierarchy_layer,0
+26504,26504,unknown,-1,upper_hierarchy_layer,0
+26506,26506,unknown,-1,upper_hierarchy_layer,0
+26507,26507,unknown,-1,upper_hierarchy_layer,0
+26508,26508,unknown,-1,upper_hierarchy_layer,0
+26509,26509,unknown,-1,upper_hierarchy_layer,0
+26510,26510,unknown,-1,upper_hierarchy_layer,0
+26511,26511,unknown,-1,upper_hierarchy_layer,0
+26512,26512,unknown,-1,upper_hierarchy_layer,0
+26513,26513,unknown,-1,upper_hierarchy_layer,0
+26514,26514,unknown,-1,upper_hierarchy_layer,0
+26515,26515,unknown,-1,upper_hierarchy_layer,0
+26516,26516,unknown,-1,upper_hierarchy_layer,0
+26517,26517,unknown,-1,upper_hierarchy_layer,0
+26520,26520,unknown,-1,upper_hierarchy_layer,0
+26521,26521,unknown,-1,upper_hierarchy_layer,0
+26522,26522,unknown,-1,upper_hierarchy_layer,0
+26523,26523,unknown,-1,upper_hierarchy_layer,0
+26524,26524,unknown,-1,upper_hierarchy_layer,0
+26525,26525,unknown,-1,upper_hierarchy_layer,0
+26526,26526,unknown,-1,upper_hierarchy_layer,0
+26527,26527,unknown,-1,upper_hierarchy_layer,0
+26528,26528,unknown,-1,upper_hierarchy_layer,0
+26529,26529,unknown,-1,upper_hierarchy_layer,0
+26530,26530,unknown,-1,upper_hierarchy_layer,0
+26531,26531,unknown,-1,upper_hierarchy_layer,0
+26532,26532,unknown,-1,upper_hierarchy_layer,0
+26533,26533,unknown,-1,upper_hierarchy_layer,0
+26534,26534,unknown,-1,upper_hierarchy_layer,0
+26535,26535,unknown,-1,upper_hierarchy_layer,0
+26536,26536,unknown,-1,upper_hierarchy_layer,0
+26537,26537,unknown,-1,upper_hierarchy_layer,0
+26538,26538,unknown,-1,upper_hierarchy_layer,0
+26539,26539,unknown,-1,upper_hierarchy_layer,0
+26540,26540,unknown,-1,upper_hierarchy_layer,0
+26541,26541,unknown,-1,upper_hierarchy_layer,0
+26542,26542,unknown,-1,upper_hierarchy_layer,0
+26543,26543,unknown,-1,upper_hierarchy_layer,0
+26544,26544,unknown,-1,upper_hierarchy_layer,0
+26545,26545,unknown,-1,upper_hierarchy_layer,0
+26546,26546,unknown,-1,upper_hierarchy_layer,0
+26547,26547,unknown,-1,upper_hierarchy_layer,0
+26548,26548,unknown,-1,upper_hierarchy_layer,0
+26549,26549,unknown,-1,upper_hierarchy_layer,0
+26550,26550,unknown,-1,upper_hierarchy_layer,0
+26551,26551,unknown,-1,upper_hierarchy_layer,0
+26552,26552,unknown,-1,upper_hierarchy_layer,0
+26553,26553,unknown,-1,upper_hierarchy_layer,0
+26554,26554,unknown,-1,upper_hierarchy_layer,0
+26555,26555,unknown,-1,upper_hierarchy_layer,0
+26556,26556,unknown,-1,upper_hierarchy_layer,0
+26557,26557,unknown,-1,upper_hierarchy_layer,0
+26558,26558,unknown,-1,upper_hierarchy_layer,0
+26559,26559,unknown,-1,upper_hierarchy_layer,0
+26560,26560,unknown,-1,upper_hierarchy_layer,0
+26561,26561,unknown,-1,upper_hierarchy_layer,0
+26562,26562,unknown,-1,upper_hierarchy_layer,0
+26563,26563,unknown,-1,upper_hierarchy_layer,0
+26565,26565,unknown,-1,upper_hierarchy_layer,0
+26566,26566,unknown,-1,upper_hierarchy_layer,0
+26567,26567,unknown,-1,upper_hierarchy_layer,0
+26568,26568,unknown,-1,upper_hierarchy_layer,0
+26569,26569,unknown,-1,upper_hierarchy_layer,0
+26570,26570,unknown,-1,upper_hierarchy_layer,0
+26571,26571,unknown,-1,upper_hierarchy_layer,0
+26572,26572,unknown,-1,upper_hierarchy_layer,0
+26573,26573,unknown,-1,upper_hierarchy_layer,0
+26574,26574,unknown,-1,upper_hierarchy_layer,0
+26575,26575,unknown,-1,upper_hierarchy_layer,0
+26576,26576,unknown,-1,upper_hierarchy_layer,0
+26577,26577,unknown,-1,upper_hierarchy_layer,0
+26578,26578,unknown,-1,upper_hierarchy_layer,0
+26579,26579,unknown,-1,upper_hierarchy_layer,0
+26580,26580,unknown,-1,upper_hierarchy_layer,0
+26581,26581,unknown,-1,upper_hierarchy_layer,0
+26582,26582,unknown,-1,upper_hierarchy_layer,0
+26583,26583,unknown,-1,upper_hierarchy_layer,0
+26584,26584,unknown,-1,upper_hierarchy_layer,0
+26585,26585,unknown,-1,upper_hierarchy_layer,0
+26587,26587,unknown,-1,upper_hierarchy_layer,0
+26588,26588,unknown,-1,upper_hierarchy_layer,0
+26589,26589,unknown,-1,upper_hierarchy_layer,0
+26590,26590,unknown,-1,upper_hierarchy_layer,0
+26591,Consumer Spending Category 26591,Environment,5,numeric_category_id,324
+26592,26592,unknown,-1,upper_hierarchy_layer,0
+26593,26593,unknown,-1,upper_hierarchy_layer,0
+26594,26594,unknown,-1,upper_hierarchy_layer,0
+26595,26595,unknown,-1,upper_hierarchy_layer,0
+26596,26596,unknown,-1,upper_hierarchy_layer,0
+26597,26597,unknown,-1,upper_hierarchy_layer,0
+26598,26598,unknown,-1,upper_hierarchy_layer,0
+26599,26599,unknown,-1,upper_hierarchy_layer,0
+26600,26600,unknown,-1,upper_hierarchy_layer,0
+26601,26601,unknown,-1,upper_hierarchy_layer,0
+26602,26602,unknown,-1,upper_hierarchy_layer,0
+26603,Consumer Spending Category 26603,Environment,5,numeric_category_id,108
+26604,26604,unknown,-1,upper_hierarchy_layer,0
+26605,26605,unknown,-1,upper_hierarchy_layer,0
+26606,26606,unknown,-1,upper_hierarchy_layer,0
+26607,26607,unknown,-1,upper_hierarchy_layer,0
+26608,26608,unknown,-1,upper_hierarchy_layer,0
+26609,26609,unknown,-1,upper_hierarchy_layer,0
+26611,26611,unknown,-1,upper_hierarchy_layer,0
+26612,26612,unknown,-1,upper_hierarchy_layer,0
+26613,26613,unknown,-1,upper_hierarchy_layer,0
+26614,26614,unknown,-1,upper_hierarchy_layer,0
+26615,26615,unknown,-1,upper_hierarchy_layer,0
+26616,26616,unknown,-1,upper_hierarchy_layer,0
+26617,26617,unknown,-1,upper_hierarchy_layer,0
+26618,26618,unknown,-1,upper_hierarchy_layer,0
+26619,26619,unknown,-1,upper_hierarchy_layer,0
+26620,26620,unknown,-1,upper_hierarchy_layer,0
+26621,26621,unknown,-1,upper_hierarchy_layer,0
+26622,26622,unknown,-1,upper_hierarchy_layer,0
+26623,26623,unknown,-1,upper_hierarchy_layer,0
+26624,26624,unknown,-1,upper_hierarchy_layer,0
+26652,Consumer Spending Category 26652,Environment,5,numeric_category_id,216
+299932,Consumer Spending Category (Recreation and Culture),Economic,4,numeric_category_id,352
+3,Income & Living Standards,Economic,1,non_indicator_hierarchy_node,0
+4,Equality & Fairness,Economic,1,non_indicator_hierarchy_node,0
+40041,Price Comparison Category 40041,Economic,4,numeric_category_id,980
+404,Price Comparison Category 404,Education,4,numeric_category_id,104
+41906,Consumer Spending Category 41906,Economic,5,numeric_category_id,108
+41907,Spending Category 41907,Environment,5,numeric_category_id,1260
+41908,Consumer Spending Category 41908,Economic,5,numeric_category_id,1197
+41915,International Price Comparison Category 41915,Economic,5,numeric_category_id,384
+41918,Consumer Spending Category (Transport Services),Economic,5,numeric_category_id,834
+41927,International Price Comparison - Category 41927,Economic,4,numeric_category_id,2186
+41940,Consumer Spending Category 41940,Economic,5,numeric_category_id,668
+42097,Consumer Spending Category 42097,Environment,5,numeric_category_id,420
+42099,Consumer Spending Category 42099,Economic,5,numeric_category_id,840
+42101,Healthcare Spending,Environment,5,numeric_category_id,980
+42104,Price Comparison Category 42104,Environment,5,numeric_category_id,808
+42614,International Price Comparison Category,Environment,5,numeric_category_id,856
+42615,Household Equipment Spending,Economic,5,numeric_category_id,312
+42619,Price Comparison Category 42619,Environment,4,numeric_category_id,312
+42620,Household Spending Category 42620,Environment,5,numeric_category_id,800
+42635,Spending on Public Transportation,Economic,5,numeric_category_id,88
+42654,Consumer Spending Category 42654,Environment,5,numeric_category_id,208
+43617,Consumer Spending Category,Environment,5,numeric_category_id,840
+5,Safety & Security,Security,1,non_indicator_hierarchy_node,0
+6,Governance & Democracy,Governance,1,non_indicator_hierarchy_node,0
+7,Infrastructure & Access,Development,1,non_indicator_hierarchy_node,0
+8,Employment & Work,Economic,1,non_indicator_hierarchy_node,0
+9,Environment & Sustainability,Environment,1,non_indicator_hierarchy_node,0
+999973,Consumer Spending Category 999973,Economic,5,numeric_category_id,420
+999974,Consumer Spending Category (Net Purchases Abroad),Economic,5,numeric_category_id,804
+999975,999975,unknown,-1,upper_hierarchy_layer,0
+999977,999977,unknown,-1,upper_hierarchy_layer,0
+999978,999978,unknown,-1,upper_hierarchy_layer,0
+999988,International Price Comparison - Category 999988,Economic,5,numeric_category_id,1120
+AG.LND.PRCP.MM,AG.LND.PRCP.MM,unknown,-1,upper_hierarchy_layer,0
+AG.LND.TOTL.K2,AG.LND.TOTL.K2,unknown,-1,upper_hierarchy_layer,0
+AG.SRF.TOTL.K2,AG.SRF.TOTL.K2,unknown,-1,upper_hierarchy_layer,0
+ASTAFF.6T8,ASTAFF.6T8,unknown,-1,upper_hierarchy_layer,0
+ASTAFF.6T8.M,ASTAFF.6T8.M,unknown,-1,upper_hierarchy_layer,0
+BI.WAG.TOTL.GD.ZS,BI.WAG.TOTL.GD.ZS,unknown,-1,upper_hierarchy_layer,0
+BI.WAG.TOTL.PB.ZS,BI.WAG.TOTL.PB.ZS,unknown,-1,upper_hierarchy_layer,0
+BX.KLT.DINV.WD.GD.ZS,BX.KLT.DINV.WD.GD.ZS,unknown,-1,upper_hierarchy_layer,0
+BX.PEF.TOTL.CD.WD,BX.PEF.TOTL.CD.WD,unknown,-1,upper_hierarchy_layer,0
+COWcode,COWcode,unknown,-1,upper_hierarchy_layer,0
+CR.1.Q1.LPIA,CR.1.Q1.LPIA,unknown,-1,upper_hierarchy_layer,0
+CR.1.Q2.F.LPIA,CR.1.Q2.F.LPIA,unknown,-1,upper_hierarchy_layer,0
+CR.1.RUR.Q5,CR.1.RUR.Q5,unknown,-1,upper_hierarchy_layer,0
+CR.3.Q3.M.LPIA,CR.3.Q3.M.LPIA,unknown,-1,upper_hierarchy_layer,0
+CR.3.Q5.LPIA,CR.3.Q5.LPIA,unknown,-1,upper_hierarchy_layer,0
+CR.3.URB.Q3.F,CR.3.URB.Q3.F,unknown,-1,upper_hierarchy_layer,0
+CR.3.URB.Q3.GPIA,CR.3.URB.Q3.GPIA,unknown,-1,upper_hierarchy_layer,0
+CR.MOD.1,CR.MOD.1,unknown,-1,upper_hierarchy_layer,0
+CR.MOD.1.F,CR.MOD.1.F,unknown,-1,upper_hierarchy_layer,0
+CR.MOD.1.GPIA,CR.MOD.1.GPIA,unknown,-1,upper_hierarchy_layer,0
+CR.MOD.1.M,CR.MOD.1.M,unknown,-1,upper_hierarchy_layer,0
+DC.DAC.CECL.CD,DC.DAC.CECL.CD,unknown,-1,upper_hierarchy_layer,0
+DT.NFL.UNDP.CD,DT.NFL.UNDP.CD,unknown,-1,upper_hierarchy_layer,0
+DebtA,DebtA,unknown,-1,upper_hierarchy_layer,0
+DebtForg,DebtForg,unknown,-1,upper_hierarchy_layer,0
+DebtL,DebtL,unknown,-1,upper_hierarchy_layer,0
+Deriv,Deriv,unknown,-1,upper_hierarchy_layer,0
+DirectAbroad,DirectAbroad,unknown,-1,upper_hierarchy_layer,0
+DirectIn,DirectIn,unknown,-1,upper_hierarchy_layer,0
+E.5T8.FOREIGN.ORG40500,E.5T8.FOREIGN.ORG40500,unknown,-1,upper_hierarchy_layer,0
+EA.1T8.AG25T99.GPIA,EA.1T8.AG25T99.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.1T8.AG25T99.LPIA,EA.1T8.AG25T99.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.1T8.AG25T99.RUR.F,EA.1T8.AG25T99.RUR.F,unknown,-1,upper_hierarchy_layer,0
+EA.2T8.AG25T99.F.LPIA,EA.2T8.AG25T99.F.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.2T8.AG25T99.RUR.F,EA.2T8.AG25T99.RUR.F,unknown,-1,upper_hierarchy_layer,0
+EA.2T8.AG25T99.RUR.GPIA,EA.2T8.AG25T99.RUR.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.3T8.AG25T99.F.LPIA,EA.3T8.AG25T99.F.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.3T8.AG25T99.M.LPIA,EA.3T8.AG25T99.M.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.3T8.AG25T99.Q5.F,EA.3T8.AG25T99.Q5.F,unknown,-1,upper_hierarchy_layer,0
+EA.3T8.AG25T99.RUR.GPIA,EA.3T8.AG25T99.RUR.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.4T8.AG25T99.RUR,EA.4T8.AG25T99.RUR,unknown,-1,upper_hierarchy_layer,0
+EA.4T8.AG25T99.RUR.GPIA,EA.4T8.AG25T99.RUR.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.4T8.AG25T99.RUR.M,EA.4T8.AG25T99.RUR.M,unknown,-1,upper_hierarchy_layer,0
+EA.4T8.AG25T99.URB,EA.4T8.AG25T99.URB,unknown,-1,upper_hierarchy_layer,0
+EA.4T8.AG25T99.URB.F,EA.4T8.AG25T99.URB.F,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99,EA.5T8.AG25T99,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99.F,EA.5T8.AG25T99.F,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99.GPIA,EA.5T8.AG25T99.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99.LPIA,EA.5T8.AG25T99.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99.M,EA.5T8.AG25T99.M,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99.M.LPIA,EA.5T8.AG25T99.M.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99.RUR,EA.5T8.AG25T99.RUR,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99.RUR.M,EA.5T8.AG25T99.RUR.M,unknown,-1,upper_hierarchy_layer,0
+EA.5T8.AG25T99.URB.F,EA.5T8.AG25T99.URB.F,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99,EA.6T8.AG25T99,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99.F,EA.6T8.AG25T99.F,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99.LPIA,EA.6T8.AG25T99.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99.M,EA.6T8.AG25T99.M,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99.M.LPIA,EA.6T8.AG25T99.M.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99.RUR,EA.6T8.AG25T99.RUR,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99.RUR.M,EA.6T8.AG25T99.RUR.M,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99.URB,EA.6T8.AG25T99.URB,unknown,-1,upper_hierarchy_layer,0
+EA.6T8.AG25T99.URB.F,EA.6T8.AG25T99.URB.F,unknown,-1,upper_hierarchy_layer,0
+EA.7T8.AG25T99.F,EA.7T8.AG25T99.F,unknown,-1,upper_hierarchy_layer,0
+EA.7T8.AG25T99.F.LPIA,EA.7T8.AG25T99.F.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.7T8.AG25T99.RUR.F,EA.7T8.AG25T99.RUR.F,unknown,-1,upper_hierarchy_layer,0
+EA.7T8.AG25T99.RUR.GPIA,EA.7T8.AG25T99.RUR.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.7T8.AG25T99.RUR.M,EA.7T8.AG25T99.RUR.M,unknown,-1,upper_hierarchy_layer,0
+EA.7T8.AG25T99.URB.GPIA,EA.7T8.AG25T99.URB.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.7T8.AG25T99.URB.M,EA.7T8.AG25T99.URB.M,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.F,EA.8.AG25T99.F,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.F.LPIA,EA.8.AG25T99.F.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.LPIA,EA.8.AG25T99.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.M.LPIA,EA.8.AG25T99.M.LPIA,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.RUR,EA.8.AG25T99.RUR,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.RUR.F,EA.8.AG25T99.RUR.F,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.RUR.GPIA,EA.8.AG25T99.RUR.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.RUR.M,EA.8.AG25T99.RUR.M,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.URB.F,EA.8.AG25T99.URB.F,unknown,-1,upper_hierarchy_layer,0
+EA.8.AG25T99.URB.GPIA,EA.8.AG25T99.URB.GPIA,unknown,-1,upper_hierarchy_layer,0
+EA.S1T8.AG25T99.RUR.F,EA.S1T8.AG25T99.RUR.F,unknown,-1,upper_hierarchy_layer,0
+EF.EFM.OVRL.XD,EF.EFM.OVRL.XD,unknown,-1,upper_hierarchy_layer,0
+EF.EFM.RANK.XD,EF.EFM.RANK.XD,unknown,-1,upper_hierarchy_layer,0
+EN.CLC.HDDY.XD,EN.CLC.HDDY.XD,unknown,-1,upper_hierarchy_layer,0
+EN.CLC.HEAT.XD,EN.CLC.HEAT.XD,unknown,-1,upper_hierarchy_layer,0
+EN.CLC.SPEI.XD,EN.CLC.SPEI.XD,unknown,-1,upper_hierarchy_layer,0
+EN.GHG.N2O.MT.CE.AR5,EN.GHG.N2O.MT.CE.AR5,unknown,-1,upper_hierarchy_layer,0
+EN.URB.LCTY,EN.URB.LCTY,unknown,-1,upper_hierarchy_layer,0
+ER.H2O.INTR.K3,ER.H2O.INTR.K3,unknown,-1,upper_hierarchy_layer,0
+ETOIP.01.PU,Primary Teacher Outreach Coverage,Education,5,label_coverage_metric,516
+ETOIP.2.PR.M,ETOIP.2.PR.M,unknown,-1,upper_hierarchy_layer,0
+ETOIP.3.PU.M,Male Teacher Coverage in Public High Schools,Education,5,label_coverage_metric,1990
+ETOIP.4.PR.M,ETOIP.4.PR.M,unknown,-1,upper_hierarchy_layer,0
+EV1524P.2T5.V.F,EV1524P.2T5.V.F,unknown,-1,upper_hierarchy_layer,0
+EV1524P.2T5.V.GPIA,EV1524P.2T5.V.GPIA,unknown,-1,upper_hierarchy_layer,0
+EV1524P.2T5.V.M,EV1524P.2T5.V.M,unknown,-1,upper_hierarchy_layer,0
+EquityA,EquityA,unknown,-1,upper_hierarchy_layer,0
+EquityL,EquityL,unknown,-1,upper_hierarchy_layer,0
+FINPROTECTION_IMPOV_ESTIMATE_AVAILABLE,FINPROTECTION_IMPOV_ESTIMATE_AVAILABLE,unknown,-1,upper_hierarchy_layer,0
+FOSGP.5T8.F600.M,FOSGP.5T8.F600.M,unknown,-1,upper_hierarchy_layer,0
+FOSGP.5T8.F800.F,FOSGP.5T8.F800.F,unknown,-1,upper_hierarchy_layer,0
+FOSGP.5T8.FUK.GPIA,FOSGP.5T8.FUK.GPIA,unknown,-1,upper_hierarchy_layer,0
+FR_ind,FR_ind,unknown,-1,upper_hierarchy_layer,0
+GAR.5T8,GAR.5T8,unknown,-1,upper_hierarchy_layer,0
+GAR.5T8.F,GAR.5T8.F,unknown,-1,upper_hierarchy_layer,0
+GAR.5T8.M,GAR.5T8.M,unknown,-1,upper_hierarchy_layer,0
+GDI_TC,GDI_TC,unknown,-1,upper_hierarchy_layer,0
+GFDD.OI.19,GFDD.OI.19,unknown,-1,upper_hierarchy_layer,0
+GHED_CHEGDP_SHA2011,GHED_CHEGDP_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_CHE_pc_US_SHA2011,GHED_CHE_pc_US_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_EXTCHE_SHA2011,GHED_EXTCHE_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_EXT_pc_US_SHA2011,GHED_EXT_pc_US_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_GGHE-DCHE_SHA2011,GHED_GGHE-DCHE_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_GGHE-DGGE_SHA2011,GHED_GGHE-DGGE_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_GGHE-D_pc_US_SHA2011,GHED_GGHE-D_pc_US_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_OOPSCHE_SHA2011,GHED_OOPSCHE_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_OOP_pc_US_SHA2011,GHED_OOP_pc_US_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_PVT-DCHE_SHA2011,GHED_PVT-DCHE_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GHED_PVT-D_pc_US_SHA2011,GHED_PVT-D_pc_US_SHA2011,unknown,-1,upper_hierarchy_layer,0
+GII_TC,GII_TC,unknown,-1,upper_hierarchy_layer,0
+GTVP.3.GPV.F,GTVP.3.GPV.F,unknown,-1,upper_hierarchy_layer,0
+HEMOGLOBINLEVEL_CHILDREN_MEAN,HEMOGLOBINLEVEL_CHILDREN_MEAN,unknown,-1,upper_hierarchy_layer,0
+HEMOGLOBINLEVEL_NONPREGNANT_MEAN,HEMOGLOBINLEVEL_NONPREGNANT_MEAN,unknown,-1,upper_hierarchy_layer,0
+HEMOGLOBINLEVEL_PREGNANT_MEAN,HEMOGLOBINLEVEL_PREGNANT_MEAN,unknown,-1,upper_hierarchy_layer,0
+HEMOGLOBINLEVEL_REPRODUCTIVEAGE_MEAN,HEMOGLOBINLEVEL_REPRODUCTIVEAGE_MEAN,unknown,-1,upper_hierarchy_layer,0
+HIV_0000000026,HIV_0000000026,unknown,-1,upper_hierarchy_layer,0
+HIV_ARTCOVERAGE,HIV Treatment Coverage,Health,5,label_coverage_metric,61
+HWF_0001,HWF_0001,unknown,-1,upper_hierarchy_layer,0
+HWF_0002,HWF_0002,unknown,-1,upper_hierarchy_layer,0
+HWF_0003,HWF_0003,unknown,-1,upper_hierarchy_layer,0
+HWF_0004,HWF_0004,unknown,-1,upper_hierarchy_layer,0
+HWF_0006,HWF_0006,unknown,-1,upper_hierarchy_layer,0
+HWF_0008,HWF_0008,unknown,-1,upper_hierarchy_layer,0
+HWF_0010,HWF_0010,unknown,-1,upper_hierarchy_layer,0
+HWF_0012,HWF_0012,unknown,-1,upper_hierarchy_layer,0
+HWF_0013,HWF_0013,unknown,-1,upper_hierarchy_layer,0
+HWF_0014,HWF_0014,unknown,-1,upper_hierarchy_layer,0
+HWF_0016,HWF_0016,unknown,-1,upper_hierarchy_layer,0
+HWF_0017,HWF_0017,unknown,-1,upper_hierarchy_layer,0
+HWF_0018,HWF_0018,unknown,-1,upper_hierarchy_layer,0
+HWF_0019,HWF_0019,unknown,-1,upper_hierarchy_layer,0
+HWF_0020,HWF_0020,unknown,-1,upper_hierarchy_layer,0
+HWF_0022,HWF_0022,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD,ICTSKILLDLDONLD,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.AG15T24,ICTSKILLDLDONLD.AG15T24,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.AG15T24.F,ICTSKILLDLDONLD.AG15T24.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.AG15T24.GPIA,ICTSKILLDLDONLD.AG15T24.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.AG15T24.M,ICTSKILLDLDONLD.AG15T24.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.AG25T74,ICTSKILLDLDONLD.AG25T74,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.AG25T74.F,ICTSKILLDLDONLD.AG25T74.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.AG25T74.GPIA,ICTSKILLDLDONLD.AG25T74.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.AG25T74.M,ICTSKILLDLDONLD.AG25T74.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.F,ICTSKILLDLDONLD.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.GPIA,ICTSKILLDLDONLD.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLDLDONLD.M,ICTSKILLDLDONLD.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR,ICTSKILLFGSPUR,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.AG15T24,ICTSKILLFGSPUR.AG15T24,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.AG15T24.F,ICTSKILLFGSPUR.AG15T24.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.AG15T24.GPIA,ICTSKILLFGSPUR.AG15T24.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.AG15T24.M,ICTSKILLFGSPUR.AG15T24.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.AG25T74,ICTSKILLFGSPUR.AG25T74,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.AG25T74.F,ICTSKILLFGSPUR.AG25T74.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.AG25T74.GPIA,ICTSKILLFGSPUR.AG25T74.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.AG25T74.M,ICTSKILLFGSPUR.AG25T74.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.F,ICTSKILLFGSPUR.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.GPIA,ICTSKILLFGSPUR.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLFGSPUR.M,ICTSKILLFGSPUR.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF,ICTSKILLGSINF,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.AG15T24,ICTSKILLGSINF.AG15T24,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.AG15T24.F,ICTSKILLGSINF.AG15T24.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.AG15T24.GPIA,ICTSKILLGSINF.AG15T24.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.AG15T24.M,ICTSKILLGSINF.AG15T24.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.AG25T74,ICTSKILLGSINF.AG25T74,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.AG25T74.F,ICTSKILLGSINF.AG25T74.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.AG25T74.GPIA,ICTSKILLGSINF.AG25T74.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.AG25T74.M,ICTSKILLGSINF.AG25T74.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.F,ICTSKILLGSINF.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.GPIA,ICTSKILLGSINF.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLGSINF.M,ICTSKILLGSINF.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLHLTHINF,ICTSKILLHLTHINF,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLHLTHINF.AG15T24,ICTSKILLHLTHINF.AG15T24,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLHLTHINF.AG15T24.F,ICTSKILLHLTHINF.AG15T24.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLHLTHINF.AG25T74,ICTSKILLHLTHINF.AG25T74,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLHLTHINF.AG25T74.F,ICTSKILLHLTHINF.AG25T74.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLHLTHINF.F,ICTSKILLHLTHINF.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLHLTHINF.GPIA,ICTSKILLHLTHINF.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLHLTHINF.M,ICTSKILLHLTHINF.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK,ICTSKILLINTBNK,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.AG15T24,ICTSKILLINTBNK.AG15T24,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.AG15T24.F,ICTSKILLINTBNK.AG15T24.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.AG15T24.GPIA,ICTSKILLINTBNK.AG15T24.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.AG15T24.M,ICTSKILLINTBNK.AG15T24.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.AG25T74,ICTSKILLINTBNK.AG25T74,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.AG25T74.F,ICTSKILLINTBNK.AG25T74.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.AG25T74.GPIA,ICTSKILLINTBNK.AG25T74.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.AG25T74.M,ICTSKILLINTBNK.AG25T74.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.F,ICTSKILLINTBNK.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.GPIA,ICTSKILLINTBNK.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLINTBNK.M,ICTSKILLINTBNK.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP,ICTSKILLVOIP,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.AG15T24,ICTSKILLVOIP.AG15T24,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.AG15T24.F,ICTSKILLVOIP.AG15T24.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.AG15T24.GPIA,ICTSKILLVOIP.AG15T24.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.AG15T24.M,ICTSKILLVOIP.AG15T24.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.AG25T74,ICTSKILLVOIP.AG25T74,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.AG25T74.F,ICTSKILLVOIP.AG25T74.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.AG25T74.GPIA,ICTSKILLVOIP.AG25T74.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.AG25T74.M,ICTSKILLVOIP.AG25T74.M,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.F,ICTSKILLVOIP.F,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.GPIA,ICTSKILLVOIP.GPIA,unknown,-1,upper_hierarchy_layer,0
+ICTSKILLVOIP.M,ICTSKILLVOIP.M,unknown,-1,upper_hierarchy_layer,0
+LBW_NUMBER,LBW_NUMBER,unknown,-1,upper_hierarchy_layer,0
+LBW_PREVALENCE,LBW_PREVALENCE,unknown,-1,upper_hierarchy_layer,0
+LR.AG15T24.Q5.M,LR.AG15T24.Q5.M,unknown,-1,upper_hierarchy_layer,0
+MALARIA_EST_CASES,MALARIA_EST_CASES,unknown,-1,upper_hierarchy_layer,0
+MALARIA_EST_DEATHS,MALARIA_EST_DEATHS,unknown,-1,upper_hierarchy_layer,0
+MALARIA_EST_INCIDENCE,MALARIA_EST_INCIDENCE,unknown,-1,upper_hierarchy_layer,0
+MALARIA_EST_MORTALITY,MALARIA_EST_MORTALITY,unknown,-1,upper_hierarchy_layer,0
+MCV2,MCV2,unknown,-1,upper_hierarchy_layer,0
+MDG_0000000017,MDG_0000000017,unknown,-1,upper_hierarchy_layer,0
+MDG_0000000025,MDG_0000000025,unknown,-1,upper_hierarchy_layer,0
+MDG_0000000026,MDG_0000000026,unknown,-1,upper_hierarchy_layer,0
+MOR.5T8.40520.M,MOR.5T8.40520.M,unknown,-1,upper_hierarchy_layer,0
+MOR.5T8.40535,MOR.5T8.40535,unknown,-1,upper_hierarchy_layer,0
+MORT_MATERNALNUM,MORT_MATERNALNUM,unknown,-1,upper_hierarchy_layer,0
+MS.MIL.MPRT.KD,MS.MIL.MPRT.KD,unknown,-1,upper_hierarchy_layer,0
+NARA.AGM1.URB.Q2,NARA.AGM1.URB.Q2,unknown,-1,upper_hierarchy_layer,0
+NARA.AGM1.URB.Q3.F,NARA.AGM1.URB.Q3.F,unknown,-1,upper_hierarchy_layer,0
+NARA.AGM1.URB.Q3.M,NARA.AGM1.URB.Q3.M,unknown,-1,upper_hierarchy_layer,0
+NE.CON.PRVT.KD.ZG,NE.CON.PRVT.KD.ZG,unknown,-1,upper_hierarchy_layer,0
+NE.CON.TOTL.KD.ZG,NE.CON.TOTL.KD.ZG,unknown,-1,upper_hierarchy_layer,0
+NE.EXP.GNFS.KD.ZG,NE.EXP.GNFS.KD.ZG,unknown,-1,upper_hierarchy_layer,0
+NE.EXP.GNFS.ZS,NE.EXP.GNFS.ZS,unknown,-1,upper_hierarchy_layer,0
+NE.GDI.FTOT.CD,NE.GDI.FTOT.CD,unknown,-1,upper_hierarchy_layer,0
+NE.GDI.FTOT.ZS,NE.GDI.FTOT.ZS,unknown,-1,upper_hierarchy_layer,0
+NE.IMP.GNFS.KD.ZG,NE.IMP.GNFS.KD.ZG,unknown,-1,upper_hierarchy_layer,0
+NER.02.CP,NER.02.CP,unknown,-1,upper_hierarchy_layer,0
+NER.02.F.CP,NER.02.F.CP,unknown,-1,upper_hierarchy_layer,0
+NERA.AGM1.GPIA.CP,NERA.AGM1.GPIA.CP,unknown,-1,upper_hierarchy_layer,0
+NERT.2.F.CP,NERT.2.F.CP,unknown,-1,upper_hierarchy_layer,0
+NTD_LEISHCNUM,NTD_LEISHCNUM,unknown,-1,upper_hierarchy_layer,0
+NTD_LEISHVNUM,NTD_LEISHVNUM,unknown,-1,upper_hierarchy_layer,0
+NUTRITION_570,NUTRITION_570,unknown,-1,upper_hierarchy_layer,0
+NV.AGR.TOTL.KD.ZG,NV.AGR.TOTL.KD.ZG,unknown,-1,upper_hierarchy_layer,0
+NV.IND.TOTL.KD.ZG,NV.IND.TOTL.KD.ZG,unknown,-1,upper_hierarchy_layer,0
+NV.SRV.TOTL.KD.ZG,NV.SRV.TOTL.KD.ZG,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.FISH.PC.CD,NW.NCA.FISH.PC.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.FISH.TO.CD,NW.NCA.FISH.TO.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.FSTP.PC.CD,NW.NCA.FSTP.PC.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.HYDR.PC,NW.NCA.HYDR.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.HYDR.PC.CD,NW.NCA.HYDR.PC.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.HYDR.TO,NW.NCA.HYDR.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.HYDR.TO.CD,NW.NCA.HYDR.TO.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MANG.PC,NW.NCA.MANG.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MANG.PC.CD,NW.NCA.MANG.PC.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MANG.TO,NW.NCA.MANG.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MANG.TO.CD,NW.NCA.MANG.TO.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MCOB.TO,NW.NCA.MCOB.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MGOL.PC,NW.NCA.MGOL.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MGOL.TO,NW.NCA.MGOL.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MIRO.PC,NW.NCA.MIRO.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MIRO.TO,NW.NCA.MIRO.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MLEA.PC,NW.NCA.MLEA.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MLEA.TO,NW.NCA.MLEA.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MLIT.PC,NW.NCA.MLIT.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MLIT.TO,NW.NCA.MLIT.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MMOL.PC,NW.NCA.MMOL.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MMOL.TO,NW.NCA.MMOL.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MPHO.TO,NW.NCA.MPHO.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MSIL.PC,NW.NCA.MSIL.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MSIL.TO,NW.NCA.MSIL.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.MZIN.TO,NW.NCA.MZIN.TO,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.SAOI.PC,NW.NCA.SAOI.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.SAOI.TO.CD,NW.NCA.SAOI.TO.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.SSOI.PC,NW.NCA.SSOI.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.SSOI.PC.CD,NW.NCA.SSOI.PC.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.TOTL.PC,NW.NCA.TOTL.PC,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.TOTL.PC.CD,NW.NCA.TOTL.PC.CD,unknown,-1,upper_hierarchy_layer,0
+NW.NCA.TOTL.TO,NW.NCA.TOTL.TO,unknown,-1,upper_hierarchy_layer,0
+NW.TOW.PC,NW.TOW.PC,unknown,-1,upper_hierarchy_layer,0
+NY.GDS.TOTL.CD,NY.GDS.TOTL.CD,unknown,-1,upper_hierarchy_layer,0
+OAEPG.1,OAEPG.1,unknown,-1,upper_hierarchy_layer,0
+OAEPG.2.GPV.GPIA,OAEPG.2.GPV.GPIA,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.Q1,OAEPG.H.1.Q1,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.RUR.Q5,OAEPG.H.1.RUR.Q5,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.RUR.Q5.F,OAEPG.H.1.RUR.Q5.F,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.RUR.Q5.M,OAEPG.H.1.RUR.Q5.M,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.RUR.WPIA,OAEPG.H.1.RUR.WPIA,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.URB.Q1,OAEPG.H.1.URB.Q1,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.URB.Q1.F,OAEPG.H.1.URB.Q1.F,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.URB.Q1.M,OAEPG.H.1.URB.Q1.M,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.URB.Q5,OAEPG.H.1.URB.Q5,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.URB.Q5.F,OAEPG.H.1.URB.Q5.F,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.URB.Q5.M,OAEPG.H.1.URB.Q5.M,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.URB.WPIA,OAEPG.H.1.URB.WPIA,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.1.WPIA,OAEPG.H.1.WPIA,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.Q1,OAEPG.H.2.Q1,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.Q1.F,OAEPG.H.2.Q1.F,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.Q1.M,OAEPG.H.2.Q1.M,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.Q5,OAEPG.H.2.Q5,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.Q5.F,OAEPG.H.2.Q5.F,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.Q5.M,OAEPG.H.2.Q5.M,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.RUR.M,OAEPG.H.2.RUR.M,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.RUR.Q1,OAEPG.H.2.RUR.Q1,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.RUR.Q1.F,OAEPG.H.2.RUR.Q1.F,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.RUR.Q1.M,OAEPG.H.2.RUR.Q1.M,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.RUR.WPIA,OAEPG.H.2.RUR.WPIA,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.URB.Q5,OAEPG.H.2.URB.Q5,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.URB.Q5.F,OAEPG.H.2.URB.Q5.F,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.URB.Q5.M,OAEPG.H.2.URB.Q5.M,unknown,-1,upper_hierarchy_layer,0
+OAEPG.H.2.WPIA,OAEPG.H.2.WPIA,unknown,-1,upper_hierarchy_layer,0
+OtherA,OtherA,unknown,-1,upper_hierarchy_layer,0
+OtherGov,OtherGov,unknown,-1,upper_hierarchy_layer,0
+OtherL,OtherL,unknown,-1,upper_hierarchy_layer,0
+PA.NUS.ATLS,PA.NUS.ATLS,unknown,-1,upper_hierarchy_layer,0
+PTRHC.02.TRAINED,PTRHC.02.TRAINED,unknown,-1,upper_hierarchy_layer,0
+PTRHC.1.TRAINED,PTRHC.1.TRAINED,unknown,-1,upper_hierarchy_layer,0
+PTRHC.2T3.TRAINED,PTRHC.2T3.TRAINED,unknown,-1,upper_hierarchy_layer,0
+PTRHC.3.TRAINED,PTRHC.3.TRAINED,unknown,-1,upper_hierarchy_layer,0
+Portfa,Portfa,unknown,-1,upper_hierarchy_layer,0
+Portfl,Portfl,unknown,-1,upper_hierarchy_layer,0
+PrivInexDI,PrivInexDI,unknown,-1,upper_hierarchy_layer,0
+PrivInexDIGDP,PrivInexDIGDP,unknown,-1,upper_hierarchy_layer,0
+PrivOutexDI,PrivOutexDI,unknown,-1,upper_hierarchy_layer,0
+QUTP.02.M,QUTP.02.M,unknown,-1,upper_hierarchy_layer,0
+ROFST.1.F.CP,ROFST.1.F.CP,unknown,-1,upper_hierarchy_layer,0
+ROFST.1.GPIA.CP,ROFST.1.GPIA.CP,unknown,-1,upper_hierarchy_layer,0
+ROFST.1T2.GPIA.CP,ROFST.1T2.GPIA.CP,unknown,-1,upper_hierarchy_layer,0
+ROFST.1T2.M.CP,ROFST.1T2.M.CP,unknown,-1,upper_hierarchy_layer,0
+ROFST.2.GPIA.CP,ROFST.2.GPIA.CP,unknown,-1,upper_hierarchy_layer,0
+ROFST.2.M.CP,ROFST.2.M.CP,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.1.Q1.F.LPIA,ROFST.H.1.Q1.F.LPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.1.Q1.M.LPIA,ROFST.H.1.Q1.M.LPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.1.URB.F.WPIA,ROFST.H.1.URB.F.WPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.1.URB.M.WPIA,ROFST.H.1.URB.M.WPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.1.URB.Q1.GPIA,ROFST.H.1.URB.Q1.GPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.2.RUR.Q5.M,ROFST.H.2.RUR.Q5.M,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.2.URB.Q1.F,ROFST.H.2.URB.Q1.F,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.2.URB.Q1.M,ROFST.H.2.URB.Q1.M,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.3.Q3.M.LPIA,ROFST.H.3.Q3.M.LPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.3.Q5.LPIA,ROFST.H.3.Q5.LPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.3.URB.Q2.F,ROFST.H.3.URB.Q2.F,unknown,-1,upper_hierarchy_layer,0
+ROFST.H.3.URB.Q2.M,ROFST.H.3.URB.Q2.M,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.1,ROFST.MOD.1,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.1.F,ROFST.MOD.1.F,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.1.GPIA,ROFST.MOD.1.GPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.1.M,ROFST.MOD.1.M,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.2,ROFST.MOD.2,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.2.F,ROFST.MOD.2.F,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.2.GPIA,ROFST.MOD.2.GPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.2.M,ROFST.MOD.2.M,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.3,ROFST.MOD.3,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.3.F,ROFST.MOD.3.F,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.3.GPIA,ROFST.MOD.3.GPIA,unknown,-1,upper_hierarchy_layer,0
+ROFST.MOD.3.M,ROFST.MOD.3.M,unknown,-1,upper_hierarchy_layer,0
+SAP.2.G1.M,SAP.2.G1.M,unknown,-1,upper_hierarchy_layer,0
+SA_0000001475,SA_0000001475,unknown,-1,upper_hierarchy_layer,0
+SA_0000001688,SA_0000001688,unknown,-1,upper_hierarchy_layer,0
+SA_0000001747,SA_0000001747,unknown,-1,upper_hierarchy_layer,0
+SA_0000001821,SA_0000001821,unknown,-1,upper_hierarchy_layer,0
+SA_0000001823,SA_0000001823,unknown,-1,upper_hierarchy_layer,0
+SCHBSP.1.WINTERN,SCHBSP.1.WINTERN,unknown,-1,upper_hierarchy_layer,0
+SCHBSP.1.WWASH,SCHBSP.1.WWASH,unknown,-1,upper_hierarchy_layer,0
+SCHBSP.3.WINTERN,SCHBSP.3.WINTERN,unknown,-1,upper_hierarchy_layer,0
+SE.PRM.AGES,SE.PRM.AGES,unknown,-1,upper_hierarchy_layer,0
+SG.ABS.PENB,SG.ABS.PENB,unknown,-1,upper_hierarchy_layer,0
+SG.AGE.PAPN.EQ,SG.AGE.PAPN.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.BUS.REGT.EQ,SG.BUS.REGT.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.CNT.SIGN.EQ,SG.CNT.SIGN.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.CTR.TRVL.EQ,SG.CTR.TRVL.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.DNG.WORK.DN.EQ,SG.DNG.WORK.DN.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.GET.JOBS.EQ,SG.GET.JOBS.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.HLD.HEAD.EQ,SG.HLD.HEAD.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.HME.TRVL.EQ,SG.HME.TRVL.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.IHT.ASST.EQ,SG.IHT.ASST.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.IHT.ASST.PT.EQ,SG.IHT.ASST.PT.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.IND.WORK.EQ,SG.IND.WORK.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.LAW.NMCN,SG.LAW.NMCN,unknown,-1,upper_hierarchy_layer,0
+SG.LAW.OBHB.MR.NO,SG.LAW.OBHB.MR.NO,unknown,-1,upper_hierarchy_layer,0
+SG.LEG.SXHR.EM,SG.LEG.SXHR.EM,unknown,-1,upper_hierarchy_layer,0
+SG.LOC.LIVE.EQ,SG.LOC.LIVE.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.NGT.WORK.EQ,SG.NGT.WORK.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.OBT.DVRC.EQ,SG.OBT.DVRC.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.OPN.BANK.EQ,SG.OPN.BANK.EQ,unknown,-1,upper_hierarchy_layer,0
+SG.REM.RIGT.EQ,SG.REM.RIGT.EQ,unknown,-1,upper_hierarchy_layer,0
+SH.DYN.MORT,SH.DYN.MORT,unknown,-1,upper_hierarchy_layer,0
+SH.DYN.MORT.FE,SH.DYN.MORT.FE,unknown,-1,upper_hierarchy_layer,0
+SH.DYN.MORT.MA,SH.DYN.MORT.MA,unknown,-1,upper_hierarchy_layer,0
+SH.DYN.NMRT,SH.DYN.NMRT,unknown,-1,upper_hierarchy_layer,0
+SH.IMM.MEAS,Measles Vaccination Rate for Toddlers,Health,3,non_indicator_hierarchy_node,272
+SH.MMR.LEVE.AL,SH.MMR.LEVE.AL,unknown,-1,upper_hierarchy_layer,0
+SH.MMR.LEVE.GT,SH.MMR.LEVE.GT,unknown,-1,upper_hierarchy_layer,0
+SH.PAR.LEVE,SH.PAR.LEVE,unknown,-1,upper_hierarchy_layer,0
+SH.PAR.LEVE.AL,SH.PAR.LEVE.AL,unknown,-1,upper_hierarchy_layer,0
+SH.PAR.LEVE.FE,SH.PAR.LEVE.FE,unknown,-1,upper_hierarchy_layer,0
+SH.PAR.LEVE.MA,SH.PAR.LEVE.MA,unknown,-1,upper_hierarchy_layer,0
+SITC1_0,SITC1_0,unknown,-1,upper_hierarchy_layer,0
+SITC1_3,SITC1_3,unknown,-1,upper_hierarchy_layer,0
+SITC1_5,SITC1_5,unknown,-1,upper_hierarchy_layer,0
+SITC1_9,SITC1_9,unknown,-1,upper_hierarchy_layer,0
+SITC1_total,SITC1_total,unknown,-1,upper_hierarchy_layer,0
+SLE.1T2.GPIA,SLE.1T2.GPIA,unknown,-1,upper_hierarchy_layer,0
+SLE.1T3.F,SLE.1T3.F,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.AMRT.FE,SP.DYN.AMRT.FE,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.AMRT.MA,SP.DYN.AMRT.MA,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.CDRT.IN,SP.DYN.CDRT.IN,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.IMRT.FE.IN,SP.DYN.IMRT.FE.IN,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.IMRT.IN,SP.DYN.IMRT.IN,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.IMRT.MA.IN,SP.DYN.IMRT.MA.IN,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.LE00.MA.IN,SP.DYN.LE00.MA.IN,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.LE60.FE.IN,SP.DYN.LE60.FE.IN,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.LE60.MA.IN,SP.DYN.LE60.MA.IN,unknown,-1,upper_hierarchy_layer,0
+SP.DYN.TFRT.IN,SP.DYN.TFRT.IN,unknown,-1,upper_hierarchy_layer,0
+SP.POP.0004.MA,Boys Ages 0-4,Health,5,population_bucket_proxy_code,140
+SP.POP.0004.MA.5Y,Young boys as share of male population,Health,5,population_bucket_proxy_code,280
+SP.POP.0014.FE.IN,Young Girls Population (Ages 0-14),Health,4,population_bucket_proxy_code,420
+SP.POP.0014.FE.ZS,SP.POP.0014.FE.ZS,unknown,-1,upper_hierarchy_layer,0
+SP.POP.0014.MA.IN,Young Boys Population (Ages 0-14),Health,4,population_bucket_proxy_code,1080
+SP.POP.0014.MA.ZS,SP.POP.0014.MA.ZS,unknown,-1,upper_hierarchy_layer,0
+SP.POP.0014.TO.ZS,SP.POP.0014.TO.ZS,unknown,-1,upper_hierarchy_layer,0
+SP.POP.0509.FE,Girls aged 5-9,Health,5,population_bucket_proxy_code,780
+SP.POP.0509.FE.5Y,SP.POP.0509.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.0509.MA,Boys Ages 5-9,Health,5,population_bucket_proxy_code,680
+SP.POP.0509.MA.5Y,SP.POP.0509.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.1014.FE,Number of Girls Ages 10-14,Education,4,population_bucket_proxy_code,776
+SP.POP.1014.FE.5Y,SP.POP.1014.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.1014.MA.5Y,SP.POP.1014.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.1519.FE.5Y,SP.POP.1519.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.1519.MA.5Y,SP.POP.1519.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.1564.FE.IN,Working-Age Women,Education,5,population_bucket_proxy_code,652
+SP.POP.1564.FE.ZS,SP.POP.1564.FE.ZS,unknown,-1,upper_hierarchy_layer,0
+SP.POP.1564.MA.IN,Working-Age Men,Education,5,population_bucket_proxy_code,520
+SP.POP.1564.MA.ZS,SP.POP.1564.MA.ZS,unknown,-1,upper_hierarchy_layer,0
+SP.POP.1564.TO,Working-Age Population,Health,3,non_indicator_hierarchy_node,652
+SP.POP.1564.TO.ZS,SP.POP.1564.TO.ZS,unknown,-1,upper_hierarchy_layer,0
+SP.POP.2024.FE.5Y,SP.POP.2024.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.2024.MA.5Y,SP.POP.2024.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.2529.FE,Number of women aged 25-29,Education,5,population_bucket_proxy_code,420
+SP.POP.2529.FE.5Y,SP.POP.2529.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.2529.MA,Number of men aged 25-29,Education,5,population_bucket_proxy_code,632
+SP.POP.3034.FE,Number of Women Ages 30-34,Education,5,population_bucket_proxy_code,1548
+SP.POP.3034.FE.5Y,SP.POP.3034.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.3034.MA.5Y,SP.POP.3034.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.3539.FE,Female Population Ages 35-39,Education,5,population_bucket_proxy_code,420
+SP.POP.3539.FE.5Y,SP.POP.3539.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.3539.MA,Number of men aged 35-39,Education,5,population_bucket_proxy_code,140
+SP.POP.3539.MA.5Y,SP.POP.3539.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.4044.FE.5Y,SP.POP.4044.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.4044.MA.5Y,SP.POP.4044.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.4549.FE.5Y,SP.POP.4549.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.4549.MA,Number of men aged 45-49,Health,5,population_bucket_proxy_code,520
+SP.POP.4549.MA.5Y,SP.POP.4549.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.5054.MA,Male Population Ages 50-54,Health,5,population_bucket_proxy_code,1036
+SP.POP.5054.MA.5Y,SP.POP.5054.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.5559.FE,SP.POP.5559.FE,unknown,-1,upper_hierarchy_layer,0
+SP.POP.5559.MA,Male Population Ages 55-59,Health,5,population_bucket_proxy_code,420
+SP.POP.5559.MA.5Y,SP.POP.5559.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.6064.MA,Male Population Ages 60-64,Health,5,population_bucket_proxy_code,908
+SP.POP.6569.FE,Number of Women Ages 65-69,Health,5,population_bucket_proxy_code,360
+SP.POP.6569.MA,Men Aged 65-69 Population,Health,5,population_bucket_proxy_code,280
+SP.POP.6569.MA.5Y,SP.POP.6569.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.65UP.FE.IN,Elderly Women Population (65 and Older),Health,5,population_bucket_proxy_code,380
+SP.POP.65UP.MA.IN,Senior Men (65+) Population,Health,5,population_bucket_proxy_code,560
+SP.POP.65UP.TO,Total Population 65 and Older,Health,4,population_bucket_proxy_code,680
+SP.POP.7074.FE,Women aged 70-74,Health,5,population_bucket_proxy_code,560
+SP.POP.7074.MA,Number of men aged 70-74,Health,5,population_bucket_proxy_code,268
+SP.POP.7579.FE,Number of women aged 75-79,Health,5,population_bucket_proxy_code,540
+SP.POP.7579.MA,Male Population Ages 75-79,Health,5,population_bucket_proxy_code,280
+SP.POP.7579.MA.5Y,SP.POP.7579.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.80UP.FE.5Y,SP.POP.80UP.FE.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.80UP.MA.5Y,SP.POP.80UP.MA.5Y,unknown,-1,upper_hierarchy_layer,0
+SP.POP.AG00.FE.IN,Number of newborn girls,Health,5,population_bucket_proxy_code,280
+SP.POP.AG00.MA.IN,Male Population at Age 0 (Newborns),Health,4,population_bucket_proxy_code,140
+SP.POP.AG01.FE.IN,Female Population Age 1 (Estimated),Health,5,population_bucket_proxy_code,140
+SP.POP.AG01.MA.IN,1-Year-Old Boys Population,Health,4,population_bucket_proxy_code,140
+SP.POP.AG02.FE.IN,Number of 2-Year-Old Girls,Health,5,population_bucket_proxy_code,420
+SP.POP.AG02.MA.IN,Number of 2-year-old boys,Health,4,population_bucket_proxy_code,420
+SP.POP.AG03.MA.IN,SP.POP.AG03.MA.IN,unknown,-1,upper_hierarchy_layer,0
+SP.POP.AG04.MA.IN,SP.POP.AG04.MA.IN,unknown,-1,upper_hierarchy_layer,0
+SP.POP.AG05.MA.IN,Number of 5-year-old boys,Health,4,population_bucket_proxy_code,140
+SP.POP.AG06.FE.IN,Number of 6-year-old girls,Health,5,population_bucket_proxy_code,420
+SP.POP.AG07.FE.IN,Number of 7-year-old girls,Health,5,population_bucket_proxy_code,420
+SP.POP.AG08.MA.IN,Male Population at Age 8,Health,4,population_bucket_proxy_code,280
+SP.POP.AG09.FE.IN,Female Population Age 9 (Estimated),Health,5,population_bucket_proxy_code,420
+SP.POP.AG09.MA.IN,Number of 9-year-old boys,Health,4,population_bucket_proxy_code,420
+SP.POP.AG10.FE.IN,Female Population Age 10 (Estimated),Education,5,population_bucket_proxy_code,420
+SP.POP.AG10.MA.IN,Number of 10-year-old boys,Education,5,population_bucket_proxy_code,280
+SP.POP.AG11.FE.IN,Number of 11-year-old girls,Education,5,population_bucket_proxy_code,528
+SP.POP.AG11.MA.IN,Number of 11-year-old boys,Education,5,population_bucket_proxy_code,700
+SP.POP.AG12.FE.IN,Number of 12-Year-Old Girls,Education,5,population_bucket_proxy_code,840
+SP.POP.AG12.MA.IN,12-Year-Old Boys Population,Education,5,population_bucket_proxy_code,840
+SP.POP.AG13.MA.IN,13-Year-Old Boys Population,Education,5,population_bucket_proxy_code,680
+SP.POP.AG20.FE.IN,Number of 20-year-old women,Education,5,population_bucket_proxy_code,140
+SP.POP.AG20.MA.IN,Number of 20-Year-Old Men,Education,5,population_bucket_proxy_code,280
+SP.POP.AG21.FE.IN,SP.POP.AG21.FE.IN,unknown,-1,upper_hierarchy_layer,0
+SP.POP.AG24.MA.IN,Male Population at Age 24,Health,4,population_bucket_proxy_code,660
+SP.POP.AG25.MA.IN,Number of 25-year-old men,Education,5,population_bucket_proxy_code,400
+SP.POP.DPND,SP.POP.DPND,unknown,-1,upper_hierarchy_layer,0
+SP.POP.DPND.OL,SP.POP.DPND.OL,unknown,-1,upper_hierarchy_layer,0
+SP.POP.DPND.YG,SP.POP.DPND.YG,unknown,-1,upper_hierarchy_layer,0
+SP.POP.TOTL,Total Population,Health,4,population_bucket_proxy_code,420
+SP.URB.TOTL.IN.ZS,SP.URB.TOTL.IN.ZS,unknown,-1,upper_hierarchy_layer,0
+SPI.D1.5.CHLD.MORT,SPI.D1.5.CHLD.MORT,unknown,-1,upper_hierarchy_layer,0
+SPI.D1.5.DT.TDS.DPPF.XP.ZS,SPI.D1.5.DT.TDS.DPPF.XP.ZS,unknown,-1,upper_hierarchy_layer,0
+SPI.D1.5.LFP,SPI.D1.5.LFP,unknown,-1,upper_hierarchy_layer,0
+SPI.D1.5.POV,SPI.D1.5.POV,unknown,-1,upper_hierarchy_layer,0
+SPI.D1.5.SAFE.MAN.WATER,SPI.D1.5.SAFE.MAN.WATER,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.1.POV,SPI.D3.1.POV,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.10.NEQL,SPI.D3.10.NEQL,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.11.CITY,SPI.D3.11.CITY,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.12.CNSP,SPI.D3.12.CNSP,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.13.CLMT,SPI.D3.13.CLMT,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.15.LAND,SPI.D3.15.LAND,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.16.INST,SPI.D3.16.INST,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.17.PTNS,SPI.D3.17.PTNS,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.2.HNGR,SPI.D3.2.HNGR,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.3.HLTH,SPI.D3.3.HLTH,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.4.EDUC,SPI.D3.4.EDUC,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.5.GEND,SPI.D3.5.GEND,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.6.WTRS,SPI.D3.6.WTRS,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.7.ENRG,SPI.D3.7.ENRG,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.8.WORK,SPI.D3.8.WORK,unknown,-1,upper_hierarchy_layer,0
+SPI.D3.9.INDY,SPI.D3.9.INDY,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.1.1.POPU,SPI.D4.1.1.POPU,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.1.2.AGRI,SPI.D4.1.2.AGRI,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.1.3.BIZZ,SPI.D4.1.3.BIZZ,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.1.4.HOUS,SPI.D4.1.4.HOUS,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.1.5.AGSVY,SPI.D4.1.5.AGSVY,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.1.6.LABR,SPI.D4.1.6.LABR,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.1.7.HLTH,SPI.D4.1.7.HLTH,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.1.8.BZSVY,SPI.D4.1.8.BZSVY,unknown,-1,upper_hierarchy_layer,0
+SPI.D4.2.3.CRVS,SPI.D4.2.3.CRVS,unknown,-1,upper_hierarchy_layer,0
+SPI.DIM1.5.INDEX,SPI.DIM1.5.INDEX,unknown,-1,upper_hierarchy_layer,0
+SPI.DIM3.1.INDEX,SPI.DIM3.1.INDEX,unknown,-1,upper_hierarchy_layer,0
+SPI.DIM3.2.INDEX,SPI.DIM3.2.INDEX,unknown,-1,upper_hierarchy_layer,0
+SPI.DIM3.3.INDEX,SPI.DIM3.3.INDEX,unknown,-1,upper_hierarchy_layer,0
+SPI.DIM3.4.INDEX,SPI.DIM3.4.INDEX,unknown,-1,upper_hierarchy_layer,0
+SPI.DIM4.1.CEN.INDEX,SPI.DIM4.1.CEN.INDEX,unknown,-1,upper_hierarchy_layer,0
+SPI.DIM4.1.SVY.INDEX,SPI.DIM4.1.SVY.INDEX,unknown,-1,upper_hierarchy_layer,0
+SPI.DIM4.2.INDEX,SPI.DIM4.2.INDEX,unknown,-1,upper_hierarchy_layer,0
+SPI.INDEX.PIL1,SPI.INDEX.PIL1,unknown,-1,upper_hierarchy_layer,0
+SPI.INDEX.PIL3,SPI.INDEX.PIL3,unknown,-1,upper_hierarchy_layer,0
+TB_1,TB_1,unknown,-1,upper_hierarchy_layer,0
+TB_c_dst_rlt_new_pct,TB_c_dst_rlt_new_pct,unknown,-1,upper_hierarchy_layer,0
+TB_c_dst_rlt_ret_pct,TB_c_dst_rlt_ret_pct,unknown,-1,upper_hierarchy_layer,0
+TB_c_mdr_tsr,TB_c_mdr_tsr,unknown,-1,upper_hierarchy_layer,0
+TB_c_mdr_tx,TB_c_mdr_tx,unknown,-1,upper_hierarchy_layer,0
+TB_c_new_tsr,TB_c_new_tsr,unknown,-1,upper_hierarchy_layer,0
+TB_c_newinc,TB_c_newinc,unknown,-1,upper_hierarchy_layer,0
+TB_c_ret_tsr,TB_c_ret_tsr,unknown,-1,upper_hierarchy_layer,0
+TB_c_tbhiv_tsr,TB_c_tbhiv_tsr,unknown,-1,upper_hierarchy_layer,0
+TB_e_inc_num,TB_e_inc_num,unknown,-1,upper_hierarchy_layer,0
+TB_e_inc_tbhiv_100k,TB_e_inc_tbhiv_100k,unknown,-1,upper_hierarchy_layer,0
+TB_e_mort_exc_tbhiv_num,TB_e_mort_exc_tbhiv_num,unknown,-1,upper_hierarchy_layer,0
+TB_hiv_art_pct,TB_hiv_art_pct,unknown,-1,upper_hierarchy_layer,0
+TB_hivtest_pct,TB_hivtest_pct,unknown,-1,upper_hierarchy_layer,0
+TB_hivtest_pos_pct,TB_hivtest_pos_pct,unknown,-1,upper_hierarchy_layer,0
+TB_new_labconf,TB_new_labconf,unknown,-1,upper_hierarchy_layer,0
+TB_new_oth,TB_new_oth,unknown,-1,upper_hierarchy_layer,0
+TB_new_sn,TB_new_sn,unknown,-1,upper_hierarchy_layer,0
+TB_new_su,TB_new_su,unknown,-1,upper_hierarchy_layer,0
+TB_notif_num_labconf,TB_notif_num_labconf,unknown,-1,upper_hierarchy_layer,0
+TB_notif_num_newrel_clindx,TB_notif_num_newrel_clindx,unknown,-1,upper_hierarchy_layer,0
+TB_notif_num_newrel_ep,TB_notif_num_newrel_ep,unknown,-1,upper_hierarchy_layer,0
+TB_ret_oth,TB_ret_oth,unknown,-1,upper_hierarchy_layer,0
+TB_ret_tad,TB_ret_tad,unknown,-1,upper_hierarchy_layer,0
+TB_ret_taf,TB_ret_taf,unknown,-1,upper_hierarchy_layer,0
+TB_rr_mdr,TB_rr_mdr,unknown,-1,upper_hierarchy_layer,0
+TB_tot_newrel,TB_tot_newrel,unknown,-1,upper_hierarchy_layer,0
+TRTP.02,TRTP.02,unknown,-1,upper_hierarchy_layer,0
+TRTP.02.F,TRTP.02.F,unknown,-1,upper_hierarchy_layer,0
+TRTP.02.GPIA,TRTP.02.GPIA,unknown,-1,upper_hierarchy_layer,0
+TRTP.1,TRTP.1,unknown,-1,upper_hierarchy_layer,0
+TRTP.1.F,TRTP.1.F,unknown,-1,upper_hierarchy_layer,0
+TRTP.1.M,TRTP.1.M,unknown,-1,upper_hierarchy_layer,0
+TRTP.2,TRTP.2,unknown,-1,upper_hierarchy_layer,0
+TRTP.2.M,TRTP.2.M,unknown,-1,upper_hierarchy_layer,0
+TRTP.2T3.GPIA,TRTP.2T3.GPIA,unknown,-1,upper_hierarchy_layer,0
+TRTP.3,TRTP.3,unknown,-1,upper_hierarchy_layer,0
+TRTP.3.F,TRTP.3.F,unknown,-1,upper_hierarchy_layer,0
+TRTP.3.GPIA,TRTP.3.GPIA,unknown,-1,upper_hierarchy_layer,0
+TRTP.3.M,TRTP.3.M,unknown,-1,upper_hierarchy_layer,0
+TX.VAL.FUEL.ZS.UN,TX.VAL.FUEL.ZS.UN,unknown,-1,upper_hierarchy_layer,0
+WHOSIS_000014,WHOSIS_000014,unknown,-1,upper_hierarchy_layer,0
+WHS3_42,WHS3_42,unknown,-1,upper_hierarchy_layer,0
+WHS3_45,WHS3_45,unknown,-1,upper_hierarchy_layer,0
+WHS3_49,WHS3_49,unknown,-1,upper_hierarchy_layer,0
+WHS3_50,WHS3_50,unknown,-1,upper_hierarchy_layer,0
+WHS3_53,WHS3_53,unknown,-1,upper_hierarchy_layer,0
+WHS3_57,WHS3_57,unknown,-1,upper_hierarchy_layer,0
+WHS4_117,Hepatitis B Vaccination Coverage,Environment,5,label_coverage_metric,82
+WHS4_128,WHS4_128,unknown,-1,upper_hierarchy_layer,0
+WHS4_129,Hib Vaccine Coverage (3 doses),Economic,5,label_coverage_metric,41
+WHS4_543,WHS4_543,unknown,-1,upper_hierarchy_layer,0
+WHS4_544,Polio Vaccination Coverage Rate,Economic,5,label_coverage_metric,41
+WHS6_102,WHS6_102,unknown,-1,upper_hierarchy_layer,0
+WHS8_110,WHS8_110,unknown,-1,upper_hierarchy_layer,0
+XGDP.02.FSGOV,XGDP.02.FSGOV,unknown,-1,upper_hierarchy_layer,0
+XGDP.FSHH.FFNTR,XGDP.FSHH.FFNTR,unknown,-1,upper_hierarchy_layer,0
+XGDP.FSPE.FFNTR,XGDP.FSPE.FFNTR,unknown,-1,upper_hierarchy_layer,0
+XGOVEXP.IMFCALC,XGOVEXP.IMFCALC,unknown,-1,upper_hierarchy_layer,0
+YEARS.FC.COMP.02,YEARS.FC.COMP.02,unknown,-1,upper_hierarchy_layer,0
+aceucoi992,aceucoi992,unknown,-1,upper_hierarchy_layer,0
+aceucoi999,aceucoi999,unknown,-1,upper_hierarchy_layer,0
+aceuhni999,aceuhni999,unknown,-1,upper_hierarchy_layer,0
+acfccoi992,acfccoi992,unknown,-1,upper_hierarchy_layer,0
+acfcgoi999,acfcgoi999,unknown,-1,upper_hierarchy_layer,0
+acolgoi999,Average Consumption Level (All Groups),Development,5,generic_population_aggregate,840
+acompxi999,acompxi999,unknown,-1,upper_hierarchy_layer,0
+aconfci992,aconfci992,unknown,-1,upper_hierarchy_layer,0
+acwbusi992,acwbusi992,unknown,-1,upper_hierarchy_layer,0
+acwfini992,acwfini992,unknown,-1,upper_hierarchy_layer,0
+acwfini999,acwfini999,unknown,-1,upper_hierarchy_layer,0
+acwhoui999,acwhoui999,unknown,-1,upper_hierarchy_layer,0
+acwnfai992,acwnfai992,unknown,-1,upper_hierarchy_layer,0
+adiincj999,adiincj999,unknown,-1,upper_hierarchy_layer,0
+aedpgei999,aedpgei999,unknown,-1,upper_hierarchy_layer,0
+aenvgei999,aenvgei999,unknown,-1,upper_hierarchy_layer,0
+afdirxi992,afdirxi992,unknown,-1,upper_hierarchy_layer,0
+afinpxi999,afinpxi999,unknown,-1,upper_hierarchy_layer,0
+aflciri992,aflciri992,unknown,-1,upper_hierarchy_layer,0
+agninci992,agninci992,unknown,-1,upper_hierarchy_layer,0
+agsmhni999,Average Government Social Support (All Population),Development,5,generic_population_aggregate,560
+agvacoi992,agvacoi992,unknown,-1,upper_hierarchy_layer,0
+agvahni999,agvahni999,unknown,-1,upper_hierarchy_layer,0
+agvatoi999,agvatoi999,unknown,-1,upper_hierarchy_layer,0
+agwhoui992,agwhoui992,unknown,-1,upper_hierarchy_layer,0
+ansrgoi999,ansrgoi999,unknown,-1,upper_hierarchy_layer,0
+aprgnpi999,aprgnpi999,unknown,-1,upper_hierarchy_layer,0
+aptfhri992,aptfhri992,unknown,-1,upper_hierarchy_layer,0
+aptfhri999,aptfhri999,unknown,-1,upper_hierarchy_layer,0
+aptfori999,aptfori999,unknown,-1,upper_hierarchy_layer,0
+aptincj999,aptincj999,unknown,-1,upper_hierarchy_layer,0
+apweqii999,apweqii999,unknown,-1,upper_hierarchy_layer,0
+apwhoui992,apwhoui992,unknown,-1,upper_hierarchy_layer,0
+asaggoi992,Adult Social Security Coverage,Development,5,label_coverage_metric,420
+asavhoi999,Average Social Wealth Share (All Groups),Development,5,generic_population_aggregate,420
+ascgnxi992,ascgnxi992,unknown,-1,upper_hierarchy_layer,0
+ascrpxi999,ascrpxi999,unknown,-1,upper_hierarchy_layer,0
+asprgoi999,Average Social Program Coverage,Development,5,label_coverage_metric,1400
+atgnmxi992,atgnmxi992,unknown,-1,upper_hierarchy_layer,0
+atgnmxi999,atgnmxi999,unknown,-1,upper_hierarchy_layer,0
+atsvpxi999,atsvpxi999,unknown,-1,upper_hierarchy_layer,0
+br_newconst,br_newconst,unknown,-1,upper_hierarchy_layer,0
+ciri_speech,ciri_speech,unknown,-1,upper_hierarchy_layer,0
+coarse_1,Aging Population Demographics,Health,2,non_indicator_hierarchy_node,0
+coarse_10,Teacher Availability & Distribution,Education,2,non_indicator_hierarchy_node,0
+coarse_11,Government Spending & Public Finance,Economic,2,non_indicator_hierarchy_node,0
+coarse_12,Household Income and Consumption,Economic,2,non_indicator_hierarchy_node,0
+coarse_13,Economic Vulnerability & Aid Dependence,Economic,2,non_indicator_hierarchy_node,0
+coarse_14,Trade Flows & Exchange Rates,Economic,2,non_indicator_hierarchy_node,0
+coarse_15,Personal Care & Household Services,Economic,2,non_indicator_hierarchy_node,0
+coarse_16,Wealth Distribution & Economic Freedom,Economic,2,non_indicator_hierarchy_node,0
+coarse_17,Political Representation & Access,Economic,2,non_indicator_hierarchy_node,0
+coarse_18,Women's Rights and Empowerment,Economic,2,non_indicator_hierarchy_node,0
+coarse_19,Pre-Tax Income Distribution,Economic,2,non_indicator_hierarchy_node,0
+coarse_2,Educational Attainment and Access,Health,2,non_indicator_hierarchy_node,0
+coarse_20,Resource Distribution & Worker Share,Economic,2,non_indicator_hierarchy_node,0
+coarse_21,Violence Prevention & Conflict Resolution,Security,2,non_indicator_hierarchy_node,0
+coarse_22,Military Spending & Defense Investment,Security,2,non_indicator_hierarchy_node,0
+coarse_23,Political Stability & Democratic Governance,Security,2,non_indicator_hierarchy_node,0
+coarse_24,Personal Security & Violence Protection,Security,2,non_indicator_hierarchy_node,0
+coarse_25,Government Safety Services Expenditure,Security,2,non_indicator_hierarchy_node,0
+coarse_26,Civil Society Participation & Rights,Governance,2,non_indicator_hierarchy_node,0
+coarse_27,Media Freedom & Independence,Governance,2,non_indicator_hierarchy_node,0
+coarse_28,Political Systems & Electoral Processes,Governance,2,non_indicator_hierarchy_node,0
+coarse_29,Government Integrity & Consultation,Governance,2,non_indicator_hierarchy_node,0
+coarse_3,Population Health Investment & Outcomes,Health,2,non_indicator_hierarchy_node,0
+coarse_30,Democratic Quality & Deliberation,Governance,2,non_indicator_hierarchy_node,0
+coarse_31,Economic Activity & Environmental Impact,Development,2,non_indicator_hierarchy_node,0
+coarse_32,National Wealth & Defense Investment,Development,2,non_indicator_hierarchy_node,0
+coarse_33,Institutional Capacity & Funding,Development,2,non_indicator_hierarchy_node,0
+coarse_34,Wealth Distribution Across Demographics,Development,2,non_indicator_hierarchy_node,0
+coarse_35,Market Access & Consumption,Development,2,non_indicator_hierarchy_node,0
+coarse_36,International Trade & Services Economy,Economic,2,non_indicator_hierarchy_node,0
+coarse_37,Human Capital Value Measurement,Economic,2,non_indicator_hierarchy_node,0
+coarse_38,Income Sources & Benefits,Economic,2,non_indicator_hierarchy_node,0
+coarse_39,Democratic Participation & Governance Quality,Economic,2,non_indicator_hierarchy_node,0
+coarse_4,Child and Youth Population,Health,2,non_indicator_hierarchy_node,0
+coarse_40,Workforce Skills & Training Development,Economic,2,non_indicator_hierarchy_node,0
+coarse_41,Energy Consumption & Environmental Impact,Environment,2,non_indicator_hierarchy_node,0
+coarse_42,Water Resources & Agricultural Productivity,Environment,2,non_indicator_hierarchy_node,0
+coarse_43,Employment & Labor Force Participation,Environment,2,non_indicator_hierarchy_node,0
+coarse_44,Market-Based Environmental Solutions,Environment,2,non_indicator_hierarchy_node,0
+coarse_45,Environmental Protection & Conservation,Environment,2,non_indicator_hierarchy_node,0
+coarse_5,Population Growth & Demographics,Health,2,non_indicator_hierarchy_node,0
+coarse_6,Educational Access and Attainment,Education,2,non_indicator_hierarchy_node,0
+coarse_7,School Enrollment and Access,Education,2,non_indicator_hierarchy_node,0
+coarse_8,Educational Completion Across Demographics,Education,2,non_indicator_hierarchy_node,0
+coarse_9,Education System Structure & Delivery,Education,2,non_indicator_hierarchy_node,0
+e_democracy_breakdowns,e_democracy_breakdowns,unknown,-1,upper_hierarchy_layer,0
+e_pop,Total Population,Health,5,population_bucket_proxy,420
+e_v2x_civlib_4C,e_v2x_civlib_4C,unknown,-1,upper_hierarchy_layer,0
+e_v2x_jucon_5C,e_v2x_jucon_5C,unknown,-1,upper_hierarchy_layer,0
+e_v2x_mpi_4C,e_v2x_mpi_4C,unknown,-1,upper_hierarchy_layer,0
+e_v2xcl_rol_5C,e_v2xcl_rol_5C,unknown,-1,upper_hierarchy_layer,0
+e_v2xeg_eqprotec_5C,e_v2xeg_eqprotec_5C,unknown,-1,upper_hierarchy_layer,0
+eofcari999,External Trade Output (All Population),Environment,4,generic_population_aggregate,280
+exp,exp,unknown,-1,upper_hierarchy_layer,0
+extensive,extensive,unknown,-1,upper_hierarchy_layer,0
+fao_lucrop,fao_lucrop,unknown,-1,upper_hierarchy_layer,0
+fine_1,Male Survival Rates,Health,3,non_indicator_hierarchy_node,0
+fine_100,Gender Political Equality,Security,3,non_indicator_hierarchy_node,0
+fine_101,Violence Prevention Systems,Security,3,non_indicator_hierarchy_node,0
+fine_102,Violence Prevention & Safety,Security,3,non_indicator_hierarchy_node,0
+fine_103,Workplace Safety Standards,Security,3,non_indicator_hierarchy_node,0
+fine_104,Federal Safety Services Spending,Security,3,non_indicator_hierarchy_node,0
+fine_105,Government Safety Operations,Security,3,non_indicator_hierarchy_node,0
+fine_106,Government Safety Spending,Security,3,non_indicator_hierarchy_node,0
+fine_107,Democratic Freedoms & Assembly,Governance,3,non_indicator_hierarchy_node,0
+fine_108,Civil Liberties Protection,Governance,3,non_indicator_hierarchy_node,0
+fine_109,Civil Society Autonomy,Governance,3,non_indicator_hierarchy_node,0
+fine_11,HIV Treatment & Prevention,Health,3,non_indicator_hierarchy_node,0
+fine_110,Civil Society Freedom,Governance,3,non_indicator_hierarchy_node,0
+fine_111,Political Repression & Dissent,Governance,3,non_indicator_hierarchy_node,0
+fine_112,Media Opposition & Criticism,Governance,3,non_indicator_hierarchy_node,0
+fine_113,Media Bias & Neutrality,Governance,3,non_indicator_hierarchy_node,0
+fine_114,Social Media Regulation,Governance,3,non_indicator_hierarchy_node,0
+fine_115,Social Media Regulation,Governance,3,non_indicator_hierarchy_node,0
+fine_116,Social Media Political Environment,Governance,3,non_indicator_hierarchy_node,0
+fine_117,Local Electoral Integrity,Governance,3,non_indicator_hierarchy_node,0
+fine_118,Electoral Integrity & Peace,Governance,3,non_indicator_hierarchy_node,0
+fine_119,Political Party Organization,Governance,3,non_indicator_hierarchy_node,0
+fine_12,Population Dynamics & Structure,Health,3,non_indicator_hierarchy_node,0
+fine_120,Political Party Classification,Governance,3,non_indicator_hierarchy_node,0
+fine_121,Political Regime Transitions,Governance,3,non_indicator_hierarchy_node,0
+fine_122,Judicial Independence & Accountability,Governance,3,non_indicator_hierarchy_node,0
+fine_123,Democratic Deliberation Quality,Governance,3,non_indicator_hierarchy_node,0
+fine_124,Political Group Dynamics,Governance,3,non_indicator_hierarchy_node,0
+fine_125,Legislative Transparency & Accountability,Governance,3,non_indicator_hierarchy_node,0
+fine_126,Executive Corruption & Bribery,Governance,3,non_indicator_hierarchy_node,0
+fine_127,Inclusive Democracy & Representation,Governance,3,non_indicator_hierarchy_node,0
+fine_128,Electoral Fairness & Participation,Governance,3,non_indicator_hierarchy_node,0
+fine_129,Liberal Democratic Institutions,Governance,3,non_indicator_hierarchy_node,0
+fine_13,Health Investment & Longevity,Health,3,non_indicator_hierarchy_node,0
+fine_130,Local Democratic Deliberation,Governance,3,non_indicator_hierarchy_node,0
+fine_131,Digital Connectivity & Migration,Development,3,non_indicator_hierarchy_node,0
+fine_132,Energy Production & Emissions,Development,3,non_indicator_hierarchy_node,0
+fine_133,Global Trade Connectivity,Development,3,non_indicator_hierarchy_node,0
+fine_134,Economic Output & Production,Development,3,non_indicator_hierarchy_node,0
+fine_135,Foreign Exchange & Trade Balance,Development,3,non_indicator_hierarchy_node,0
+fine_136,Per Capita Defense Spending,Development,3,non_indicator_hierarchy_node,0
+fine_137,Comprehensive Wealth Accumulation,Development,3,non_indicator_hierarchy_node,0
+fine_138,Price Stability & Inflation,Development,3,non_indicator_hierarchy_node,0
+fine_139,Average Income Levels,Development,3,non_indicator_hierarchy_node,0
+fine_14,Early Childhood Female Population,Health,3,non_indicator_hierarchy_node,0
+fine_140,Foreign Investment Flows,Development,3,non_indicator_hierarchy_node,0
+fine_141,Financial Governance Systems,Development,3,non_indicator_hierarchy_node,0
+fine_142,Government Resources & Legitimacy,Development,3,non_indicator_hierarchy_node,0
+fine_143,Electoral Integrity & Competition,Development,3,non_indicator_hierarchy_node,0
+fine_144,Financial Access & Business Development,Development,3,non_indicator_hierarchy_node,0
+fine_145,Adult Average Wealth,Development,3,non_indicator_hierarchy_node,0
+fine_146,Social Wealth Distribution,Development,3,non_indicator_hierarchy_node,0
+fine_147,Average Income Distribution,Development,3,non_indicator_hierarchy_node,0
+fine_148,Government Wealth Distribution,Development,3,non_indicator_hierarchy_node,0
+fine_149,Average Wealth Distribution,Development,3,non_indicator_hierarchy_node,0
+fine_15,Early Male Childhood Population,Health,3,non_indicator_hierarchy_node,0
+fine_150,Market Consumption Levels,Development,3,non_indicator_hierarchy_node,0
+fine_151,Market Integration Networks,Development,3,non_indicator_hierarchy_node,0
+fine_152,Market Size & Coverage,Development,3,non_indicator_hierarchy_node,0
+fine_153,Foreign Investment Flows,Economic,3,non_indicator_hierarchy_node,0
+fine_154,Trade-Driven Service Economy,Economic,3,non_indicator_hierarchy_node,0
+fine_155,Personal Remittances Flow,Economic,3,non_indicator_hierarchy_node,0
+fine_156,Merchandise Trade Patterns,Economic,3,non_indicator_hierarchy_node,0
+fine_157,Women's Economic Empowerment,Economic,3,non_indicator_hierarchy_node,0
+fine_158,Self Employment Rates,Economic,3,non_indicator_hierarchy_node,0
+fine_159,Gender Equity Policies,Economic,3,non_indicator_hierarchy_node,0
+fine_16,Young Adult Males,Health,3,non_indicator_hierarchy_node,0
+fine_160,Human Capital Monetary Value,Economic,3,non_indicator_hierarchy_node,0
+fine_161,Self-Employment & Labor Income,Economic,3,non_indicator_hierarchy_node,0
+fine_162,Retirement Income Security,Economic,3,non_indicator_hierarchy_node,0
+fine_163,Economic Productivity & Earnings,Economic,3,non_indicator_hierarchy_node,0
+fine_164,Private Income Trends,Economic,3,non_indicator_hierarchy_node,0
+fine_165,Electoral Democracy & Participation,Economic,3,non_indicator_hierarchy_node,0
+fine_166,Executive Corruption Control,Economic,3,non_indicator_hierarchy_node,0
+fine_167,Executive Corruption & Theft,Economic,3,non_indicator_hierarchy_node,0
+fine_168,Political Participation & Inclusion,Economic,3,non_indicator_hierarchy_node,0
+fine_169,Skills Training Program Quality,Economic,3,non_indicator_hierarchy_node,0
+fine_17,Young Male Population,Health,3,non_indicator_hierarchy_node,0
+fine_170,Professional Skills Training,Economic,3,non_indicator_hierarchy_node,0
+fine_171,Workforce Skills Alignment,Economic,3,non_indicator_hierarchy_node,0
+fine_172,Skills Training Programs,Economic,3,non_indicator_hierarchy_node,0
+fine_173,Capital Asset Valuation,Environment,3,non_indicator_hierarchy_node,0
+fine_174,Energy Sector Emissions,Environment,3,non_indicator_hierarchy_node,0
+fine_175,Renewable Natural Capital,Environment,3,non_indicator_hierarchy_node,0
+fine_176,Economic Consumption & Resource Depletion,Environment,3,non_indicator_hierarchy_node,0
+fine_177,Energy Production & Consumption,Environment,3,non_indicator_hierarchy_node,0
+fine_178,Adaptive Capacity & Resilience,Environment,3,non_indicator_hierarchy_node,0
+fine_179,Resource Management & Health,Environment,3,non_indicator_hierarchy_node,0
+fine_18,Rural Population Distribution,Health,3,non_indicator_hierarchy_node,0
+fine_180,Water Management Efficiency,Environment,3,non_indicator_hierarchy_node,0
+fine_181,Educational Development & Centralization,Environment,3,non_indicator_hierarchy_node,0
+fine_182,Agricultural Water Management,Environment,3,non_indicator_hierarchy_node,0
+fine_183,Education-Based Labor Participation,Environment,3,non_indicator_hierarchy_node,0
+fine_184,Employment Quality & Security,Environment,3,non_indicator_hierarchy_node,0
+fine_185,Population Growth & Demographics,Environment,3,non_indicator_hierarchy_node,0
+fine_186,Gender Employment Ratios,Environment,3,non_indicator_hierarchy_node,0
+fine_187,Employment Sector Distribution,Environment,3,non_indicator_hierarchy_node,0
+fine_188,Middle Income Environmental Markets,Environment,3,non_indicator_hierarchy_node,0
+fine_189,Market Social Outcomes,Environment,3,non_indicator_hierarchy_node,0
+fine_19,Total Population Size,Health,3,non_indicator_hierarchy_node,0
+fine_190,Market-Driven Investment Flows,Environment,3,non_indicator_hierarchy_node,0
+fine_191,Environmental Output Performance,Environment,3,non_indicator_hierarchy_node,0
+fine_192,Market Industry Development,Environment,3,non_indicator_hierarchy_node,0
+fine_193,Environmental Quality Monitoring,Environment,3,non_indicator_hierarchy_node,0
+fine_194,Environmental Monitoring & Assessment,Environment,3,non_indicator_hierarchy_node,0
+fine_195,Environmental Monitoring & Assessment,Environment,3,non_indicator_hierarchy_node,0
+fine_196,Environmental Monitoring & Assessment,Environment,3,non_indicator_hierarchy_node,0
+fine_2,Gender Age Distribution,Health,3,non_indicator_hierarchy_node,0
+fine_20,Population Size Metrics,Health,3,non_indicator_hierarchy_node,0
+fine_21,Household Population Size,Health,3,non_indicator_hierarchy_node,0
+fine_22,Individual Population Size,Health,3,non_indicator_hierarchy_node,0
+fine_23,Educational Equity & Outcomes,Education,3,non_indicator_hierarchy_node,0
+fine_24,Youth Literacy Equity,Education,3,non_indicator_hierarchy_node,0
+fine_25,Educational Completion Levels,Education,3,non_indicator_hierarchy_node,0
+fine_26,Age-Specific Population Demographics,Education,3,non_indicator_hierarchy_node,0
+fine_27,Young Adult Primary Participation,Education,3,non_indicator_hierarchy_node,0
+fine_28,Female Education Investment,Education,3,non_indicator_hierarchy_node,0
+fine_29,Out-of-School Children,Education,3,non_indicator_hierarchy_node,0
+fine_3,Age Group Demographics,Health,3,non_indicator_hierarchy_node,0
+fine_30,Vocational Education Access,Education,3,non_indicator_hierarchy_node,0
+fine_31,Primary and Tertiary Enrollment,Education,3,non_indicator_hierarchy_node,0
+fine_32,Academic Achievement Levels,Education,3,non_indicator_hierarchy_node,0
+fine_33,Educational Attainment Rates,Education,3,non_indicator_hierarchy_node,0
+fine_34,Educational Equity Gaps,Education,3,non_indicator_hierarchy_node,0
+fine_35,Rural Educational Completion,Education,3,non_indicator_hierarchy_node,0
+fine_36,Urban Educational Achievement,Education,3,non_indicator_hierarchy_node,0
+fine_37,Educational Wealth Equity,Education,3,non_indicator_hierarchy_node,0
+fine_38,Educational Diversity & Displacement,Education,3,non_indicator_hierarchy_node,0
+fine_39,Education Autonomy & Ideology,Education,3,non_indicator_hierarchy_node,0
+fine_40,Teacher Employment & Organization,Education,3,non_indicator_hierarchy_node,0
+fine_41,Female Tertiary Education Mobility,Education,3,non_indicator_hierarchy_node,0
+fine_42,Freshman Student Engagement,Education,3,non_indicator_hierarchy_node,0
+fine_43,Full-Time Teaching Staff,Education,3,non_indicator_hierarchy_node,0
+fine_44,Teacher Outreach Programs,Education,3,non_indicator_hierarchy_node,0
+fine_45,Educational Support Programs,Education,3,non_indicator_hierarchy_node,0
+fine_46,Lower Secondary Teacher Qualifications,Education,3,non_indicator_hierarchy_node,0
+fine_47,Teacher Gender Parity,Education,3,non_indicator_hierarchy_node,0
+fine_48,Government Consumption Spending,Economic,3,non_indicator_hierarchy_node,0
+fine_49,Public Investment Productivity,Economic,3,non_indicator_hierarchy_node,0
+fine_5,School Support Programs,Health,3,non_indicator_hierarchy_node,0
+fine_50,Productivity and Efficiency,Economic,3,non_indicator_hierarchy_node,0
+fine_51,Government Consumption Expenditure,Economic,3,non_indicator_hierarchy_node,0
+fine_52,Household Consumption Patterns,Economic,3,non_indicator_hierarchy_node,0
+fine_53,Investment and Capital Returns,Economic,3,non_indicator_hierarchy_node,0
+fine_54,Resource Efficiency & Education Access,Economic,3,non_indicator_hierarchy_node,0
+fine_55,Financial Credit Access,Economic,3,non_indicator_hierarchy_node,0
+fine_56,Government Spending & Media,Economic,3,non_indicator_hierarchy_node,0
+fine_57,Foreign Aid Flows,Economic,3,non_indicator_hierarchy_node,0
+fine_58,External Financial Flows,Economic,3,non_indicator_hierarchy_node,0
+fine_59,National Income Measures,Economic,3,non_indicator_hierarchy_node,0
+fine_6,Male Educational Participation,Health,3,non_indicator_hierarchy_node,0
+fine_60,Refugee Displacement Burden,Economic,3,non_indicator_hierarchy_node,0
+fine_61,Currency Valuation & Purchasing Power,Economic,3,non_indicator_hierarchy_node,0
+fine_62,Domestic Economic Performance,Economic,3,non_indicator_hierarchy_node,0
+fine_63,Merchandise Trade Composition,Economic,3,non_indicator_hierarchy_node,0
+fine_64,Trade Openness Shares,Economic,3,non_indicator_hierarchy_node,0
+fine_65,Personal Grooming Services,Economic,3,non_indicator_hierarchy_node,0
+fine_66,Personal Grooming Services,Economic,3,non_indicator_hierarchy_node,0
+fine_67,Personal Hygiene & Beauty,Economic,3,non_indicator_hierarchy_node,0
+fine_68,Personal Hygiene Services,Economic,3,non_indicator_hierarchy_node,0
+fine_69,Personal Grooming Services,Economic,3,non_indicator_hierarchy_node,0
+fine_7,Female Educational Progression,Health,3,non_indicator_hierarchy_node,0
+fine_70,Wealth Taxation & Accumulation,Economic,3,non_indicator_hierarchy_node,0
+fine_71,Government Wealth Concentration,Economic,3,non_indicator_hierarchy_node,0
+fine_72,Individual Wealth Accumulation,Economic,3,non_indicator_hierarchy_node,0
+fine_73,Individual Enterprise Freedom,Economic,3,non_indicator_hierarchy_node,0
+fine_74,Wage Policy Implementation,Economic,3,non_indicator_hierarchy_node,0
+fine_75,Political Equality Assessment,Economic,3,non_indicator_hierarchy_node,0
+fine_76,Political Equality Dimensions,Economic,3,non_indicator_hierarchy_node,0
+fine_77,Political Power Distribution,Economic,3,non_indicator_hierarchy_node,0
+fine_78,Opposition Group Representation,Economic,3,non_indicator_hierarchy_node,0
+fine_79,Legal Gender Equality,Economic,3,non_indicator_hierarchy_node,0
+fine_8,Post-Secondary Education Access,Health,3,non_indicator_hierarchy_node,0
+fine_80,Female Educational Attainment,Economic,3,non_indicator_hierarchy_node,0
+fine_81,Human Development Progress,Economic,3,non_indicator_hierarchy_node,0
+fine_82,Government Revenue Collection,Economic,3,non_indicator_hierarchy_node,0
+fine_83,Pre-Tax Income Levels,Economic,3,non_indicator_hierarchy_node,0
+fine_84,Tax Burden Distribution,Economic,3,non_indicator_hierarchy_node,0
+fine_85,Government Tax Revenue,Economic,3,non_indicator_hierarchy_node,0
+fine_86,Average Pre-Tax Income,Economic,3,non_indicator_hierarchy_node,0
+fine_87,Adult Income Distribution,Economic,3,non_indicator_hierarchy_node,0
+fine_88,Labor Income Share,Economic,3,non_indicator_hierarchy_node,0
+fine_89,Individual Income Components,Economic,3,non_indicator_hierarchy_node,0
+fine_9,Maternal and Infant Mortality,Health,3,non_indicator_hierarchy_node,0
+fine_90,Individual Compensation Levels,Economic,3,non_indicator_hierarchy_node,0
+fine_91,Domestic Violence Legislation,Security,3,non_indicator_hierarchy_node,0
+fine_92,Armed Conflict Dynamics,Security,3,non_indicator_hierarchy_node,0
+fine_93,Homicide Prevention & Safety,Security,3,non_indicator_hierarchy_node,0
+fine_94,Child Militarization Practices,Security,3,non_indicator_hierarchy_node,0
+fine_95,Military Budget Allocation,Security,3,non_indicator_hierarchy_node,0
+fine_96,Military Capacity & Arms Trade,Security,3,non_indicator_hierarchy_node,0
+fine_97,Electoral Peace & Democracy,Security,3,non_indicator_hierarchy_node,0
+fine_98,Political Opposition & Displacement,Security,3,non_indicator_hierarchy_node,0
+fine_99,Legislative Oversight & Participation,Security,3,non_indicator_hierarchy_node,0
+gain_gov,gain_gov,unknown,-1,upper_hierarchy_layer,0
+gap_index,gap_index,unknown,-1,upper_hierarchy_layer,0
+gol_inst,gol_inst,unknown,-1,upper_hierarchy_layer,0
+gpcr_eci,gpcr_eci,unknown,-1,upper_hierarchy_layer,0
+group_10,TB-HIV Coinfection Management,Health,4,hierarchy_group_id,0
+group_100,Teacher Qualification Rates,Education,4,hierarchy_group_id,0
+group_101,Qualified Teacher Parity,Education,4,hierarchy_group_id,0
+group_102,Teacher Gender Balance,Education,4,hierarchy_group_id,0
+group_103,Government Purchasing Power Parity,Economic,4,hierarchy_group_id,0
+group_104,Government Spending Efficiency,Economic,4,hierarchy_group_id,0
+group_105,Government Construction Spending,Economic,4,hierarchy_group_id,0
+group_106,Capital Productivity & Efficiency,Economic,4,hierarchy_group_id,0
+group_107,Human Capital Investment,Economic,4,hierarchy_group_id,0
+group_108,Government Service Delivery,Economic,4,hierarchy_group_id,0
+group_109,Purchasing Power & Income,Economic,4,hierarchy_group_id,0
+group_11,HIV Clinical Outcomes,Health,4,hierarchy_group_id,0
+group_110,Consumption and Savings Patterns,Economic,4,hierarchy_group_id,0
+group_111,Government Household Income,Economic,4,hierarchy_group_id,0
+group_112,Social Security Benefits,Economic,4,hierarchy_group_id,0
+group_113,Investment Climate & Taxation,Economic,4,hierarchy_group_id,0
+group_114,Capital Asset Returns,Economic,4,hierarchy_group_id,0
+group_115,Capital Productivity & Efficiency,Economic,4,hierarchy_group_id,0
+group_116,Individual Property Returns,Economic,4,hierarchy_group_id,0
+group_117,Capital Income Taxation,Economic,4,hierarchy_group_id,0
+group_118,Female Education Costs,Economic,4,hierarchy_group_id,0
+group_119,Primary School Entry,Economic,4,hierarchy_group_id,0
+group_12,Population Change & Migration,Health,4,hierarchy_group_id,0
+group_120,National Income Levels,Economic,4,hierarchy_group_id,0
+group_121,Financial Infrastructure Development,Economic,4,hierarchy_group_id,0
+group_122,Private Sector Credit,Economic,4,hierarchy_group_id,0
+group_123,Credit Registration & Documentation,Economic,4,hierarchy_group_id,0
+group_124,Executive Power Concentration,Economic,4,hierarchy_group_id,0
+group_125,Government Corruption & Transparency,Economic,4,hierarchy_group_id,0
+group_126,Legislative Transparency & Administration,Economic,4,hierarchy_group_id,0
+group_127,State Accountability & Transparency,Economic,4,hierarchy_group_id,0
+group_128,Bilateral Donor Contributions,Economic,4,hierarchy_group_id,0
+group_129,Bilateral Donor Contributions,Economic,4,hierarchy_group_id,0
+group_13,Reproductive Health & Planning,Health,4,hierarchy_group_id,0
+group_130,Official Development Assistance,Economic,4,hierarchy_group_id,0
+group_131,Foreign Direct Investment,Economic,4,hierarchy_group_id,0
+group_132,Development Aid Flows,Economic,4,hierarchy_group_id,0
+group_133,PPP Exchange Rate Analysis,Economic,4,hierarchy_group_id,0
+group_134,Currency Exchange Dynamics,Economic,4,hierarchy_group_id,0
+group_135,Productivity and Price Competitiveness,Economic,4,hierarchy_group_id,0
+group_136,Domestic Consumption & Pricing,Economic,4,hierarchy_group_id,0
+group_137,Import Source Geography,Economic,4,hierarchy_group_id,0
+group_138,Goods Import Values,Economic,4,hierarchy_group_id,0
+group_139,Hair & Beauty Services,Economic,4,hierarchy_group_id,0
+group_14,Institutional Stability & Education,Health,4,hierarchy_group_id,0
+group_140,Beauty & Hair Services,Economic,4,hierarchy_group_id,0
+group_141,Hair Care Services,Economic,4,hierarchy_group_id,0
+group_142,Beauty Salon Services,Economic,4,hierarchy_group_id,0
+group_143,Personal Care Products,Economic,4,hierarchy_group_id,0
+group_144,Hair & Skincare Products,Economic,4,hierarchy_group_id,0
+group_145,Hair Care Products,Economic,4,hierarchy_group_id,0
+group_146,Personal Care Services,Economic,4,hierarchy_group_id,0
+group_147,Hair & Beauty Services,Economic,4,hierarchy_group_id,0
+group_148,Financial Asset Composition,Economic,4,hierarchy_group_id,0
+group_149,Wealth Distribution Policy,Economic,4,hierarchy_group_id,0
+group_15,Life Expectancy Outcomes,Health,4,hierarchy_group_id,0
+group_150,Government Economic Control,Economic,4,hierarchy_group_id,0
+group_151,Individual Wealth Distribution,Economic,4,hierarchy_group_id,0
+group_152,Real Estate Wealth,Economic,4,hierarchy_group_id,0
+group_153,Socioeconomic Political Representation,Economic,4,hierarchy_group_id,0
+group_154,Political Equality Dimensions,Economic,4,hierarchy_group_id,0
+group_155,Social Political Participation,Economic,4,hierarchy_group_id,0
+group_156,Gender Political Equality,Economic,4,hierarchy_group_id,0
+group_157,Political Equality Measurement,Economic,4,hierarchy_group_id,0
+group_158,Political Representation Equality,Economic,4,hierarchy_group_id,0
+group_159,Political Power Distribution,Economic,4,hierarchy_group_id,0
+group_16,Per Capita Health Spending,Health,4,hierarchy_group_id,0
+group_160,Political Equality Measurement,Economic,4,hierarchy_group_id,0
+group_161,Political Equality Measures,Economic,4,hierarchy_group_id,0
+group_162,Economic Rights Equality,Economic,4,hierarchy_group_id,0
+group_163,Adult Female Education Access,Economic,4,hierarchy_group_id,0
+group_164,Senior Female Education,Economic,4,hierarchy_group_id,0
+group_165,Government Revenue Capacity,Economic,4,hierarchy_group_id,0
+group_166,Personal Income Taxation,Economic,4,hierarchy_group_id,0
+group_167,Individual Income Distribution,Economic,4,hierarchy_group_id,0
+group_168,Average Pre-Tax Earnings,Economic,4,hierarchy_group_id,0
+group_169,Tax Income Burden,Economic,4,hierarchy_group_id,0
+group_17,Infant Female Population,Health,4,hierarchy_group_id,0
+group_170,Goods Tax Burden,Economic,4,hierarchy_group_id,0
+group_171,Tax Revenue Sources,Economic,4,hierarchy_group_id,0
+group_172,Government Tax Collection,Economic,4,hierarchy_group_id,0
+group_173,Average Pretax Income,Economic,4,hierarchy_group_id,0
+group_174,Adult Pre-Tax Earnings,Economic,4,hierarchy_group_id,0
+group_175,Adult Disposable Income Ratios,Economic,4,hierarchy_group_id,0
+group_176,Mixed Income Levels,Economic,4,hierarchy_group_id,0
+group_177,Individual Social Income,Economic,4,hierarchy_group_id,0
+group_178,Personal Income Levels,Economic,4,hierarchy_group_id,0
+group_179,Mixed Compensation Structures,Economic,4,hierarchy_group_id,0
+group_18,School Age Female Population,Health,4,hierarchy_group_id,0
+group_180,Armed Conflict Leadership Patterns,Security,4,hierarchy_group_id,0
+group_181,Electoral Violence Prevention,Security,4,hierarchy_group_id,0
+group_182,Civil Society Participation,Governance,4,hierarchy_group_id,0
+group_183,Civil Society Engagement,Governance,4,hierarchy_group_id,0
+group_184,Civil Society Strength,Governance,4,hierarchy_group_id,0
+group_185,Civil Society Engagement,Governance,4,hierarchy_group_id,0
+group_186,Civil Society Participation,Governance,4,hierarchy_group_id,0
+group_187,Civil Liberties Assessment,Governance,4,hierarchy_group_id,0
+group_188,Property Rights & Justice,Governance,4,hierarchy_group_id,0
+group_189,Civil Rights Protections,Governance,4,hierarchy_group_id,0
+group_19,Total Population Count,Health,4,hierarchy_group_id,0
+group_190,Social Group Civil Rights,Governance,4,hierarchy_group_id,0
+group_191,Civil Society Freedoms,Governance,4,hierarchy_group_id,0
+group_192,Civil Society Movement Freedom,Governance,4,hierarchy_group_id,0
+group_193,Civil Society Organization Freedom,Governance,4,hierarchy_group_id,0
+group_194,Civil Liberties Protection,Governance,4,hierarchy_group_id,0
+group_195,Political Prisoners & Disappearances,Governance,4,hierarchy_group_id,0
+group_196,Media Criticism Measurement,Governance,4,hierarchy_group_id,0
+group_197,Media Integrity & Independence,Governance,4,hierarchy_group_id,0
+group_198,Media Patriotism & State Control,Governance,4,hierarchy_group_id,0
+group_199,Media Bias Assessment,Governance,4,hierarchy_group_id,0
+group_2,Older Male Population,Health,4,hierarchy_group_id,0
+group_20,Total Population Count,Health,4,hierarchy_group_id,0
+group_200,Media Political Polarization,Governance,4,hierarchy_group_id,0
+group_201,Social Media Freedom,Governance,4,hierarchy_group_id,0
+group_202,Legal Protection Measures,Governance,4,hierarchy_group_id,0
+group_203,Social Media Regulatory Framework,Governance,4,hierarchy_group_id,0
+group_204,Social Media Harassment Monitoring,Governance,4,hierarchy_group_id,0
+group_205,Government Social Media Control,Governance,4,hierarchy_group_id,0
+group_206,Social Media Non-Compliance,Governance,4,hierarchy_group_id,0
+group_207,Government Social Media Oversight,Governance,4,hierarchy_group_id,0
+group_208,Political Capacity & Hate,Governance,4,hierarchy_group_id,0
+group_209,Social Media Governance Control,Governance,4,hierarchy_group_id,0
+group_210,Organizational Political Engagement,Governance,4,hierarchy_group_id,0
+group_211,Social Media Campaign Regulation,Governance,4,hierarchy_group_id,0
+group_212,Government Social Media Control,Governance,4,hierarchy_group_id,0
+group_213,Electoral Process Quality,Governance,4,hierarchy_group_id,0
+group_214,Local Election Authority,Governance,4,hierarchy_group_id,0
+group_215,Electoral Campaign Standards,Governance,4,hierarchy_group_id,0
+group_216,Electoral Response Participation,Governance,4,hierarchy_group_id,0
+group_217,Electoral Participation Response,Governance,4,hierarchy_group_id,0
+group_218,Peaceful Electoral Processes,Governance,4,hierarchy_group_id,0
+group_219,Electoral Legitimacy & Stability,Governance,4,hierarchy_group_id,0
+group_22,Geographic Educational Equity,Education,4,hierarchy_group_id,0
+group_220,Electoral Misconduct & Violations,Governance,4,hierarchy_group_id,0
+group_221,Democratic Governance Quality,Governance,4,hierarchy_group_id,0
+group_222,National Party Participation,Governance,4,hierarchy_group_id,0
+group_223,Party Cohesion Measurement,Governance,4,hierarchy_group_id,0
+group_224,Party Structure Completeness,Governance,4,hierarchy_group_id,0
+group_225,Party Ban Measures,Governance,4,hierarchy_group_id,0
+group_226,Bantar Party Support,Governance,4,hierarchy_group_id,0
+group_227,Political Transition Patterns,Governance,4,hierarchy_group_id,0
+group_228,Political Transition Indicators,Governance,4,hierarchy_group_id,0
+group_229,Political Surge Performance,Governance,4,hierarchy_group_id,0
+group_23,Lower Secondary Education Parity,Education,4,hierarchy_group_id,0
+group_230,Judicial Oversight & Compensation,Governance,4,hierarchy_group_id,0
+group_231,Judicial Compliance Measures,Governance,4,hierarchy_group_id,0
+group_232,Judicial Reform Efforts,Governance,4,hierarchy_group_id,0
+group_233,Corruption and Legal Standards,Governance,4,hierarchy_group_id,0
+group_234,Deliberative Consultation and Reasoning,Governance,4,hierarchy_group_id,0
+group_235,Inclusive Deliberative Processes,Governance,4,hierarchy_group_id,0
+group_236,Deliberative Process Inclusivity,Governance,4,hierarchy_group_id,0
+group_237,Political Group Importance Assessment,Governance,4,hierarchy_group_id,0
+group_238,Regime Subgroup Structure,Governance,4,hierarchy_group_id,0
+group_239,Opposition Group Activity,Governance,4,hierarchy_group_id,0
+group_24,Educational Access Equity,Education,4,hierarchy_group_id,0
+group_240,Regime Support Attitudes,Governance,4,hierarchy_group_id,0
+group_241,Regime Support Location,Governance,4,hierarchy_group_id,0
+group_242,Legislative Information Disclosure,Governance,4,hierarchy_group_id,0
+group_243,Legislative Corruption & Service,Governance,4,hierarchy_group_id,0
+group_244,Legislative Oversight Functions,Governance,4,hierarchy_group_id,0
+group_245,Constitutional Social Foundations,Governance,4,hierarchy_group_id,0
+group_246,Executive Legitimacy & Embezzlement,Governance,4,hierarchy_group_id,0
+group_247,Executive Bribery Levels,Governance,4,hierarchy_group_id,0
+group_248,Political System Fragmentation,Governance,4,hierarchy_group_id,0
+group_249,Government Accountability Violations,Governance,4,hierarchy_group_id,0
+group_25,Literacy Parity Across Demographics,Education,4,hierarchy_group_id,0
+group_250,Agricultural Land Corruption,Governance,4,hierarchy_group_id,0
+group_251,Electoral Transparency & Monitoring,Governance,4,hierarchy_group_id,0
+group_252,Democratic Quality & Integrity,Governance,4,hierarchy_group_id,0
+group_253,Democratic Equality & Inclusion,Governance,4,hierarchy_group_id,0
+group_254,Democratic Regime Quality,Governance,4,hierarchy_group_id,0
+group_255,Electoral Process Integrity,Governance,4,hierarchy_group_id,0
+group_256,Liberal Democracy Quality,Governance,4,hierarchy_group_id,0
+group_257,Political Party Competition,Governance,4,hierarchy_group_id,0
+group_258,Local Election Quality,Governance,4,hierarchy_group_id,0
+group_259,Civil Society Engagement,Governance,4,hierarchy_group_id,0
+group_260,Democratic Deliberation Quality,Governance,4,hierarchy_group_id,0
+group_261,Digital Migration Patterns,Development,4,hierarchy_group_id,0
+group_262,Non-CO2 Energy Emissions,Development,4,hierarchy_group_id,0
+group_264,Electricity Generation Output,Development,4,hierarchy_group_id,0
+group_265,Renewable Energy Resources,Development,4,hierarchy_group_id,0
+group_267,Trade Flow Dynamics,Development,4,hierarchy_group_id,0
+group_268,Transport and Travel Trade,Development,4,hierarchy_group_id,0
+group_269,Trade Flow Volume,Development,4,hierarchy_group_id,0
+group_27,Female Literacy Attainment,Education,4,hierarchy_group_id,0
+group_271,Financial Market Depth,Development,4,hierarchy_group_id,0
+group_272,Price Level Changes,Development,4,hierarchy_group_id,0
+group_273,Government Spending & Expenditure,Development,4,hierarchy_group_id,0
+group_274,Currency Exchange Rates,Development,4,hierarchy_group_id,0
+group_275,External Balance Position,Development,4,hierarchy_group_id,0
+group_276,Educational Mobility Rates,Development,4,hierarchy_group_id,0
+group_277,Telecommunications Infrastructure Access,Development,4,hierarchy_group_id,0
+group_278,Individual Government Spending,Development,4,hierarchy_group_id,0
+group_279,Individual Defense Allocation,Development,4,hierarchy_group_id,0
+group_28,Tertiary Literacy Rates,Education,4,hierarchy_group_id,0
+group_280,Housing Wealth Distribution,Development,4,hierarchy_group_id,0
+group_281,National Wealth Accumulation,Development,4,hierarchy_group_id,0
+group_282,Household Asset Growth,Development,4,hierarchy_group_id,0
+group_283,Government Economic Contribution,Development,4,hierarchy_group_id,0
+group_284,Sectoral Inflation Dynamics,Development,4,hierarchy_group_id,0
+group_285,Average Income Measures,Development,4,hierarchy_group_id,0
+group_286,Income Segment Classification,Development,4,hierarchy_group_id,0
+group_287,Individual Consumption Spending,Development,4,hierarchy_group_id,0
+group_288,Wealth Accumulation Levels,Development,4,hierarchy_group_id,0
+group_289,Foreign Direct Investment Flows,Development,4,hierarchy_group_id,0
+group_29,Educational Attainment Duration,Education,4,hierarchy_group_id,0
+group_290,Financial Regulatory Framework,Development,4,hierarchy_group_id,0
+group_291,Financial Index Performance,Development,4,hierarchy_group_id,0
+group_292,Legislative Capacity & Media Independence,Development,4,hierarchy_group_id,0
+group_293,Government Accountability Standards,Development,4,hierarchy_group_id,0
+group_294,Democratic Legitimacy & Support,Development,4,hierarchy_group_id,0
+group_295,Electoral Competition & Participation,Development,4,hierarchy_group_id,0
+group_296,Electoral Fairness & Freedom,Development,4,hierarchy_group_id,0
+group_297,Adult Wealth Distribution,Development,4,hierarchy_group_id,0
+group_298,Adult Factor Income,Development,4,hierarchy_group_id,0
+group_299,Adult Social Wealth,Development,4,hierarchy_group_id,0
+group_3,Elderly Population Demographics,Health,4,hierarchy_group_id,0
+group_30,Male Educational Attainment,Education,4,hierarchy_group_id,0
+group_300,Average Social Wealth,Development,4,hierarchy_group_id,0
+group_301,Average Income Factors,Development,4,hierarchy_group_id,0
+group_302,Government Wealth Allocation,Development,4,hierarchy_group_id,0
+group_303,Government Income Distribution,Development,4,hierarchy_group_id,0
+group_304,Average Total Wealth,Development,4,hierarchy_group_id,0
+group_305,Average Consumption Levels,Development,4,hierarchy_group_id,0
+group_306,Total Market Consumption,Development,4,hierarchy_group_id,0
+group_307,Market Network Connectivity,Development,4,hierarchy_group_id,0
+group_308,Total Market Coverage,Development,4,hierarchy_group_id,0
+group_309,Foreign Investment Dynamics,Economic,4,hierarchy_group_id,0
+group_31,Primary Education Completion,Education,4,hierarchy_group_id,0
+group_310,Foreign Debt Obligations,Economic,4,hierarchy_group_id,0
+group_311,Trade Labor Integration,Economic,4,hierarchy_group_id,0
+group_312,Banking Sector Development,Economic,4,hierarchy_group_id,0
+group_313,Regional Export Flows,Economic,4,hierarchy_group_id,0
+group_314,Merchandise Trade Volume,Economic,4,hierarchy_group_id,0
+group_315,Human Capital Valuation,Economic,4,hierarchy_group_id,0
+group_316,Human Capital Measurement,Economic,4,hierarchy_group_id,0
+group_318,Individual Employment Income,Economic,4,hierarchy_group_id,0
+group_319,Income Distribution Dynamics,Economic,4,hierarchy_group_id,0
+group_32,Rural Secondary Education,Education,4,hierarchy_group_id,0
+group_320,Retirement Benefit Levels,Economic,4,hierarchy_group_id,0
+group_321,Individual Income Generation,Economic,4,hierarchy_group_id,0
+group_322,Individual Economic Performance,Economic,4,hierarchy_group_id,0
+group_323,Average Private Income,Economic,4,hierarchy_group_id,0
+group_324,Average Private Income,Economic,4,hierarchy_group_id,0
+group_325,Democratic Participation & Suffrage,Economic,4,hierarchy_group_id,0
+group_326,Civil Society Participation,Economic,4,hierarchy_group_id,0
+group_327,Political Voice & Representation,Economic,4,hierarchy_group_id,0
+group_328,Program Implementation Effectiveness,Economic,4,hierarchy_group_id,0
+group_329,Training Completion Rates,Economic,4,hierarchy_group_id,0
+group_33,Lower Secondary Completion,Education,4,hierarchy_group_id,0
+group_330,Workplace Health Safety Training,Economic,4,hierarchy_group_id,0
+group_331,Workforce Skills Development,Economic,4,hierarchy_group_id,0
+group_332,Nonrenewable Resource Wealth,Environment,4,hierarchy_group_id,0
+group_333,Mineral Resource Valuation,Environment,4,hierarchy_group_id,0
+group_334,Industrial Capital Development,Environment,4,hierarchy_group_id,0
+group_335,Produced Capital Wealth,Environment,4,hierarchy_group_id,0
+group_336,Nitrous Oxide Emissions,Environment,4,hierarchy_group_id,0
+group_337,Methane Emissions Sources,Environment,4,hierarchy_group_id,0
+group_338,Industrial Carbon Emissions,Environment,4,hierarchy_group_id,0
+group_339,Forest Ecosystem Services,Environment,4,hierarchy_group_id,0
+group_34,Male Population by Age,Education,4,hierarchy_group_id,0
+group_340,Forest and Fisheries Recreation,Environment,4,hierarchy_group_id,0
+group_341,Agricultural Land Capital,Environment,4,hierarchy_group_id,0
+group_343,Natural Resource Depletion,Environment,4,hierarchy_group_id,0
+group_344,Economic Growth Drivers,Environment,4,hierarchy_group_id,0
+group_345,Consumption Spending & Transfers,Environment,4,hierarchy_group_id,0
+group_346,Oil Market Valuation,Environment,4,hierarchy_group_id,0
+group_347,Renewable Energy Transition,Environment,4,hierarchy_group_id,0
+group_348,Household Energy Supply,Environment,4,hierarchy_group_id,0
+group_349,Fuel Consumption & Imports,Environment,4,hierarchy_group_id,0
+group_35,Young Adult Population,Education,4,hierarchy_group_id,0
+group_350,Economic Readiness & Health,Environment,4,hierarchy_group_id,0
+group_351,Poverty Reduction Progress,Environment,4,hierarchy_group_id,0
+group_352,Forest Resource Access,Environment,4,hierarchy_group_id,0
+group_353,Resource Allocation Capacity,Environment,4,hierarchy_group_id,0
+group_354,Executive Water Leadership,Environment,4,hierarchy_group_id,0
+group_355,Water System Solutions,Environment,4,hierarchy_group_id,0
+group_356,Executive Water Leadership,Environment,4,hierarchy_group_id,0
+group_357,Educational Exclusion & Federalism,Environment,4,hierarchy_group_id,0
+group_358,Democratic Education Integration,Environment,4,hierarchy_group_id,0
+group_359,Educational Quality & Access,Environment,4,hierarchy_group_id,0
+group_36,Working Age Population,Education,4,hierarchy_group_id,0
+group_360,Educational Service Delivery,Environment,4,hierarchy_group_id,0
+group_361,Civil Liberties Protection,Environment,4,hierarchy_group_id,0
+group_362,Agricultural Water Infrastructure,Environment,4,hierarchy_group_id,0
+group_363,Agricultural Commodity Exports,Environment,4,hierarchy_group_id,0
+group_364,Water Use Efficiency,Environment,4,hierarchy_group_id,0
+group_365,Female Education Employment Outcomes,Environment,4,hierarchy_group_id,0
+group_366,Adult Education Completion,Environment,4,hierarchy_group_id,0
+group_367,Educational Employment Outcomes,Environment,4,hierarchy_group_id,0
+group_368,Economic Revenue Generation,Environment,4,hierarchy_group_id,0
+group_369,Unemployment Rates & Demographics,Environment,4,hierarchy_group_id,0
+group_37,Female Age Distribution,Education,4,hierarchy_group_id,0
+group_370,Employment Stability & Transitions,Environment,4,hierarchy_group_id,0
+group_371,Population Size & Growth,Environment,4,hierarchy_group_id,0
+group_372,Life Expectancy Outcomes,Environment,4,hierarchy_group_id,0
+group_373,Gender Employment Participation Rates,Environment,4,hierarchy_group_id,0
+group_374,Employment Gender Parity,Environment,4,hierarchy_group_id,0
+group_375,Industry Service Employment,Environment,4,hierarchy_group_id,0
+group_376,Middle Income Demographics,Environment,4,hierarchy_group_id,0
+group_377,Market Social Development,Environment,4,hierarchy_group_id,0
+group_378,Market Investment Dynamics,Environment,4,hierarchy_group_id,0
+group_379,Market Environment Performance,Environment,4,hierarchy_group_id,0
+group_380,Market Access Indicators,Environment,4,hierarchy_group_id,0
+group_381,Environmental Pollution Monitoring,Environment,4,hierarchy_group_id,0
+group_382,Water Quality Assessment,Environment,4,hierarchy_group_id,0
+group_383,Air Quality Assessment,Environment,4,hierarchy_group_id,0
+group_384,Environmental Quality Assessment,Environment,4,hierarchy_group_id,0
+group_385,ICP Environmental Standards,Environment,4,hierarchy_group_id,0
+group_386,Environmental Quality Monitoring,Environment,4,hierarchy_group_id,0
+group_387,Environmental Quality Assessment,Environment,4,hierarchy_group_id,0
+group_39,Classroom Resource Allocation,Education,4,hierarchy_group_id,0
+group_4,Population Age Structure,Health,4,hierarchy_group_id,0
+group_40,Female Education Spending,Education,4,hierarchy_group_id,0
+group_41,Female Secondary Education Spending,Education,4,hierarchy_group_id,0
+group_42,Female Education Spending,Education,4,hierarchy_group_id,0
+group_43,Lower Secondary Costs,Education,4,hierarchy_group_id,0
+group_44,Primary Education Access,Education,4,hierarchy_group_id,0
+group_45,Primary Education Exclusion,Education,4,hierarchy_group_id,0
+group_46,Education Access Equity,Education,4,hierarchy_group_id,0
+group_49,Tertiary Vocational Enrollment,Education,4,hierarchy_group_id,0
+group_5,Male Early Childhood Population,Health,4,hierarchy_group_id,0
+group_50,Gender Parity Education,Education,4,hierarchy_group_id,0
+group_51,Primary Education Participation,Education,4,hierarchy_group_id,0
+group_52,Student Retention and Progression,Education,4,hierarchy_group_id,0
+group_53,Educational Participation Rates,Education,4,hierarchy_group_id,0
+group_55,Male Academic Performance,Education,4,hierarchy_group_id,0
+group_56,Primary Achievement Testing,Education,4,hierarchy_group_id,0
+group_57,Female Academic Performance,Education,4,hierarchy_group_id,0
+group_58,Standardized Achievement Performance,Education,4,hierarchy_group_id,0
+group_59,Male Secondary Completion,Education,4,hierarchy_group_id,0
+group_6,Birth Outcomes & Survival,Health,4,hierarchy_group_id,0
+group_60,School Completion Rates,Education,4,hierarchy_group_id,0
+group_61,Higher Income Educational Completion,Education,4,hierarchy_group_id,0
+group_62,Location-Based Completion Gaps,Education,4,hierarchy_group_id,0
+group_63,Gender Education Completion,Education,4,hierarchy_group_id,0
+group_64,Secondary School Completion,Education,4,hierarchy_group_id,0
+group_65,Rural Gender Education Completion,Education,4,hierarchy_group_id,0
+group_66,Rural Education Attainment,Education,4,hierarchy_group_id,0
+group_67,Higher Income Rural Completion,Education,4,hierarchy_group_id,0
+group_68,Urban Education Completion,Education,4,hierarchy_group_id,0
+group_69,Urban Education Completion,Education,4,hierarchy_group_id,0
+group_7,Maternal Death Rates,Health,4,hierarchy_group_id,0
+group_70,Middle Income Educational Completion,Education,4,hierarchy_group_id,0
+group_71,Urban Education Transitions,Education,4,hierarchy_group_id,0
+group_72,Rural Education Completion,Education,4,hierarchy_group_id,0
+group_73,Urban Education Equity,Education,4,hierarchy_group_id,0
+group_74,Secondary Education Access,Education,4,hierarchy_group_id,0
+group_75,Human Capital Displacement,Education,4,hierarchy_group_id,0
+group_76,Educational Curriculum Approaches,Education,4,hierarchy_group_id,0
+group_77,Educational Rights Protection,Education,4,hierarchy_group_id,0
+group_78,Patriotic Education Emphasis,Education,4,hierarchy_group_id,0
+group_79,Teacher Autonomy & Ideology,Education,4,hierarchy_group_id,0
+group_8,Prenatal and Delivery Care,Health,4,hierarchy_group_id,0
+group_80,Executive Education Control,Education,4,hierarchy_group_id,0
+group_81,Teacher Rights & Equality,Education,4,hierarchy_group_id,0
+group_82,Teacher Union Membership,Education,4,hierarchy_group_id,0
+group_83,Teacher Quality Standards,Education,4,hierarchy_group_id,0
+group_85,Freshman Survey Response,Education,4,hierarchy_group_id,0
+group_86,Secondary Education Teachers,Education,4,hierarchy_group_id,0
+group_87,Primary Education Teachers,Education,4,hierarchy_group_id,0
+group_88,Female Teacher Outreach,Education,4,hierarchy_group_id,0
+group_89,Male Teacher Outreach,Education,4,hierarchy_group_id,0
+group_9,HIV Treatment Coverage,Health,4,hierarchy_group_id,0
+group_90,Teacher Education Outreach,Education,4,hierarchy_group_id,0
+group_91,Secondary Education Outreach,Education,4,hierarchy_group_id,0
+group_92,Teacher Education Outreach,Education,4,hierarchy_group_id,0
+group_94,Out of School Education,Education,4,hierarchy_group_id,0
+group_95,Secondary School Support,Education,4,hierarchy_group_id,0
+group_96,Male Secondary Education Outreach,Education,4,hierarchy_group_id,0
+group_98,Female Teacher Qualifications,Education,4,hierarchy_group_id,0
+group_99,Male Teacher Qualifications,Education,4,hierarchy_group_id,0
+gted_rfusd,gted_rfusd,unknown,-1,upper_hierarchy_layer,0
+ie,ie,unknown,-1,upper_hierarchy_layer,0
+intensive,intensive,unknown,-1,upper_hierarchy_layer,0
+mcfccoi999,mcfccoi999,unknown,-1,upper_hierarchy_layer,0
+mcfcnpi999,Market-Based Consumer Spending (All Population),Development,5,generic_population_aggregate,2040
+mconfci999,mconfci999,unknown,-1,upper_hierarchy_layer,0
+mcongoi999,mcongoi999,unknown,-1,upper_hierarchy_layer,0
+mdefgoi999,mdefgoi999,unknown,-1,upper_hierarchy_layer,0
+mfdinxi999,mfdinxi999,unknown,-1,upper_hierarchy_layer,0
+mfinpxi999,mfinpxi999,unknown,-1,upper_hierarchy_layer,0
+mflciri999,mflciri999,unknown,-1,upper_hierarchy_layer,0
+mgsrgoi999,mgsrgoi999,unknown,-1,upper_hierarchy_layer,0
+mnwgxai999,Average Market-Based Wealth (All Population),Development,5,generic_population_aggregate,560
+mptfoni999,mptfoni999,unknown,-1,upper_hierarchy_layer,0
+msavgoi999,msavgoi999,unknown,-1,upper_hierarchy_layer,0
+msecnpi999,msecnpi999,unknown,-1,upper_hierarchy_layer,0
+mtsopxi999,mtsopxi999,unknown,-1,upper_hierarchy_layer,0
+npopulf014,Female Population (Bottom 1.4%),Health,5,population_bucket_proxy_code,1320
+npopulf101,Population Count (Females 10-14),Health,5,population_bucket_proxy_code,840
+npopulf156,Population Count,Health,5,population_bucket_proxy_code,820
+npopulf202,Population Count (Females Age 20-24),Health,5,population_bucket_proxy_code,420
+npopulf251,Population Count (Females Age 25-54),Health,5,population_bucket_proxy_code,280
+npopulf301,Population Count,Health,5,population_bucket_proxy_code,520
+npopulf351,Female Population (64.9% Income Level),Health,5,population_bucket_proxy_code,560
+npopulf401,Female Population Count,Health,5,population_bucket_proxy_code,1219
+npopulf501,Female Population (Middle 49.9%),Health,5,population_bucket_proxy_code,560
+npopulf601,Total Population,Health,5,population_bucket_proxy_code,788
+npopulf602,Population Count (Females Age 60+),Health,5,population_bucket_proxy_code,640
+npopulf651,Population Count (Females Age 65+),Health,5,population_bucket_proxy_code,840
+npopulf702,Population Count (Females 70+),Health,5,population_bucket_proxy_code,540
+npopulf851,Population Count,Health,5,population_bucket_proxy_code,560
+npopulf992,Female Population (Top 0.8%),Health,5,population_bucket_proxy_code,980
+npopulf993,Total Population Count,Health,5,population_bucket_proxy_code,676
+npopulf994,Population Count,Health,5,population_bucket_proxy_code,1940
+npopulf995,Population Count,Health,5,population_bucket_proxy_code,488
+npopulf996,Female Population (Top 0.4%),Health,5,population_bucket_proxy_code,692
+npopuli151,Population Count,Health,5,population_bucket_proxy_code,280
+npopuli202,Population Count (All People Age 20-24),Health,5,population_bucket_proxy_code,692
+npopuli251,Population Count,Health,5,population_bucket_proxy_code,1304
+npopuli351,Population Count,Health,5,population_bucket_proxy_code,560
+npopuli501,Population Count (Age Group 50+),Health,5,population_bucket_proxy_code,904
+npopuli502,Total Population Count,Health,5,population_bucket_proxy_code,736
+npopuli602,Population Count,Health,5,population_bucket_proxy_code,528
+npopuli702,Population Count (Age Group 70+),Health,5,population_bucket_proxy_code,560
+npopuli751,Population Count (All People Age 75+),Health,5,population_bucket_proxy_code,400
+npopuli851,Total Population Count,Health,5,population_bucket_proxy_code,700
+npopuli991,Total Population Count,Health,5,population_bucket_proxy_code,380
+npopuli992,Number of Households,Health,4,population_bucket_proxy_code,396
+npopuli993,Total Population Count,Health,5,population_bucket_proxy_code,400
+npopuli994,Population Count (Ages 20+),Health,5,population_bucket_proxy_code,800
+npopuli996,Total Population Count,Health,5,population_bucket_proxy_code,664
+npopuli997,Population Count,Health,5,population_bucket_proxy_code,780
+npopuli999,Population Count per Person,Health,4,population_bucket_proxy_code,820
+npopulm001,Population Count,Health,5,population_bucket_proxy_code,560
+npopulm156,Population Count (Males Age 15-64),Health,5,population_bucket_proxy_code,388
+npopulm202,Male Population (79.8% Income Level),Health,5,population_bucket_proxy_code,1172
+npopulm251,Population Count,Health,5,population_bucket_proxy_code,392
+npopulm302,Population Count,Health,5,population_bucket_proxy_code,260
+npopulm351,Male Population Count,Health,5,population_bucket_proxy_code,108
+npopulm402,Population Count (Males 40-44),Health,5,population_bucket_proxy_code,660
+npopulm451,Population Count (Males 45-49),Health,5,population_bucket_proxy_code,400
+npopulm502,Population Count,Health,5,population_bucket_proxy_code,660
+npopulm602,Total Population Count,Health,5,population_bucket_proxy_code,512
+npopulm651,Population Count,Health,5,population_bucket_proxy_code,280
+npopulm701,Total Population Count,Health,5,population_bucket_proxy_code,484
+npopulm702,Male Population (29.8% Income Level),Health,5,population_bucket_proxy_code,800
+npopulm801,Population Count,Health,5,population_bucket_proxy_code,356
+npopulm901,Population Count,Health,5,population_bucket_proxy_code,260
+npopulm991,"Population Count (Males, All Ages)",Health,5,population_bucket_proxy_code,1079
+npopulm994,Total Population Count,Health,5,population_bucket_proxy_code,1640
+npopulm996,Male Population (Top 0.4%),Health,5,population_bucket_proxy_code,392
+npopulm997,Population Count,Health,5,population_bucket_proxy_code,680
+opri_tiuset,opri_tiuset,unknown,-1,upper_hierarchy_layer,0
+pb,pb,unknown,-1,upper_hierarchy_layer,0
+pl_i,pl_i,unknown,-1,upper_hierarchy_layer,0
+pl_k,pl_k,unknown,-1,upper_hierarchy_layer,0
+prim_exp,prim_exp,unknown,-1,upper_hierarchy_layer,0
+pwt_rt,pwt_rt,unknown,-1,upper_hierarchy_layer,0
+qar_san,qar_san,unknown,-1,upper_hierarchy_layer,0
+rev,rev,unknown,-1,upper_hierarchy_layer,0
+rgc,rgc,unknown,-1,upper_hierarchy_layer,0
+root,Quality of Life,nan,0,non_indicator_hierarchy_node,0
+total_theil,total_theil,unknown,-1,upper_hierarchy_layer,0
+v2caacadfree,v2caacadfree,unknown,-1,upper_hierarchy_layer,0
+v2caassemb_mean,v2caassemb_mean,unknown,-1,upper_hierarchy_layer,0
+v2caassemb_ord,v2caassemb_ord,unknown,-1,upper_hierarchy_layer,0
+v2caassemb_osp,v2caassemb_osp,unknown,-1,upper_hierarchy_layer,0
+v2caautmob_mean,v2caautmob_mean,unknown,-1,upper_hierarchy_layer,0
+v2caautmob_osp,v2caautmob_osp,unknown,-1,upper_hierarchy_layer,0
+v2cacamps,v2cacamps,unknown,-1,upper_hierarchy_layer,0
+v2caconmob_nr,v2caconmob_nr,unknown,-1,upper_hierarchy_layer,0
+v2cademmob_mean,v2cademmob_mean,unknown,-1,upper_hierarchy_layer,0
+v2cademmob_nr,Democratic Civil Society Mobilization Data Quality,Governance,5,data_quality_suffix_nr,260
+v2cademmob_ord,v2cademmob_ord,unknown,-1,upper_hierarchy_layer,0
+v2cademmob_osp,v2cademmob_osp,unknown,-1,upper_hierarchy_layer,0
+v2cafexch_mean,v2cafexch_mean,unknown,-1,upper_hierarchy_layer,0
+v2cafres_mean,v2cafres_mean,unknown,-1,upper_hierarchy_layer,0
+v2cagenmob,v2cagenmob,unknown,-1,upper_hierarchy_layer,0
+v2cagenmob_mean,v2cagenmob_mean,unknown,-1,upper_hierarchy_layer,0
+v2cagenmob_nr,Civil Society Gender Mobilization (Data Availability),Governance,5,data_quality_suffix_nr,280
+v2cainsaut_mean,v2cainsaut_mean,unknown,-1,upper_hierarchy_layer,0
+v2canonpol,v2canonpol,unknown,-1,upper_hierarchy_layer,0
+v2caprotac,v2caprotac,unknown,-1,upper_hierarchy_layer,0
+v2casoe_nr,Civil Society State of Emergency Data Coverage,Governance,5,data_quality_suffix_nr,1520
+v2castate_ord,v2castate_ord,unknown,-1,upper_hierarchy_layer,0
+v2casurv_mean,v2casurv_mean,unknown,-1,upper_hierarchy_layer,0
+v2cauni,v2cauni,unknown,-1,upper_hierarchy_layer,0
+v2clacfree,v2clacfree,unknown,-1,upper_hierarchy_layer,0
+v2clacfree_mean,v2clacfree_mean,unknown,-1,upper_hierarchy_layer,0
+v2clacfree_nr,Academic Freedom Data Quality,Governance,5,data_quality_suffix_nr,128
+v2clacjstw,v2clacjstw,unknown,-1,upper_hierarchy_layer,0
+v2clacjstw_mean,v2clacjstw_mean,unknown,-1,upper_hierarchy_layer,0
+v2clacjstw_osp,v2clacjstw_osp,unknown,-1,upper_hierarchy_layer,0
+v2cldiscm,v2cldiscm,unknown,-1,upper_hierarchy_layer,0
+v2cldiscm_mean,v2cldiscm_mean,unknown,-1,upper_hierarchy_layer,0
+v2cldiscm_osp,v2cldiscm_osp,unknown,-1,upper_hierarchy_layer,0
+v2cldiscw_mean,v2cldiscw_mean,unknown,-1,upper_hierarchy_layer,0
+v2cldiscw_osp,v2cldiscw_osp,unknown,-1,upper_hierarchy_layer,0
+v2cldmovem_nr,Freedom of Movement Data Quality,Governance,5,data_quality_suffix_nr,268
+v2cldmovew_mean,v2cldmovew_mean,unknown,-1,upper_hierarchy_layer,0
+v2cldmovew_osp,v2cldmovew_osp,unknown,-1,upper_hierarchy_layer,0
+v2clfmove,v2clfmove,unknown,-1,upper_hierarchy_layer,0
+v2clfmove_mean,v2clfmove_mean,unknown,-1,upper_hierarchy_layer,0
+v2clfmove_ord,v2clfmove_ord,unknown,-1,upper_hierarchy_layer,0
+v2clfmove_osp,v2clfmove_osp,unknown,-1,upper_hierarchy_layer,0
+v2clgencl_nr,Civil Liberties Gender Equality (Data Availability),Governance,5,data_quality_suffix_nr,140
+v2clgeocl_mean,v2clgeocl_mean,unknown,-1,upper_hierarchy_layer,0
+v2clkill,v2clkill,unknown,-1,upper_hierarchy_layer,0
+v2clpolcl,v2clpolcl,unknown,-1,upper_hierarchy_layer,0
+v2clpolcl_nr,Political Civil Liberties Data Coverage,Governance,5,data_quality_suffix_nr,700
+v2clprptym_mean,v2clprptym_mean,unknown,-1,upper_hierarchy_layer,0
+v2clprptyw,v2clprptyw,unknown,-1,upper_hierarchy_layer,0
+v2clrelig_osp,v2clrelig_osp,unknown,-1,upper_hierarchy_layer,0
+v2clrgstch_1,v2clrgstch_1,unknown,-1,upper_hierarchy_layer,0
+v2clrgstch_17,v2clrgstch_17,unknown,-1,upper_hierarchy_layer,0
+v2clrgstch_5,v2clrgstch_5,unknown,-1,upper_hierarchy_layer,0
+v2clrgwkch_15,v2clrgwkch_15,unknown,-1,upper_hierarchy_layer,0
+v2clrgwkch_17,v2clrgwkch_17,unknown,-1,upper_hierarchy_layer,0
+v2clrgwkch_21,v2clrgwkch_21,unknown,-1,upper_hierarchy_layer,0
+v2clrgwkch_7,v2clrgwkch_7,unknown,-1,upper_hierarchy_layer,0
+v2clslavef,v2clslavef,unknown,-1,upper_hierarchy_layer,0
+v2clslavef_mean,v2clslavef_mean,unknown,-1,upper_hierarchy_layer,0
+v2clslavef_ord,v2clslavef_ord,unknown,-1,upper_hierarchy_layer,0
+v2clsnlpct,v2clsnlpct,unknown,-1,upper_hierarchy_layer,0
+v2clsocgrp_nr,Social Group Civil Liberties Data Coverage,Governance,5,data_quality_suffix_nr,659
+v2clstown,v2clstown,unknown,-1,upper_hierarchy_layer,0
+v2clstown_nr,Property Rights Data Availability,Governance,5,data_quality_suffix_nr,555
+v2cltort,v2cltort,unknown,-1,upper_hierarchy_layer,0
+v2cltort_mean,v2cltort_mean,unknown,-1,upper_hierarchy_layer,0
+v2cltort_osp,v2cltort_osp,unknown,-1,upper_hierarchy_layer,0
+v2cltrnslw,v2cltrnslw,unknown,-1,upper_hierarchy_layer,0
+v2csanmvch_10,v2csanmvch_10,unknown,-1,upper_hierarchy_layer,0
+v2csanmvch_6,v2csanmvch_6,unknown,-1,upper_hierarchy_layer,0
+v2csgender,v2csgender,unknown,-1,upper_hierarchy_layer,0
+v2csprtcpt,v2csprtcpt,unknown,-1,upper_hierarchy_layer,0
+v2csprtcpt_osp,v2csprtcpt_osp,unknown,-1,upper_hierarchy_layer,0
+v2csreprss,v2csreprss,unknown,-1,upper_hierarchy_layer,0
+v2csrlgrep_osp,v2csrlgrep_osp,unknown,-1,upper_hierarchy_layer,0
+v2csstruc_1,v2csstruc_1,unknown,-1,upper_hierarchy_layer,0
+v2csstruc_2,v2csstruc_2,unknown,-1,upper_hierarchy_layer,0
+v2ddadmor,v2ddadmor,unknown,-1,upper_hierarchy_layer,0
+v2ddappor,v2ddappor,unknown,-1,upper_hierarchy_layer,0
+v2ddlexpl,v2ddlexpl,unknown,-1,upper_hierarchy_layer,0
+v2ddpartor,v2ddpartor,unknown,-1,upper_hierarchy_layer,0
+v2ddpartpl,v2ddpartpl,unknown,-1,upper_hierarchy_layer,0
+v2ddspmor,v2ddspmor,unknown,-1,upper_hierarchy_layer,0
+v2ddspmpl,v2ddspmpl,unknown,-1,upper_hierarchy_layer,0
+v2ddthreci,v2ddthreci,unknown,-1,upper_hierarchy_layer,0
+v2ddyrall,v2ddyrall,unknown,-1,upper_hierarchy_layer,0
+v2ddyrci,v2ddyrci,unknown,-1,upper_hierarchy_layer,0
+v2ddyror,v2ddyror,unknown,-1,upper_hierarchy_layer,0
+v2ddyrpl,v2ddyrpl,unknown,-1,upper_hierarchy_layer,0
+v2ddyrrf,v2ddyrrf,unknown,-1,upper_hierarchy_layer,0
+v2dlcommon_nr,Political Discussion Data Coverage,Governance,5,data_quality_suffix_nr,136
+v2dlcountr,v2dlcountr,unknown,-1,upper_hierarchy_layer,0
+v2dlencmps,v2dlencmps,unknown,-1,upper_hierarchy_layer,0
+v2dlencmps_nr,Political Discussion Data: Compromise Information Availability,Governance,5,data_quality_suffix_nr,275
+v2dlreason_nr,Reasoned Political Debate Data Availability,Governance,5,data_quality_suffix_nr,691
+v2dlunivl_nr,Political Deliberation Data Availability,Governance,5,data_quality_suffix_nr,690
+v2edcentcurrlm_nr,Centralized Curriculum Control Data Availability,Education,5,data_quality_suffix_nr,280
+v2edideol,v2edideol,unknown,-1,upper_hierarchy_layer,0
+v2edideol_osp,v2edideol_osp,unknown,-1,upper_hierarchy_layer,0
+v2edteunion_nr,Education Data: Teacher Union Information Availability,Education,5,data_quality_suffix_nr,2800
+v2edteunionindp_mean,v2edteunionindp_mean,unknown,-1,upper_hierarchy_layer,0
+v2edteunionindp_nr,Teacher Union Independence Data Quality,Education,5,data_quality_suffix_nr,672
+v2elcomvot,v2elcomvot,unknown,-1,upper_hierarchy_layer,0
+v2eldonate_nr,Elections: Campaign Donations (Data Quality),Governance,5,data_quality_suffix_nr,515
+v2elembaut_mean,v2elembaut_mean,unknown,-1,upper_hierarchy_layer,0
+v2elembaut_nr,Election Management Body Independence Data Coverage,Governance,5,data_quality_suffix_nr,935
+v2elembcap_nr,Election Management Data Availability,Governance,5,data_quality_suffix_nr,794
+v2elembcap_ord,v2elembcap_ord,unknown,-1,upper_hierarchy_layer,0
+v2elffelr,v2elffelr,unknown,-1,upper_hierarchy_layer,0
+v2elffelr_mean,v2elffelr_mean,unknown,-1,upper_hierarchy_layer,0
+v2elffelr_ord,v2elffelr_ord,unknown,-1,upper_hierarchy_layer,0
+v2elffelr_osp,v2elffelr_osp,unknown,-1,upper_hierarchy_layer,0
+v2elffelrbin,v2elffelrbin,unknown,-1,upper_hierarchy_layer,0
+v2elffelrbin_nr,Data Availability: Election Competitiveness,Governance,5,data_quality_suffix_nr,276
+v2elffelrbin_ord,v2elffelrbin_ord,unknown,-1,upper_hierarchy_layer,0
+v2elfrcamp,v2elfrcamp,unknown,-1,upper_hierarchy_layer,0
+v2elfrfair_osp,v2elfrfair_osp,unknown,-1,upper_hierarchy_layer,0
+v2ellocelc,v2ellocelc,unknown,-1,upper_hierarchy_layer,0
+v2ellocgov,v2ellocgov,unknown,-1,upper_hierarchy_layer,0
+v2ellocpwr_nr,Local Government Power Data Coverage,Governance,5,data_quality_suffix_nr,816
+v2elpaidig_ord,v2elpaidig_ord,unknown,-1,upper_hierarchy_layer,0
+v2elprescumul,v2elprescumul,unknown,-1,upper_hierarchy_layer,0
+v2elpubfin_nr,Public Campaign Finance Data Availability,Governance,5,data_quality_suffix_nr,375
+v2elreggov,v2elreggov,unknown,-1,upper_hierarchy_layer,0
+v2elrgpwr_nr,Regional Government Power Data Availability,Governance,5,data_quality_suffix_nr,276
+v2elrgpwr_ord,v2elrgpwr_ord,unknown,-1,upper_hierarchy_layer,0
+v2elrstrct,v2elrstrct,unknown,-1,upper_hierarchy_layer,0
+v2elsnlfc_13,v2elsnlfc_13,unknown,-1,upper_hierarchy_layer,0
+v2elsnlfc_17,v2elsnlfc_17,unknown,-1,upper_hierarchy_layer,0
+v2elsnlfc_nr,Data Availability: Election Information,Governance,5,data_quality_suffix_nr,140
+v2elsnlsff_nr,Subnational Election Data Availability,Governance,5,data_quality_suffix_nr,140
+v2elsnmrfc_12,v2elsnmrfc_12,unknown,-1,upper_hierarchy_layer,0
+v2elsnmrfc_13,v2elsnmrfc_13,unknown,-1,upper_hierarchy_layer,0
+v2elsnmrfc_14,v2elsnmrfc_14,unknown,-1,upper_hierarchy_layer,0
+v2elsnmrfc_17,v2elsnmrfc_17,unknown,-1,upper_hierarchy_layer,0
+v2elsnmrfc_5,v2elsnmrfc_5,unknown,-1,upper_hierarchy_layer,0
+v2elsnmrfc_8,v2elsnmrfc_8,unknown,-1,upper_hierarchy_layer,0
+v2elsnmrfc_9,v2elsnmrfc_9,unknown,-1,upper_hierarchy_layer,0
+v2elsnmrfc_nr,Election Irregularities Data Coverage,Governance,5,data_quality_suffix_nr,279
+v2elsuffrage,v2elsuffrage,unknown,-1,upper_hierarchy_layer,0
+v2elvotbuy_ord,v2elvotbuy_ord,unknown,-1,upper_hierarchy_layer,0
+v2ex_elechog,v2ex_elechog,unknown,-1,upper_hierarchy_layer,0
+v2ex_hosconhog,v2ex_hosconhog,unknown,-1,upper_hierarchy_layer,0
+v2ex_legconhog,v2ex_legconhog,unknown,-1,upper_hierarchy_layer,0
+v2ex_legconhos,v2ex_legconhos,unknown,-1,upper_hierarchy_layer,0
+v2exagehos,v2exagehos,unknown,-1,upper_hierarchy_layer,0
+v2exaphogp,v2exaphogp,unknown,-1,upper_hierarchy_layer,0
+v2exaphos,v2exaphos,unknown,-1,upper_hierarchy_layer,0
+v2exbribe_nr,v2exbribe_nr,unknown,-1,upper_hierarchy_layer,0
+v2excrptps,v2excrptps,unknown,-1,upper_hierarchy_layer,0
+v2exctlhg_4,v2exctlhg_4,unknown,-1,upper_hierarchy_layer,0
+v2exctlhg_8,v2exctlhg_8,unknown,-1,upper_hierarchy_layer,0
+v2exctlhg_nr,v2exctlhg_nr,unknown,-1,upper_hierarchy_layer,0
+v2exctlhs_3,v2exctlhs_3,unknown,-1,upper_hierarchy_layer,0
+v2exdfcbhs_rec,v2exdfcbhs_rec,unknown,-1,upper_hierarchy_layer,0
+v2exdfdshg_nr,v2exdfdshg_nr,unknown,-1,upper_hierarchy_layer,0
+v2exdfpphg_nr,v2exdfpphg_nr,unknown,-1,upper_hierarchy_layer,0
+v2exdfpphg_ord,v2exdfpphg_ord,unknown,-1,upper_hierarchy_layer,0
+v2exdfpphs_ord,v2exdfpphs_ord,unknown,-1,upper_hierarchy_layer,0
+v2exdfvthg,v2exdfvthg,unknown,-1,upper_hierarchy_layer,0
+v2exdfvthg_mean,v2exdfvthg_mean,unknown,-1,upper_hierarchy_layer,0
+v2exdfvthg_nr,v2exdfvthg_nr,unknown,-1,upper_hierarchy_layer,0
+v2exdfvths_osp,v2exdfvths_osp,unknown,-1,upper_hierarchy_layer,0
+v2exdjdshg_nr,Executive: Judicial Dismissals (Data Quality),Environment,5,data_quality_suffix_nr,107
+v2exembez_mean,v2exembez_mean,unknown,-1,upper_hierarchy_layer,0
+v2exembez_nr,Executive Embezzlement Data Coverage,Governance,5,data_quality_suffix_nr,140
+v2exembez_ord,v2exembez_ord,unknown,-1,upper_hierarchy_layer,0
+v2exfemhog,v2exfemhog,unknown,-1,upper_hierarchy_layer,0
+v2exfemhos,v2exfemhos,unknown,-1,upper_hierarchy_layer,0
+v2exl_legitideol_nr,Executive Legitimacy Ideology (Data Availability),Governance,5,data_quality_suffix_nr,18177
+v2exl_legitideol_osp,v2exl_legitideol_osp,unknown,-1,upper_hierarchy_layer,0
+v2exl_legitideolcr_1,v2exl_legitideolcr_1,unknown,-1,upper_hierarchy_layer,0
+v2exl_legitlead,v2exl_legitlead,unknown,-1,upper_hierarchy_layer,0
+v2exl_legitlead_osp,v2exl_legitlead_osp,unknown,-1,upper_hierarchy_layer,0
+v2exl_legitperf,v2exl_legitperf,unknown,-1,upper_hierarchy_layer,0
+v2exl_legitperf_nr,Executive Legitimacy Performance Data Coverage,Governance,5,data_quality_suffix_nr,18804
+v2exl_legitperf_osp,v2exl_legitperf_osp,unknown,-1,upper_hierarchy_layer,0
+v2exl_legitratio,v2exl_legitratio,unknown,-1,upper_hierarchy_layer,0
+v2expathhs,v2expathhs,unknown,-1,upper_hierarchy_layer,0
+v2exremhog,v2exremhog,unknown,-1,upper_hierarchy_layer,0
+v2exremhsp_mean,v2exremhsp_mean,unknown,-1,upper_hierarchy_layer,0
+v2exremhsp_osp,v2exremhsp_osp,unknown,-1,upper_hierarchy_layer,0
+v2exrescon,v2exrescon,unknown,-1,upper_hierarchy_layer,0
+v2exrescon_nr,Executive: Resource Control Data Coverage,Governance,5,data_quality_suffix_nr,268
+v2exrescon_osp,v2exrescon_osp,unknown,-1,upper_hierarchy_layer,0
+v2exrmhgnp_nr,v2exrmhgnp_nr,unknown,-1,upper_hierarchy_layer,0
+v2exrmhsol_3,v2exrmhsol_3,unknown,-1,upper_hierarchy_layer,0
+v2exthftps_nr,Executive Theft from State (Data Availability),Environment,5,data_quality_suffix_nr,276
+v2jucorrdc,v2jucorrdc,unknown,-1,upper_hierarchy_layer,0
+v2juhccomp_nr,High Court Competence Data Coverage,Governance,5,data_quality_suffix_nr,380
+v2juhccomp_ord,v2juhccomp_ord,unknown,-1,upper_hierarchy_layer,0
+v2juhccomp_osp,v2juhccomp_osp,unknown,-1,upper_hierarchy_layer,0
+v2juhcind_mean,v2juhcind_mean,unknown,-1,upper_hierarchy_layer,0
+v2juhcind_nr,Judiciary Independence Data Coverage,Governance,5,data_quality_suffix_nr,380
+v2juhcind_ord,v2juhcind_ord,unknown,-1,upper_hierarchy_layer,0
+v2juncind,v2juncind,unknown,-1,upper_hierarchy_layer,0
+v2juncind_nr,Judicial Independence Data Coverage,Governance,5,data_quality_suffix_nr,420
+v2jupack,v2jupack,unknown,-1,upper_hierarchy_layer,0
+v2jupack_osp,v2jupack_osp,unknown,-1,upper_hierarchy_layer,0
+v2jupurge,v2jupurge,unknown,-1,upper_hierarchy_layer,0
+v2jupurge_ord,v2jupurge_ord,unknown,-1,upper_hierarchy_layer,0
+v2jureform,v2jureform,unknown,-1,upper_hierarchy_layer,0
+v2jureform_mean,v2jureform_mean,unknown,-1,upper_hierarchy_layer,0
+v2jureform_osp,v2jureform_osp,unknown,-1,upper_hierarchy_layer,0
+v2jureview_mean,v2jureview_mean,unknown,-1,upper_hierarchy_layer,0
+v2jureview_ord,v2jureview_ord,unknown,-1,upper_hierarchy_layer,0
+v2lgcomslo,v2lgcomslo,unknown,-1,upper_hierarchy_layer,0
+v2lgcomslo_mean,v2lgcomslo_mean,unknown,-1,upper_hierarchy_layer,0
+v2lgcomslo_nr,Legislature Committee System Data Coverage,Governance,5,data_quality_suffix_nr,252
+v2lgcomslo_ord,v2lgcomslo_ord,unknown,-1,upper_hierarchy_layer,0
+v2lgcomslo_osp,v2lgcomslo_osp,unknown,-1,upper_hierarchy_layer,0
+v2lgcrrpt,v2lgcrrpt,unknown,-1,upper_hierarchy_layer,0
+v2lgcrrpt_nr,Legislative Corruption Data Coverage,Governance,5,data_quality_suffix_nr,532
+v2lgdomchm_nr,Legislature Dominance Data Coverage,Governance,5,data_quality_suffix_nr,136
+v2lgdomchm_ord,v2lgdomchm_ord,unknown,-1,upper_hierarchy_layer,0
+v2lgdomchm_osp,v2lgdomchm_osp,unknown,-1,upper_hierarchy_layer,0
+v2lgdsadlo,v2lgdsadlo,unknown,-1,upper_hierarchy_layer,0
+v2lgdsadlo_nr,Legislature Lower House Dissolution Data Coverage,Governance,5,data_quality_suffix_nr,420
+v2lgdsadlobin_nr,Legislature Disability Access Data Coverage,Governance,5,data_quality_suffix_nr,392
+v2lgfunds_nr,Legislature Funding Data Quality,Governance,5,data_quality_suffix_nr,252
+v2lginello,v2lginello,unknown,-1,upper_hierarchy_layer,0
+v2lginvstp_nr,Legislature Investigative Powers: Data Availability,Governance,5,data_quality_suffix_nr,252
+v2lglegplo,v2lglegplo,unknown,-1,upper_hierarchy_layer,0
+v2lglegplo_nr,Legislative Process Data Availability,Governance,5,data_quality_suffix_nr,276
+v2lglegplo_osp,v2lglegplo_osp,unknown,-1,upper_hierarchy_layer,0
+v2lglegpup_nr,Legislative Oversight Data Coverage,Governance,5,data_quality_suffix_nr,140
+v2lgoppart,v2lgoppart,unknown,-1,upper_hierarchy_layer,0
+v2lgoppart_nr,Data Quality: Opposition Parties in Legislature,Economic,4,data_quality_suffix_nr,136
+v2lgoppart_osp,v2lgoppart_osp,unknown,-1,upper_hierarchy_layer,0
+v2lgotovst_nr,Legislature Voting Data Availability,Governance,5,data_quality_suffix_nr,136
+v2lgqstexp_nr,Legislature Question Time Data Coverage,Governance,5,data_quality_suffix_nr,392
+v2lgsrvlo_nr,Legislature: Service Provision Data Coverage,Governance,5,data_quality_suffix_nr,532
+v2lgsrvlo_osp,v2lgsrvlo_osp,unknown,-1,upper_hierarchy_layer,0
+v2lgstafflo_nr,Legislature Staffing Data Availability,Governance,5,data_quality_suffix_nr,252
+v2lgstafflo_ord,v2lgstafflo_ord,unknown,-1,upper_hierarchy_layer,0
+v2mebias_nr,Media Bias Data Availability,Governance,5,data_quality_suffix_nr,280
+v2mecenefi_nr,Media Censorship Effort Data Quality,Governance,5,data_quality_suffix_nr,1024
+v2mecenefi_osp,v2mecenefi_osp,unknown,-1,upper_hierarchy_layer,0
+v2mecenefibin_nr,Media Censorship: Financial Incentives Data Availability,Governance,4,data_quality_suffix_nr,384
+v2mecenefm,v2mecenefm,unknown,-1,upper_hierarchy_layer,0
+v2mecenefm_mean,v2mecenefm_mean,unknown,-1,upper_hierarchy_layer,0
+v2mecenefm_ord,v2mecenefm_ord,unknown,-1,upper_hierarchy_layer,0
+v2mecenefm_osp,v2mecenefm_osp,unknown,-1,upper_hierarchy_layer,0
+v2mecorrpt,v2mecorrpt,unknown,-1,upper_hierarchy_layer,0
+v2mecrit_mean,v2mecrit_mean,unknown,-1,upper_hierarchy_layer,0
+v2medpolnonstate_osp,Non-State Political Media Coverage,Development,5,label_coverage_metric,4568
+v2mefemjrn,v2mefemjrn,unknown,-1,upper_hierarchy_layer,0
+v2mefemjrn_mean,v2mefemjrn_mean,unknown,-1,upper_hierarchy_layer,0
+v2merange,v2merange,unknown,-1,upper_hierarchy_layer,0
+v2merange_osp,v2merange_osp,unknown,-1,upper_hierarchy_layer,0
+v2meslfcen_mean,v2meslfcen_mean,unknown,-1,upper_hierarchy_layer,0
+v2msuffrage,Voting Rights Coverage,Economic,5,label_coverage_metric,100
+v2peapsgen_nr,Gender Political Participation Data Quality,Economic,5,data_quality_suffix_nr,560
+v2peapspol_nr,Political Participation Equality Data Availability,Economic,5,data_quality_suffix_nr,700
+v2peapspol_osp,v2peapspol_osp,unknown,-1,upper_hierarchy_layer,0
+v2peasbegeo_ord,v2peasbegeo_ord,unknown,-1,upper_hierarchy_layer,0
+v2peasbepol,v2peasbepol,unknown,-1,upper_hierarchy_layer,0
+v2peasbgen_osp,v2peasbgen_osp,unknown,-1,upper_hierarchy_layer,0
+v2peasjgen,v2peasjgen,unknown,-1,upper_hierarchy_layer,0
+v2peasjgeo_mean,v2peasjgeo_mean,unknown,-1,upper_hierarchy_layer,0
+v2peasjpol_nr,Data Quality: Asian Political Equality Assessment,Economic,5,data_quality_suffix_nr,16159
+v2pehealth,v2pehealth,unknown,-1,upper_hierarchy_layer,0
+v2pehealth_nr,Political Equality in Health Data Availability,Economic,4,data_quality_suffix_nr,548
+v2peprisch,v2peprisch,unknown,-1,upper_hierarchy_layer,0
+v2pepwrort_nr,Political Power Distribution Data Coverage,Economic,5,data_quality_suffix_nr,408
+v2pepwrses_ord,v2pepwrses_ord,unknown,-1,upper_hierarchy_layer,0
+v2pepwrsoc,v2pepwrsoc,unknown,-1,upper_hierarchy_layer,0
+v2pepwrsoc_mean,v2pepwrsoc_mean,unknown,-1,upper_hierarchy_layer,0
+v2pesecsch,v2pesecsch,unknown,-1,upper_hierarchy_layer,0
+v2petersch,v2petersch,unknown,-1,upper_hierarchy_layer,0
+v2psbantar_2,v2psbantar_2,unknown,-1,upper_hierarchy_layer,0
+v2psbantar_3,v2psbantar_3,unknown,-1,upper_hierarchy_layer,0
+v2psbantar_nr,Political Parties: Barriers and Targets Data Coverage,Governance,4,data_quality_suffix_nr,120
+v2psbars_mean,v2psbars_mean,unknown,-1,upper_hierarchy_layer,0
+v2psbars_nr,Political Party Barriers Data Quality,Governance,5,data_quality_suffix_nr,512
+v2psbars_osp,v2psbars_osp,unknown,-1,upper_hierarchy_layer,0
+v2pscnslnl,v2pscnslnl,unknown,-1,upper_hierarchy_layer,0
+v2pscnslnl_nr,Political Party Consultation Data Quality,Governance,5,data_quality_suffix_nr,3049
+v2pscnslnl_ord,v2pscnslnl_ord,unknown,-1,upper_hierarchy_layer,0
+v2pscnslnl_osp,v2pscnslnl_osp,unknown,-1,upper_hierarchy_layer,0
+v2pscohesv_nr,Political Parties: Cohesion (Data Quality),Governance,5,data_quality_suffix_nr,3769
+v2pscomprg_nr,Data Availability on Party Comprehensive Programs,Governance,5,data_quality_suffix_nr,936
+v2psnatpar_mean,v2psnatpar_mean,unknown,-1,upper_hierarchy_layer,0
+v2psnatpar_nr,Data Coverage: Nationalist Political Parties,Governance,5,data_quality_suffix_nr,3749
+v2psnatpar_osp,v2psnatpar_osp,unknown,-1,upper_hierarchy_layer,0
+v2psoppaut_nr,Data Quality: Opposition Party Autonomy,Governance,5,data_quality_suffix_nr,560
+v2psorgs,v2psorgs,unknown,-1,upper_hierarchy_layer,0
+v2psparban_mean,v2psparban_mean,unknown,-1,upper_hierarchy_layer,0
+v2psparban_nr,Political Party Bans Data Quality,Governance,5,data_quality_suffix_nr,376
+v2psplats,v2psplats,unknown,-1,upper_hierarchy_layer,0
+v2psplats_mean,v2psplats_mean,unknown,-1,upper_hierarchy_layer,0
+v2psplats_nr,Political Party Platform Data Coverage,Governance,5,data_quality_suffix_nr,3333
+v2psprbrch_nr,Political Party Branch Organization Data Coverage,Governance,5,data_quality_suffix_nr,516
+v2psprlnks_nr,Political Party Links Data Coverage,Governance,5,data_quality_suffix_nr,2900
+v2pssunpar_nr,Data Availability: Political Party Information,Governance,5,data_quality_suffix_nr,3629
+v2regantireg_nr,Anti-Regime Activities Data Coverage,Governance,5,data_quality_suffix_nr,560
+v2regendtypems_0,v2regendtypems_0,unknown,-1,upper_hierarchy_layer,0
+v2regendtypems_11,v2regendtypems_11,unknown,-1,upper_hierarchy_layer,0
+v2regendtypems_13,v2regendtypems_13,unknown,-1,upper_hierarchy_layer,0
+v2regendtypems_2,v2regendtypems_2,unknown,-1,upper_hierarchy_layer,0
+v2regendtypems_8,v2regendtypems_8,unknown,-1,upper_hierarchy_layer,0
+v2regendtypems_9,v2regendtypems_9,unknown,-1,upper_hierarchy_layer,0
+v2regimpgroup_nr,Important Groups Data Quality,Governance,5,data_quality_suffix_nr,560
+v2regimpoppgroup,v2regimpoppgroup,unknown,-1,upper_hierarchy_layer,0
+v2regimpoppgroup_nr,Data Availability: Important Population Groups,Governance,5,data_quality_suffix_nr,279
+v2regoppgroups_0,v2regoppgroups_0,unknown,-1,upper_hierarchy_layer,0
+v2regoppgroups_nr,Opposition Groups Data Coverage,Governance,5,data_quality_suffix_nr,280
+v2regoppgroupsact_12,v2regoppgroupsact_12,unknown,-1,upper_hierarchy_layer,0
+v2regoppgroupsact_13,v2regoppgroupsact_13,unknown,-1,upper_hierarchy_layer,0
+v2regoppgroupsact_6,v2regoppgroupsact_6,unknown,-1,upper_hierarchy_layer,0
+v2regoppgroupsact_nr,Opposition Group Activities Data Coverage,Governance,5,data_quality_suffix_nr,419
+v2regoppgroupssize_nr,Data Coverage: Opposition Group Size,Economic,4,data_quality_suffix_nr,2068
+v2regproreg_nr,Pro-Regime Bias Data Coverage,Governance,5,data_quality_suffix_nr,2327
+v2regsupgroups_10,v2regsupgroups_10,unknown,-1,upper_hierarchy_layer,0
+v2regsupgroups_12,v2regsupgroups_12,unknown,-1,upper_hierarchy_layer,0
+v2regsupgroups_nr,v2regsupgroups_nr,unknown,-1,upper_hierarchy_layer,0
+v2regsupgroupssize_nr,Data Coverage: Government Support Group Size,Governance,5,data_quality_suffix_nr,280
+v2regsuploc_nr,Local Government Support Data Coverage,Governance,5,data_quality_suffix_nr,1660
+v2smarrest_nr,Data Availability on Social Media Arrests,Governance,4,data_quality_suffix_nr,200
+v2smcamp_nr,Social Media Campaign Data Availability,Governance,5,data_quality_suffix_nr,100
+v2smfordom_nr,Social Media Foreign Dominance Data Coverage,Governance,5,data_quality_suffix_nr,100
+v2smgovab_nr,Social Media Government Abuse Data Availability,Governance,5,data_quality_suffix_nr,100
+v2smgovcapsec_nr,Social Media: Government Security Capacity (Data Quality),Governance,5,data_quality_suffix_nr,100
+v2smgovfilcap_nr,Government Social Media Filtering Capacity Data Coverage,Governance,5,data_quality_suffix_nr,400
+v2smgovfilprc_nr,Data Availability: Government Social Media Filtering,Governance,5,data_quality_suffix_nr,300
+v2smgovshut_nr,Social Media Government Shutdowns: Data Availability,Governance,5,data_quality_suffix_nr,300
+v2smgovshutcap_nr,Data Availability: Government Social Media Shutdown Capacity,Governance,5,data_quality_suffix_nr,200
+v2smgovsm_nr,Data Availability on Government Social Media Manipulation,Governance,5,data_quality_suffix_nr,200
+v2smgovsmcenprc_nr,Social Media Censorship Data Availability,Governance,5,data_quality_suffix_nr,200
+v2smgovsmmon_nr,Government Social Media Monitoring Data Coverage,Governance,5,data_quality_suffix_nr,1000
+v2smlawpr_nr,Social Media Laws Data Availability,Governance,5,data_quality_suffix_nr,100
+v2smorgtypes_nr,Social Media Organization Data Coverage,Governance,5,data_quality_suffix_nr,200
+v2smparab_nr,Social Media Partisan Abuse Data Quality,Governance,5,data_quality_suffix_nr,100
+v2smpolhate_nr,Social Media Political Hate Data Coverage,Governance,5,data_quality_suffix_nr,200
+v2smregcap_osp,v2smregcap_osp,unknown,-1,upper_hierarchy_layer,0
+v2smregcon_nr,Social Media Regulation Data Availability,Governance,4,data_quality_suffix_nr,200
+v2stcritapparm_mean,v2stcritapparm_mean,unknown,-1,upper_hierarchy_layer,0
+v2stcritapparm_osp,v2stcritapparm_osp,unknown,-1,upper_hierarchy_layer,0
+v2stcritrecadm,v2stcritrecadm,unknown,-1,upper_hierarchy_layer,0
+v2stcritrecadm_mean,v2stcritrecadm_mean,unknown,-1,upper_hierarchy_layer,0
+v2stcritrecadm_osp,v2stcritrecadm_osp,unknown,-1,upper_hierarchy_layer,0
+v2strenadm,v2strenadm,unknown,-1,upper_hierarchy_layer,0
+v2strenadm_ord,v2strenadm_ord,unknown,-1,upper_hierarchy_layer,0
+v2strenarm_mean,v2strenarm_mean,unknown,-1,upper_hierarchy_layer,0
+v2strenarm_ord,v2strenarm_ord,unknown,-1,upper_hierarchy_layer,0
+v2strenarm_osp,v2strenarm_osp,unknown,-1,upper_hierarchy_layer,0
+v2svdomaut,v2svdomaut,unknown,-1,upper_hierarchy_layer,0
+v2svindep,v2svindep,unknown,-1,upper_hierarchy_layer,0
+v2svstterr,v2svstterr,unknown,-1,upper_hierarchy_layer,0
+v2svstterr_mean,v2svstterr_mean,unknown,-1,upper_hierarchy_layer,0
+v2svstterr_nr,State Territory Control Data Coverage,Governance,5,data_quality_suffix_nr,128
+v2x_accountability,v2x_accountability,unknown,-1,upper_hierarchy_layer,0
+v2x_api,v2x_api,unknown,-1,upper_hierarchy_layer,0
+v2x_civlib,v2x_civlib,unknown,-1,upper_hierarchy_layer,0
+v2x_clphy,v2x_clphy,unknown,-1,upper_hierarchy_layer,0
+v2x_clpol,v2x_clpol,unknown,-1,upper_hierarchy_layer,0
+v2x_corr,v2x_corr,unknown,-1,upper_hierarchy_layer,0
+v2x_diagacc,v2x_diagacc,unknown,-1,upper_hierarchy_layer,0
+v2x_egal,v2x_egal,unknown,-1,upper_hierarchy_layer,0
+v2x_egaldem,v2x_egaldem,unknown,-1,upper_hierarchy_layer,0
+v2x_execorr,v2x_execorr,unknown,-1,upper_hierarchy_layer,0
+v2x_frassoc_thick,v2x_frassoc_thick,unknown,-1,upper_hierarchy_layer,0
+v2x_freexp_altinf,v2x_freexp_altinf,unknown,-1,upper_hierarchy_layer,0
+v2x_gencl,v2x_gencl,unknown,-1,upper_hierarchy_layer,0
+v2x_gencs,v2x_gencs,unknown,-1,upper_hierarchy_layer,0
+v2x_libdem,v2x_libdem,unknown,-1,upper_hierarchy_layer,0
+v2x_liberal,v2x_liberal,unknown,-1,upper_hierarchy_layer,0
+v2x_partipdem,v2x_partipdem,unknown,-1,upper_hierarchy_layer,0
+v2x_suffr,v2x_suffr,unknown,-1,upper_hierarchy_layer,0
+v2xcl_acjst,v2xcl_acjst,unknown,-1,upper_hierarchy_layer,0
+v2xeg_eqdr,v2xeg_eqdr,unknown,-1,upper_hierarchy_layer,0
+v3cllabrig,v3cllabrig,unknown,-1,upper_hierarchy_layer,0
+v3cllabrig_mean,v3cllabrig_mean,unknown,-1,upper_hierarchy_layer,0
+v3cllabrig_nr,v3cllabrig_nr,unknown,-1,upper_hierarchy_layer,0
+v3cllabrig_ord,v3cllabrig_ord,unknown,-1,upper_hierarchy_layer,0
+v3cllabrig_osp,v3cllabrig_osp,unknown,-1,upper_hierarchy_layer,0
+v3ellocelc,v3ellocelc,unknown,-1,upper_hierarchy_layer,0
+v3ellocgov,v3ellocgov,unknown,-1,upper_hierarchy_layer,0
+v3elmalalc,v3elmalalc,unknown,-1,upper_hierarchy_layer,0
+v3elmalalc_mean,v3elmalalc_mean,unknown,-1,upper_hierarchy_layer,0
+v3elmalalc_nr,v3elmalalc_nr,unknown,-1,upper_hierarchy_layer,0
+v3elmalalc_ord,v3elmalalc_ord,unknown,-1,upper_hierarchy_layer,0
+v3elmalalc_osp,v3elmalalc_osp,unknown,-1,upper_hierarchy_layer,0
+v3elreapplc,v3elreapplc,unknown,-1,upper_hierarchy_layer,0
+v3elreapplc_mean,v3elreapplc_mean,unknown,-1,upper_hierarchy_layer,0
+v3elreapplc_nr,v3elreapplc_nr,unknown,-1,upper_hierarchy_layer,0
+v3elreapplc_ord,v3elreapplc_ord,unknown,-1,upper_hierarchy_layer,0
+v3elreapplc_osp,v3elreapplc_osp,unknown,-1,upper_hierarchy_layer,0
+v3elreappuc,v3elreappuc,unknown,-1,upper_hierarchy_layer,0
+v3elreappuc_mean,v3elreappuc_mean,unknown,-1,upper_hierarchy_layer,0
+v3elreappuc_nr,v3elreappuc_nr,unknown,-1,upper_hierarchy_layer,0
+v3elreappuc_ord,v3elreappuc_ord,unknown,-1,upper_hierarchy_layer,0
+v3elreappuc_osp,v3elreappuc_osp,unknown,-1,upper_hierarchy_layer,0
+v3elreggov,v3elreggov,unknown,-1,upper_hierarchy_layer,0
+v3elsrgel,v3elsrgel,unknown,-1,upper_hierarchy_layer,0
+v3equavolc_0,v3equavolc_0,unknown,-1,upper_hierarchy_layer,0
+v3equavolc_1,v3equavolc_1,unknown,-1,upper_hierarchy_layer,0
+v3equavolc_2,v3equavolc_2,unknown,-1,upper_hierarchy_layer,0
+v3equavolc_3,v3equavolc_3,unknown,-1,upper_hierarchy_layer,0
+v3equavolc_nr,v3equavolc_nr,unknown,-1,upper_hierarchy_layer,0
+v3exhoshog,v3exhoshog,unknown,-1,upper_hierarchy_layer,0
+v3juhcourt,v3juhcourt,unknown,-1,upper_hierarchy_layer,0
+v3lgbicam,v3lgbicam,unknown,-1,upper_hierarchy_layer,0
+v3stflag,v3stflag,unknown,-1,upper_hierarchy_layer,0
+v3stnatbank,v3stnatbank,unknown,-1,upper_hierarchy_layer,0
+v3struinvadm,v3struinvadm,unknown,-1,upper_hierarchy_layer,0
+v3struinvadm_mean,v3struinvadm_mean,unknown,-1,upper_hierarchy_layer,0
+v3struinvadm_nr,v3struinvadm_nr,unknown,-1,upper_hierarchy_layer,0
+v3struinvadm_ord,v3struinvadm_ord,unknown,-1,upper_hierarchy_layer,0
+v3struinvadm_osp,v3struinvadm_osp,unknown,-1,upper_hierarchy_layer,0
+v3ststeecap,v3ststeecap,unknown,-1,upper_hierarchy_layer,0
+v3ststeecap_mean,v3ststeecap_mean,unknown,-1,upper_hierarchy_layer,0
+v3ststeecap_nr,v3ststeecap_nr,unknown,-1,upper_hierarchy_layer,0
+v3ststeecap_ord,v3ststeecap_ord,unknown,-1,upper_hierarchy_layer,0
+v3ststeecap_osp,v3ststeecap_osp,unknown,-1,upper_hierarchy_layer,0
+vdem_exbribe,vdem_exbribe,unknown,-1,upper_hierarchy_layer,0
+vdem_jucorrdc,vdem_jucorrdc,unknown,-1,upper_hierarchy_layer,0
+warc_acov,Armed Conflict Area Coverage,Security,5,label_coverage_metric,108
+wbgi_gee,wbgi_gee,unknown,-1,upper_hierarchy_layer,0
+wbgi_pve,wbgi_pve,unknown,-1,upper_hierarchy_layer,0
+wbgi_rqe,wbgi_rqe,unknown,-1,upper_hierarchy_layer,0
+wbgi_rqn,wbgi_rqn,unknown,-1,upper_hierarchy_layer,0
+wcwbusi999,wcwbusi999,unknown,-1,upper_hierarchy_layer,0
+wdi_empprmne,wdi_empprmne,unknown,-1,upper_hierarchy_layer,0
+wdi_lfpmne15,wdi_lfpmne15,unknown,-1,upper_hierarchy_layer,0
+wdi_pop,Total Population,Environment,5,population_bucket_proxy,356
+wdi_popgr,Total Population Growth Rate,Environment,5,population_bucket_proxy,280
+wdi_povgap215,wdi_povgap215,unknown,-1,upper_hierarchy_layer,0
+wfdinxi999,wfdinxi999,unknown,-1,upper_hierarchy_layer,0
+wnwhoui999,wnwhoui999,unknown,-1,upper_hierarchy_layer,0
+wptfnxi999,wptfnxi999,unknown,-1,upper_hierarchy_layer,0
+wpwhoui999,wpwhoui999,unknown,-1,upper_hierarchy_layer,0
+xrerusi999,xrerusi999,unknown,-1,upper_hierarchy_layer,0
+yptfnxi999,yptfnxi999,unknown,-1,upper_hierarchy_layer,0
+ysscfci999,ysscfci999,unknown,-1,upper_hierarchy_layer,0

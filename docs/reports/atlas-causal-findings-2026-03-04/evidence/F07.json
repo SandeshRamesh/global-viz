@@ -1,0 +1,426 @@
+{
+  "finding": {
+    "class": "threshold",
+    "title": "Environmental Civil Society Organizations has robust threshold dynamics for Freedom of Association Index",
+    "variables": {
+      "source": {
+        "code": "v2cseeorgs_ord",
+        "label": "Environmental Civil Society Organizations"
+      },
+      "mediator": null,
+      "target": {
+        "code": "e_v2x_frassoc_thick_4C",
+        "label": "Freedom of Association Index"
+      }
+    },
+    "edge_type": "threshold",
+    "availability": {
+      "years_active": "35/35",
+      "graphs_active": "140/140"
+    },
+    "stratum_betas": {
+      "unified": {
+        "beta": null,
+        "ci_lower": null,
+        "ci_upper": null,
+        "years_active": 0
+      },
+      "developing": {
+        "beta": null,
+        "ci_lower": null,
+        "ci_upper": null,
+        "years_active": 0
+      },
+      "emerging": {
+        "beta": 0.8388322506427559,
+        "ci_lower": null,
+        "ci_upper": null,
+        "years_active": 15
+      },
+      "advanced": {
+        "beta": 0.8877573300619802,
+        "ci_lower": null,
+        "ci_upper": null,
+        "years_active": 35
+      }
+    },
+    "temporal_profile": {
+      "1990s": "active",
+      "2000s": "active",
+      "2010s": "active",
+      "2020s": "active"
+    },
+    "directionality": {
+      "reversal": false,
+      "reverse_edge_presence": "0/140"
+    },
+    "nonlinearity": {
+      "threshold": 3.0,
+      "threshold_latest_year": 2024,
+      "threshold_latest_year_value": 3.0,
+      "beta_low": 0.22642751612050352,
+      "beta_high": 0.0112796314676371,
+      "flip_years": 0,
+      "primary_stratum": "advanced",
+      "threshold_years_by_stratum": {
+        "unified": 0,
+        "developing": 0,
+        "emerging": 15,
+        "advanced": 35
+      },
+      "threshold_details_by_stratum": {
+        "unified": {
+          "years_threshold_active": 0,
+          "threshold": null,
+          "beta_low": null,
+          "beta_high": null,
+          "flip_years": 0
+        },
+        "developing": {
+          "years_threshold_active": 0,
+          "threshold": null,
+          "beta_low": null,
+          "beta_high": null,
+          "flip_years": 0
+        },
+        "emerging": {
+          "years_threshold_active": 15,
+          "threshold": 2.15977304964539,
+          "beta_low": 0.4984113038013224,
+          "beta_high": 0.15168057382124359,
+          "flip_years": 0
+        },
+        "advanced": {
+          "years_threshold_active": 35,
+          "threshold": 3.0,
+          "beta_low": 0.22642751612050352,
+          "beta_high": 0.0112796314676371,
+          "flip_years": 0
+        }
+      },
+      "threshold_variable": "v2cseeorgs_ord",
+      "reverted_recently": false,
+      "country_split_latest": {
+        "year": 2024,
+        "threshold_variable": "v2cseeorgs_ord",
+        "threshold_value": 3.0,
+        "coverage_countries": 178,
+        "below_count": 70,
+        "above_count": 108,
+        "missing_count": 0,
+        "below_countries": [
+          "Afghanistan",
+          "Algeria",
+          "Angola",
+          "Azerbaijan",
+          "Bahrain",
+          "Belarus",
+          "Burkina Faso",
+          "Burundi",
+          "Cambodia",
+          "Cameroon",
+          "Central African Republic",
+          "Chad",
+          "China",
+          "Comoros",
+          "Cuba",
+          "Djibouti",
+          "Egypt, Arab Rep.",
+          "El Salvador",
+          "Equatorial Guinea",
+          "Eritrea",
+          "Ethiopia",
+          "German Democratic Republic",
+          "Guinea",
+          "Hong Kong",
+          "Hungary",
+          "India",
+          "Iran, Islamic Rep.",
+          "Israel",
+          "Jordan",
+          "Kazakhstan",
+          "Kuwait",
+          "Kyrgyzstan",
+          "Laos",
+          "Malawi",
+          "Malaysia",
+          "Maldives",
+          "Mali",
+          "Mauritania",
+          "Morocco",
+          "Mozambique",
+          "Nicaragua",
+          "North Korea",
+          "Oman",
+          "Qatar",
+          "Republic of the Congo",
+          "Russia",
+          "Rwanda",
+          "Saudi Arabia",
+          "Singapore",
+          "Slovakia",
+          "Somalia",
+          "Somaliland",
+          "South Sudan",
+          "South Yemen",
+          "Sri Lanka",
+          "Sudan",
+          "Swaziland",
+          "Syria",
+          "Tajikistan",
+          "Tunisia",
+          "Turkmenistan",
+          "T\u00fcrkiye",
+          "Uganda",
+          "United Arab Emirates",
+          "Uzbekistan",
+          "Venezuela, RB",
+          "Vietnam",
+          "Yemen",
+          "Zanzibar",
+          "Zimbabwe"
+        ],
+        "above_countries": [
+          "Albania",
+          "Argentina",
+          "Armenia",
+          "Australia",
+          "Austria",
+          "Bangladesh",
+          "Barbados",
+          "Belgium",
+          "Benin",
+          "Bhutan",
+          "Bolivia",
+          "Bosnia and Herzegovina",
+          "Botswana",
+          "Brazil",
+          "Bulgaria",
+          "Canada",
+          "Cape Verde",
+          "Chile",
+          "Colombia",
+          "Congo, Dem. Rep.",
+          "Costa Rica",
+          "Croatia",
+          "Cyprus",
+          "Czech Republic",
+          "Denmark",
+          "Dominican Republic",
+          "Ecuador",
+          "Estonia",
+          "Fiji",
+          "Finland",
+          "France",
+          "Gabon",
+          "Georgia",
+          "Germany",
+          "Ghana",
+          "Greece",
+          "Guatemala",
+          "Guinea-Bissau",
+          "Guyana",
+          "Haiti",
+          "Honduras",
+          "Iceland",
+          "Indonesia",
+          "Iraq",
+          "Ireland",
+          "Italy",
+          "Ivory Coast",
+          "Jamaica",
+          "Japan",
+          "Kenya",
+          "Korea, Rep.",
+          "Kosovo",
+          "Latvia",
+          "Lebanon",
+          "Lesotho",
+          "Liberia",
+          "Libya",
+          "Lithuania",
+          "Luxembourg",
+          "Madagascar",
+          "Malta",
+          "Mauritius",
+          "Mexico",
+          "Moldova",
+          "Mongolia",
+          "Montenegro",
+          "Namibia",
+          "Nepal",
+          "Netherlands",
+          "New Zealand",
+          "Niger",
+          "Nigeria",
+          "North Macedonia",
+          "Norway",
+          "Pakistan",
+          "Panama",
+          "Papua New Guinea",
+          "Paraguay",
+          "Peru",
+          "Philippines",
+          "Poland",
+          "Portugal",
+          "Romania",
+          "Sao Tome and Principe",
+          "Senegal",
+          "Serbia",
+          "Seychelles",
+          "Sierra Leone",
+          "Slovenia",
+          "Solomon Islands",
+          "South Africa",
+          "Spain",
+          "Suriname",
+          "Sweden",
+          "Switzerland",
+          "Taiwan",
+          "Tanzania",
+          "Thailand",
+          "The Gambia",
+          "Timor-Leste",
+          "Togo",
+          "Trinidad and Tobago",
+          "Ukraine",
+          "United Kingdom",
+          "United States",
+          "Uruguay",
+          "Vanuatu",
+          "Zambia"
+        ],
+        "missing_countries": [],
+        "below_count_by_income_stratum": {
+          "Advanced": 12,
+          "Developing": 39,
+          "Emerging": 13,
+          "Unknown": 6
+        },
+        "above_count_by_income_stratum": {
+          "Advanced": 43,
+          "Developing": 32,
+          "Emerging": 32,
+          "Unknown": 1
+        }
+      }
+    },
+    "caveats": [
+      "Threshold parameters are edge-level and may vary year-to-year."
+    ],
+    "policy_relevance": {
+      "is_policy_relevant_lever": true,
+      "lever_variable": {
+        "code": "v2cseeorgs_ord",
+        "label": "Environmental Civil Society Organizations"
+      }
+    },
+    "plain_language": "The effect of Environmental Civil Society Organizations on Freedom of Association Index changes by regime around a learned threshold in advanced.",
+    "academic_summary": "Edge v2cseeorgs_ord->e_v2x_frassoc_thick_4C is classified as threshold in 35/35 years for advanced; beta_low=0.22642751612050352, beta_high=0.0112796314676371.",
+    "confidence": "high",
+    "_score_inputs": {
+      "graphs_active": 140,
+      "years_active": 35,
+      "beta_magnitude": 0.8877573300619802,
+      "ci_coverage": 0.0,
+      "reversal_strength": 0.2151478846528664,
+      "class": "threshold",
+      "decade_consistency": 1.0,
+      "policy_relevance": 1.0
+    },
+    "scores": {
+      "robustness": 1.0,
+      "public_clarity": 0.7142857142857143,
+      "academic_weight": 0.5907597397146009,
+      "class_diversity_bonus": 0.4281068127353646,
+      "total": 0.6975737809696342
+    },
+    "finding_id": "F07",
+    "lineage": {
+      "v2_v21_status": "confirmed_same_edge",
+      "notes": "v2cseeorgs_ord->e_v2x_frassoc_thick_4C: Exact source/target codes found in v2.1 edge set.",
+      "edge_statuses": [
+        {
+          "source": "v2cseeorgs_ord",
+          "target": "e_v2x_frassoc_thick_4C",
+          "status": "confirmed_same_edge"
+        }
+      ]
+    },
+    "uncertainty_flags": [
+      "ci_missing_or_sparse"
+    ]
+  },
+  "schema_reference": {
+    "finding_id": "F01",
+    "title": "...",
+    "class": "mediation|reversal|threshold|hub|outcome_surprise",
+    "variables": {
+      "source": {
+        "code": "...",
+        "label": "..."
+      },
+      "mediator": {
+        "code": "...",
+        "label": "..."
+      },
+      "target": {
+        "code": "...",
+        "label": "..."
+      }
+    },
+    "edge_type": "linear|threshold|quadratic|logarithmic|saturation|mixed",
+    "availability": {
+      "years_active": "X/35",
+      "graphs_active": "X/140"
+    },
+    "stratum_betas": {
+      "unified": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "developing": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "emerging": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      },
+      "advanced": {
+        "beta": 0.0,
+        "ci_lower": 0.0,
+        "ci_upper": 0.0
+      }
+    },
+    "temporal_profile": {
+      "1990s": "...",
+      "2000s": "...",
+      "2010s": "...",
+      "2020s": "..."
+    },
+    "directionality": {
+      "reversal": true,
+      "reverse_edge_presence": "X/140"
+    },
+    "nonlinearity": {
+      "threshold": null,
+      "beta_low": null,
+      "beta_high": null,
+      "flip_years": 0
+    },
+    "lineage": {
+      "v2_v21_status": "...",
+      "notes": "..."
+    },
+    "caveats": [
+      "..."
+    ],
+    "plain_language": "...",
+    "academic_summary": "...",
+    "confidence": "high|medium|low"
+  }
+}
