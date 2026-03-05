@@ -42,13 +42,21 @@ echo "Waiting for services to start..."
 sleep 5
 
 echo "Verifying deployment..."
-curl -sf http://localhost:3005/ > /dev/null && echo "✓ Landing page OK"
-curl -sf http://localhost:3005/explore/ > /dev/null && echo "✓ SPA OK"
-curl -sf http://localhost:3005/explore/test-route | grep -q "Atlas" && echo "✓ SPA fallback OK"
-curl -sf http://localhost:3005/research/ > /dev/null && echo "✓ Research hub OK"
-curl -sf http://localhost:3005/research/paper/ > /dev/null && echo "✓ Research paper OK"
-curl -sf http://localhost:3005/research/methodology/ > /dev/null && echo "✓ Methodology OK"
-curl -sf http://localhost:8000/health && echo "✓ API OK"
+FAIL=0
+
+curl -sf http://localhost:3005/ > /dev/null && echo "✓ Landing page OK" || { echo "✗ Landing page FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/explore/ > /dev/null && echo "✓ SPA OK" || { echo "✗ SPA FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/explore/test-route 2>/dev/null | grep -q "Atlas" && echo "✓ SPA fallback OK" || { echo "✗ SPA fallback FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/research/ > /dev/null && echo "✓ Research hub OK" || { echo "✗ Research hub FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/research/paper/ > /dev/null && echo "✓ Research paper OK" || { echo "✗ Research paper FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/research/methodology/ > /dev/null && echo "✓ Methodology OK" || { echo "✗ Methodology FAILED"; FAIL=1; }
+curl -sf http://localhost:8000/health > /dev/null && echo "✓ API OK" || { echo "✗ API FAILED"; FAIL=1; }
+
+if [ $FAIL -ne 0 ]; then
+  echo ""
+  echo "ERROR: Deployment verification failed!"
+  exit 1
+fi
 
 echo ""
 echo "Deployment complete!"
