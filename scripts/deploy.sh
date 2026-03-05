@@ -25,7 +25,7 @@ echo "Assembling site..."
 # Copy landing page to dist/ root (served at /)
 cp site/index.html dist/index.html
 cp -r site/assets dist/assets 2>/dev/null || true
-cp -r site/research dist/research 2>/dev/null || true
+rm -rf dist/research && cp -r site/research dist/research
 cp site/favicon.svg dist/favicon.svg 2>/dev/null || true
 cp site/404.html dist/404.html 2>/dev/null || true
 # serve.json provides rewrite rules (replaces -s flag)
