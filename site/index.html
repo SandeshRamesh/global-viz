@@ -1133,10 +1133,18 @@ function draw(elapsed) {
   requestAnimationFrame(draw);
 }
 
-// Init
-computeLayout();
+// Init — defer to next frame so mobile viewport height (100svh) settles
+requestAnimationFrame(() => {
+  computeLayout();
+  // Re-layout after a short delay to catch late viewport settle on mobile
+  setTimeout(() => {
+    const nw = canvas.offsetWidth, nh = canvas.offsetHeight;
+    if (nw !== W || Math.abs(nh - H) > 2) computeLayout();
+    lastW = W; lastH = H;
+  }, 150);
+});
 // Debounce + ignore mobile toolbar resize (height-only small changes)
-let lastW = W, lastH = H;
+let lastW = 0, lastH = 0;
 window.addEventListener('resize', () => {
   const nw = canvas.offsetWidth, nh = canvas.offsetHeight;
   if (nw === lastW && Math.abs(nh - lastH) < 150) return; // toolbar hide/show

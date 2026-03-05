@@ -17,6 +17,7 @@ interface ViewTabsProps {
   onClear?: () => void        // Clear local view targets callback
   canClear?: boolean          // Whether clear action should be enabled
   onShare?: () => Promise<boolean>  // Copy shareable link callback
+  onTutorialRestart?: () => void   // Restart guided tutorial
   simMode?: boolean           // Sim mode enables local/split even without targets
   /** Hide text labels on action buttons, show icon only */
   compact?: boolean
@@ -37,6 +38,7 @@ export function ViewTabs({
   onClear,
   canClear,
   onShare,
+  onTutorialRestart,
   simMode = false,
   compact = false,
   hideSplit = false,
@@ -420,6 +422,45 @@ export function ViewTabs({
           }
         </button>
       </div>
+
+      {/* Row 5: Tour restart — smallest button in the cascade */}
+      {onTutorialRestart && (
+        <button
+          onClick={onTutorialRestart}
+          style={{
+            padding: '4px 8px',
+            fontSize: 11,
+            fontWeight: 500,
+            cursor: 'pointer',
+            border: '1px solid #d0d5e0',
+            borderRadius: 6,
+            background: 'white',
+            color: '#999',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+            transition: 'all 0.15s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            alignSelf: 'flex-end'
+          }}
+          title="Replay guided tour"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#eef0f6'
+            e.currentTarget.style.color = '#555'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'white'
+            e.currentTarget.style.color = '#999'
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          {!compact && 'Tour'}
+        </button>
+      )}
     </div>
 
     {/* Mobile: Map button fixed at bottom-right */}

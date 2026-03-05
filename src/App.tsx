@@ -23,6 +23,7 @@ import { StrataTabs } from './components/StrataTabs'
 import { LocalView } from './components/LocalView'
 import { WorldMap } from './components/WorldMap'
 import { CountrySelector, SimulationPanel, TimelinePlayer, DataQualityPanel } from './components/simulation'
+import { Tutorial, type TutorialHandle, type TutorialRef } from './components/Tutorial'
 import { useSimulationStore, useIsPanelOpen } from './stores/simulationStore'
 import { simulationAPI, type CountryGraphEdge } from './services/api'
 import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData } from './utils/causalEdges'
@@ -382,6 +383,8 @@ function getGraphCenterY(h: number): number {
 function App() {
   const viewport = useViewport()
   const svgRef = useRef<SVGSVGElement>(null)
+  const tutorialRef = useRef<TutorialHandle>({} as TutorialHandle)
+  const tutorialCompRef = useRef<TutorialRef>(null)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const currentTransformRef = useRef<d3.ZoomTransform | null>(null)
   const prevVisibleNodeIdsRef = useRef<Set<string>>(new Set())
@@ -1659,6 +1662,13 @@ function App() {
   const [allNodes, setAllNodes] = useState<ExpandableNode[]>([])
   const [allEdges, setAllEdges] = useState<StructuralEdge[]>([])
   const [computedRingsState, setComputedRingsState] = useState<Array<{ radius: number; nodeSize: number; label?: string }>>([])
+
+  // Keep tutorial handle current
+  useEffect(() => {
+    if (tutorialRef.current) {
+      Object.assign(tutorialRef.current, { toggleExpansion, setExpandedNodes, expandRing, collapseRing, resetView, allNodes, rawData })
+    }
+  })
 
   // Share current state via URL
   const shareCurrentState = useCallback(async (): Promise<boolean> => {
@@ -6875,6 +6885,7 @@ function App() {
             || pinnedPaths.size > 0
           }
           onShare={shareCurrentState}
+          onTutorialRestart={() => tutorialCompRef.current?.restart()}
           simMode={localViewSimMode}
           compact={viewport.isBelow(1200)}
           hideSplit={viewport.isBelow(1024)}
@@ -7063,9 +7074,14 @@ function App() {
 
         return (
           <div style={{
-            position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+            position: window.innerWidth < BREAKPOINTS.TABLET ? 'fixed' : 'absolute',
+            bottom: window.innerWidth < BREAKPOINTS.TABLET ? 60 : 20,
+            left: '50%', transform: 'translateX(-50%)',
             background: 'white', padding: '10px 14px', borderRadius: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 220, maxWidth: 420, zIndex: 1100,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: 220,
+            maxWidth: window.innerWidth < BREAKPOINTS.TABLET ? 'calc(100% - 32px)' : 420,
+            ...(window.innerWidth < BREAKPOINTS.TABLET ? { maxHeight: 'calc(100vh - 130px)', overflowY: 'auto' as const } : {}),
+            zIndex: 1100,
             pointerEvents: 'none',
             opacity: isVisible ? 1 : 0,
             transition: 'opacity 0.2s ease'
@@ -7197,6 +7213,9 @@ function App() {
         edgesLoading={temporalEdgesLoading}
         isLocalView={viewMode === 'local' || viewMode === 'split'}
       />
+
+      {/* Tutorial overlay — auto-launches on first visit */}
+      <Tutorial ref={tutorialCompRef} appRef={tutorialRef} />
     </div>
   )
 }
