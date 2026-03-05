@@ -1,5 +1,35 @@
 # CLAUDE.md
 
+## PRODUCTION MODE
+
+**This project is LIVE at https://atlas.argonanalytics.org**
+
+Before ANY commit/push:
+1. **Review changes** - `git diff` and explain what changed
+2. **Check for breaking changes** - API signatures, paths, imports
+3. **Test locally first** - `curl` endpoints, check pages load
+4. **Verify after deploy** - All health checks must pass
+
+Deployment workflow:
+```bash
+# 1. Make changes
+# 2. Test locally
+# 3. Commit to live branch
+# 4. Push to both branches: git push origin live && git push origin live:master
+# 5. Run: ./scripts/deploy.sh
+# 6. Verify all endpoints respond
+```
+
+Live URLs to verify:
+- Landing: https://atlas.argonanalytics.org
+- App: https://atlas.argonanalytics.org/explore
+- Research: https://atlas.argonanalytics.org/research
+- API Health: https://api.argonanalytics.org/health
+
+**If something breaks, notify user IMMEDIATELY.**
+
+---
+
 ## SSH Session Safety Rules
 
 **CRITICAL**: Follow these rules to prevent session crashes:
