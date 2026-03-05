@@ -93,12 +93,13 @@ def check_v21_metadata() -> Dict[str, Any]:
         return {"status": "warning", "message": f"V2.1 access error: {e}"}
 
 
-@router.get("/health")
+@router.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     """
     Basic health check.
 
     Returns simple status for load balancers and monitoring.
+    Supports HEAD for Uptime Robot and similar monitoring tools.
     """
     return {"status": "healthy", "version": API_VERSION}
 
