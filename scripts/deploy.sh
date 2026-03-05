@@ -25,6 +25,9 @@ echo "Assembling site..."
 # Copy landing page to dist/ root (served at /)
 cp site/index.html dist/index.html
 cp -r site/assets dist/assets 2>/dev/null || true
+cp -r site/research dist/research 2>/dev/null || true
+cp site/favicon.svg dist/favicon.svg 2>/dev/null || true
+cp site/404.html dist/404.html 2>/dev/null || true
 # serve.json provides rewrite rules (replaces -s flag)
 cp serve.json dist/serve.json
 
@@ -42,6 +45,9 @@ echo "Verifying deployment..."
 curl -sf http://localhost:3005/ > /dev/null && echo "✓ Landing page OK"
 curl -sf http://localhost:3005/explore/ > /dev/null && echo "✓ SPA OK"
 curl -sf http://localhost:3005/explore/test-route | grep -q "Atlas" && echo "✓ SPA fallback OK"
+curl -sf http://localhost:3005/research/ > /dev/null && echo "✓ Research hub OK"
+curl -sf http://localhost:3005/research/paper/ > /dev/null && echo "✓ Research paper OK"
+curl -sf http://localhost:3005/research/methodology/ > /dev/null && echo "✓ Methodology OK"
 curl -sf http://localhost:8000/health && echo "✓ API OK"
 
 echo ""
