@@ -385,6 +385,7 @@ function App() {
   const svgRef = useRef<SVGSVGElement>(null)
   const tutorialRef = useRef<TutorialHandle>({} as TutorialHandle)
   const tutorialCompRef = useRef<TutorialRef>(null)
+  const [tutorialActive, setTutorialActive] = useState(false)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const currentTransformRef = useRef<d3.ZoomTransform | null>(null)
   const prevVisibleNodeIdsRef = useRef<Set<string>>(new Set())
@@ -6849,7 +6850,7 @@ function App() {
       />
 
       {/* Desktop recommendation banner (mobile only) */}
-      <DesktopBanner show={viewport.isBelow(768)} />
+      <DesktopBanner show={viewport.isBelow(768) && !tutorialActive} />
 
       {/* Error State */}
       {error && (
@@ -7215,7 +7216,7 @@ function App() {
       />
 
       {/* Tutorial overlay — auto-launches on first visit */}
-      <Tutorial ref={tutorialCompRef} appRef={tutorialRef} />
+      <Tutorial ref={tutorialCompRef} appRef={tutorialRef} onActiveChange={setTutorialActive} />
     </div>
   )
 }

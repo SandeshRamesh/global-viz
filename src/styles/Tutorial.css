@@ -92,7 +92,13 @@
 /* Raised position for simulation steps — avoids covering the QoL node */
 .tutorial-card--raised {
   bottom: auto;
-  top: 24px;
+  top: 48px;
+}
+
+/* Flush to top on desktop for "Zoom into any country" step */
+.tutorial-card--top {
+  bottom: auto;
+  top: 12px;
 }
 
 /* Hidden state — used on mobile to fade card before sim actions */
@@ -183,6 +189,24 @@
   transform: scale(0.97);
 }
 
+/* Position nav on top of timeline during sim playback — desktop covers it */
+.tutorial-nav--above-timeline {
+  bottom: 10px;
+}
+
+/* Dim nav during simulation playback so graph animation is visible */
+.tutorial-nav--dimmed {
+  animation: none;
+  opacity: 0.05;
+  transition: opacity 0.6s ease;
+}
+
+.tutorial-nav--dimmed:hover,
+.tutorial-nav--dimmed:focus-within {
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
 /* Map click ripple — expanding ring at click point */
 .tutorial-map-ripple {
   position: fixed;
@@ -246,10 +270,18 @@
     animation: tutorial-card-enter-mobile 0.3s ease-out both;
   }
 
-  /* Raise nav above timeline during sim playback */
   .tutorial-nav--above-timeline {
-    bottom: 80px;
+    bottom: 100px;
   }
+
+  .tutorial-nav--above-map {
+    bottom: 50%;
+  }
+
+  .tutorial-card--above-nav {
+    bottom: 200px;
+  }
+
 }
 
 /* ── Small mobile (< 480px) ── */

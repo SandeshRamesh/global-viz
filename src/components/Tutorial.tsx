@@ -27,10 +27,12 @@ interface ExpandableNodeLike extends PositionedNode {
 
 export interface TutorialRef {
   restart: () => void
+  isActive: () => boolean
 }
 
 interface TutorialProps {
   appRef: RefObject<TutorialHandle | null>
+  onActiveChange?: (active: boolean) => void
 }
 
 interface StepDef {
@@ -115,14 +117,20 @@ function getBrazilMapPath(): SVGPathElement | null {
 
 // ── Component ──
 
-export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial({ appRef }, ref) {
-  const [active, setActive] = useState(false)
+export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial({ appRef, onActiveChange }, ref) {
+  const [active, setActiveRaw] = useState(false)
+  const setActive = useCallback((v: boolean) => {
+    setActiveRaw(v)
+    onActiveChange?.(v)
+  }, [onActiveChange])
   const [step, setStep] = useState(0)
   const [spotlight, setSpotlight] = useState<{ x: number; y: number; r: number } | null>(null)
   const [showScrim, setShowScrim] = useState(true)
   const [pulseSpotlight, setPulseSpotlight] = useState(false)
   const [mapClickRipple, setMapClickRipple] = useState<{ x: number; y: number } | null>(null)
   const [cardHidden, setCardHidden] = useState(false)
+  const [navDimmed, setNavDimmed] = useState(false)
+  const navDimTimerRef = useRef<number | null>(null)
   const timersRef = useRef<number[]>([])
   const expandedNodeRef = useRef<string | null>(null)
   const blockerRef = useRef<((e: Event) => void) | null>(null)
@@ -139,8 +147,9 @@ export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial
       setCardHidden(false)
       setShowScrim(true)
       setActive(true)
-    }
-  }))
+    },
+    isActive: () => active
+  }), [active])
 
   // Check localStorage on mount
   useEffect(() => {
@@ -195,6 +204,11 @@ export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial
     setShowScrim(true)
     setMapClickRipple(null)
     setCardHidden(false)
+    setNavDimmed(false)
+    if (navDimTimerRef.current) {
+      clearTimeout(navDimTimerRef.current)
+      navDimTimerRef.current = null
+    }
 
     const store = useSimulationStore.getState()
 
@@ -481,8 +495,6 @@ export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial
         setSpotlight(null)
         setCardHidden(false)
 
-        const isMobile = window.innerWidth < 768
-
         const runSimActions = () => {
           const s = store()
           s.openPanel()
@@ -510,15 +522,19 @@ export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial
           }, 500)
         }
 
-        if (isMobile) {
-          // Let user read the description for 2.5s, then fade it and start actions
-          timer(() => {
-            setCardHidden(true)
-            timer(runSimActions, 400) // wait for fade transition
-          }, 2500)
-        } else {
-          runSimActions()
-        }
+        // Let user read the description, then fade it and start actions
+        timer(() => {
+          setCardHidden(true)
+          // On desktop, dim the nav bar once the card fades
+          if (window.innerWidth >= 768) {
+            timer(() => {
+              setNavDimmed(true)
+              // Blur focus so :focus-within doesn't override the dim
+              if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+            }, 400)
+          }
+          timer(runSimActions, 400) // wait for fade transition
+        }, 2500)
         break
       }
 
@@ -609,13 +625,31 @@ export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial
 
       {/* Text card — raised position during simulation steps to avoid covering QoL */}
       {/* On mobile step 7, don't raise — Reset spotlight is at top and card would cover it */}
-      <div className={`tutorial-card ${step >= 3 && !(step === 6 && window.innerWidth < 768) ? 'tutorial-card--raised' : ''} ${cardHidden ? 'tutorial-card--hidden' : ''}`} key={step}>
+      <div className={[
+        'tutorial-card',
+        step >= 3 && step < 6 ? 'tutorial-card--raised' : '',
+        (step === 4 || step === 5) && window.innerWidth >= 768 ? 'tutorial-card--top' : '',
+        step === 4 && window.innerWidth < 768 ? 'tutorial-card--hidden' : '',
+        step === 6 && window.innerWidth < 768 ? 'tutorial-card--above-nav' : '',
+        cardHidden ? 'tutorial-card--hidden' : ''
+      ].filter(Boolean).join(' ')} key={step}>
         <h2 className="tutorial-card__headline">{currentStep.headline}</h2>
         <p className="tutorial-card__body">{currentStep.body}</p>
       </div>
 
       {/* Navigation bar */}
-      <nav className={`tutorial-nav ${step === 5 && window.innerWidth < 768 ? 'tutorial-nav--above-timeline' : ''}`} data-tutorial-nav>
+      <nav className={[
+        'tutorial-nav',
+        step >= 5 ? 'tutorial-nav--above-timeline' : '',
+        step === 3 && window.innerWidth < 768 ? 'tutorial-nav--above-map' : '',
+        navDimmed ? 'tutorial-nav--dimmed' : ''
+      ].filter(Boolean).join(' ')} data-tutorial-nav onClick={() => {
+        if (navDimmed) {
+          setNavDimmed(false)
+          if (navDimTimerRef.current) clearTimeout(navDimTimerRef.current)
+          navDimTimerRef.current = window.setTimeout(() => setNavDimmed(true), 3000)
+        }
+      }}>
         <button
           className="tutorial-nav__skip"
           onClick={handleSkip}
