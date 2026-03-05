@@ -28,6 +28,22 @@ Live URLs to verify:
 
 **If something breaks, notify user IMMEDIATELY.**
 
+### Port Cleanup
+
+After deploying, check for stale processes on old ports:
+```bash
+# Check what's running on common dev ports
+lsof -i :5173 -i :5174 -i :5175 -i :3000 -i :3001 -i :3002
+
+# Kill stale dev servers if needed
+pkill -f "vite"
+pkill -f "npm run dev"
+```
+
+Production ports (do NOT kill):
+- 3005: atlas-frontend (systemd)
+- 8000: atlas-api (systemd)
+
 ---
 
 ## SSH Session Safety Rules
