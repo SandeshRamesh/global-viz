@@ -103,7 +103,7 @@ export class LayoutScales {
  * TOTAL_NODES_REFERENCE: Expected max node count for density calculations
  * Used to scale node sizes based on how "sparse" the current view is
  */
-const TOTAL_NODES_REFERENCE = 2583
+const TOTAL_NODES_REFERENCE = 3122
 
 /**
  * Node sizing calculator - viewport and density aware

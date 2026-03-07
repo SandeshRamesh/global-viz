@@ -243,7 +243,7 @@ interface ExpandableNode extends PositionedNode {
   angle: number  // Angular position in radians (from RadialLayout)
 }
 
-/** Searchable node for fuzzy search (all 2,583 nodes) */
+/** Searchable node for fuzzy search (all 3,122 nodes) */
 interface SearchableNode {
   id: string
   label: string
@@ -3541,10 +3541,6 @@ function App() {
       return finalizeRadius(n, vLayout.getNodeRadius(Math.max(0.01, nonNegative(n.importance, 0))))
     }
 
-    const isNodeFloored = (importance: number): boolean => {
-      return vLayout.isNodeFloored(Math.max(0, importance))
-    }
-
     const getPercentileInRing = (node: ExpandableNode): number => {
       const ringNodes = nodesByRingMemo.get(node.ring) || []
       if (ringNodes.length <= 1) return 1
@@ -4775,18 +4771,19 @@ function App() {
       const effLookup = simEffectLookup.get(d.id)
       const isAffectedDuringPlayback = simPlaybackActive && effLookup?.isLeaf && Math.abs(effLookup.pct) >= 0.01
       const simBorder = getSimBorder(d)
+      // Non-ring-0 nodes: no border by default, only during simulation
       let strokeColor = isAffectedDuringPlayback
         ? getColor(d)  // match fill = invisible border
         : simBorder
           ? simBorder.color
-          : isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E')
+          : d.ring === 0 ? (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E') : 'none'
       let strokeWidth = isAffectedDuringPlayback
         ? 0.5
         : simBorder
           ? simBorder.width
-          : isNodeFloored(d.importance) ? Math.min(1, getSize(d) * 0.5) : getBorderWidth(d)
+          : d.ring === 0 ? getBorderWidth(d) : 0
       const strokeOpacity = isAffectedDuringPlayback ? 0 : (simBorder ? simBorder.opacity : 1.0)
-      const dashArray = (!simBorder && !isAffectedDuringPlayback && isNodeFloored(d.importance)) ? '2,2' : 'none'
+      const dashArray = 'none'
 
       // Ring 0 QoL outline: RdYlGn tint — hidden during simulation (cyan pulse + glow handle it)
       if (d.ring === 0 && hideQolStroke) {
@@ -4907,7 +4904,8 @@ function App() {
         const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
         if (affectedDuringPlayback) return getColor(d)
         const sb = getSimBorder(d)
-        return sb ? sb.color : isNodeFloored(d.importance) ? '#999' : (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E')
+        if (sb) return sb.color
+        return d.ring === 0 ? (DOMAIN_COLORS[d.semanticPath.domain] || '#9E9E9E') : 'none'
       })
       .attr('stroke-width', d => {
         // Ring 0 QoL outline: hidden during sim
@@ -4921,8 +4919,8 @@ function App() {
         if (affectedDuringPlayback) return 0.5
         const sb = getSimBorder(d)
         if (sb) return sb.width
-        const radius = getSize(d)
-        if (isNodeFloored(d.importance)) return Math.min(1, radius * 0.5)
+        // Only ring 0 gets a default border
+        if (d.ring !== 0) return 0
         return getBorderWidth(d)
       })
       .attr('stroke-opacity', d => {
@@ -4933,13 +4931,7 @@ function App() {
         const sb = getSimBorder(d)
         return sb ? sb.opacity : 1.0
       })
-      .attr('stroke-dasharray', d => {
-        const eLookup = simEffectLookup.get(d.id)
-        const affectedDuringPlayback = simPlaybackActive && eLookup?.isLeaf && Math.abs(eLookup.pct) >= 0.01
-        if (affectedDuringPlayback) return 'none'
-        const sb = getSimBorder(d)
-        return (!sb && isNodeFloored(d.importance)) ? '2,2' : 'none'
-      })
+      .attr('stroke-dasharray', 'none')
       .style('cursor', d => d.hasChildren ? 'pointer' : 'default')
       .style('--kbd-focus-stroke-width', d => `${Math.max(1.5, getSize(d) * 0.06)}px`)
 
@@ -4989,8 +4981,7 @@ function App() {
         .ease(d3.easeLinear)  // Linear for smooth continuous feel
         .attr('r', d => getSize(d))
         .attr('stroke-width', d => {
-          const radius = getSize(d)
-          if (isNodeFloored(d.importance)) return Math.min(1, radius * 0.5)
+          if (d.ring !== 0) return 0
           return getBorderWidth(d)
         })
     }
@@ -5190,10 +5181,10 @@ function App() {
             const sb = getSimBorder(node)
             const baseStroke = (node.ring === 0 && hideQolStroke)
               ? 0
-              : (sb ? sb.width : isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node))
+              : (sb ? sb.width : node.ring === 0 ? getBorderWidth(node) : 0)
             const hoverStroke = (node.ring === 0 && hideQolStroke)
               ? 0
-              : Math.min(baseStroke + 1, radius * 0.8)
+              : sb ? Math.min(baseStroke + 1, radius * 0.8) : (node.ring === 0 ? Math.min(baseStroke + 1, radius * 0.8) : 0)
             d3.select(target)
               .attr('r', radius * 1.3)
               .attr('stroke-width', hoverStroke)
@@ -5221,7 +5212,7 @@ function App() {
             const sb = getSimBorder(node)
             const baseStroke = (node.ring === 0 && hideQolStroke)
               ? 0
-              : (sb ? sb.width : isNodeFloored(node.importance) ? Math.min(1, radius * 0.5) : getBorderWidth(node))
+              : (sb ? sb.width : node.ring === 0 ? getBorderWidth(node) : 0)
             d3.select(target)
               .attr('r', radius)
               .attr('stroke-width', baseStroke)

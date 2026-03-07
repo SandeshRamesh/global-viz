@@ -67,7 +67,7 @@ const STEPS: StepDef[] = [
     body: 'Each circle\u2019s area is directly proportional to its impact on Quality of Life.'
   },
   {
-    headline: 'There are 2,583 indicators inside this graph.',
+    headline: 'There are 3,122 indicators inside this graph.',
     body: 'Click any circle to expand it and reveal what drives it. Go as deep or as shallow as you want.'
   },
   {
@@ -629,7 +629,7 @@ export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial
         'tutorial-card',
         step >= 3 && step < 6 ? 'tutorial-card--raised' : '',
         (step === 4 || step === 5) && window.innerWidth >= 768 ? 'tutorial-card--top' : '',
-        step === 4 && window.innerWidth < 768 ? 'tutorial-card--hidden' : '',
+        step === 4 && window.innerWidth < 768 ? 'tutorial-card--raised' : '',
         step === 6 && window.innerWidth < 768 ? 'tutorial-card--above-nav' : '',
         cardHidden ? 'tutorial-card--hidden' : ''
       ].filter(Boolean).join(' ')} key={step}>

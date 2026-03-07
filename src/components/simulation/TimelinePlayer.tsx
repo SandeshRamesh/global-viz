@@ -209,7 +209,7 @@ export function TimelinePlayer({ edgesLoading = false, isLocalView = false }: Ti
         // Mobile: skip collapsed, go straight to docking
         collapseTimeoutRef.current = window.setTimeout(() => {
           setPlayerState('docking')
-        }, 2000)
+        }, 4000)
       } else {
         // Desktop: collapse after 4s
         collapseTimeoutRef.current = window.setTimeout(() => {
