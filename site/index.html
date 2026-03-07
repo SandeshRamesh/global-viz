@@ -554,13 +554,26 @@
     to { opacity: 0.6; }
   }
   @keyframes chevronPulse {
-    0%, 100% { opacity: 0.4; transform: translateX(-50%) translateY(0); }
-    50% { opacity: 0.9; transform: translateX(-50%) translateY(6px); }
+    0%, 100% { opacity: 0.35; transform: translateX(-50%) translateY(0); }
+    50% { opacity: 0.85; transform: translateX(-50%) translateY(8px); }
   }
 
-  /* ── HERO CHEVRON (hidden by default, shown on mobile) ── */
+  /* ── HERO CHEVRON ── */
   .hero-chevron {
-    display: none;
+    display: block; position: absolute; bottom: 32px; left: 50%;
+    transform: translateX(-50%); z-index: 10;
+    color: var(--cyan); opacity: 0;
+    transition: opacity 1.2s ease-out;
+    filter: drop-shadow(0 0 6px rgba(0,229,255,0.5));
+  }
+  .hero-chevron.visible { opacity: 0.5; }
+  .hero-chevron.pulsing {
+    animation: chevronPulse 3s ease-in-out infinite;
+  }
+  .hero-chevron.hiding {
+    opacity: 0 !important;
+    animation: none;
+    transition: opacity 0.6s ease-out;
   }
 
   .reveal {
@@ -592,18 +605,8 @@
     #cobe-canvas.ready { opacity: 0.45; }
     #cobe-canvas { top: 39%; }
     #globe-canvas.ready { opacity: 0.55; }
-    .hero-chevron {
-      display: block; position: absolute; bottom: 28px; left: 50%;
-      transform: translateX(-50%); z-index: 10;
-      color: var(--cyan); opacity: 0;
-      transition: opacity 1s ease-out;
-    }
-    .hero-chevron.visible {
-      opacity: 0.6;
-    }
-    .hero-chevron.pulsing {
-      animation: chevronPulse 2.5s ease-in-out infinite;
-    }
+    .hero-chevron { bottom: 24px; }
+    .hero-chevron.visible { opacity: 0.65; }
     .ticker-bar { overflow: hidden; padding: 14px 0; }
     .ticker-track {
       justify-content: flex-start; gap: 0; padding: 0;
@@ -671,7 +674,7 @@
       Not what happened. What causes it.<br>For every country. For the first time.
     </p>
     <div class="hero-actions">
-      <a href="/explore" class="btn-primary">Explore Atlas</a>
+      <a href="/explore" class="btn-primary" target="_blank" rel="noopener">Explore Atlas</a>
       <a href="#what" class="btn-secondary">How It Works</a>
     </div>
   </div>
@@ -1160,27 +1163,32 @@ const observer = new IntersectionObserver(entries => {
 }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-// ── CHEVRON: delay → fade in → pulse → hide on scroll ──
+// ── CHEVRON: sequence after graph expand → fade in → glow pulse → hide on scroll ──
 const chevron = document.querySelector('.hero-chevron');
 if (chevron) {
-  let chevronVisible = false;
-  // Show after 3.5s delay
+  let chevronState = 'waiting'; // waiting | visible | hidden
+
+  // Show after graph fully expands (14s) + 1.5s settle = 15.5s
+  // On mobile show sooner since there's less visual complexity
+  const delay = window.innerWidth <= 900 ? 4000 : 15500;
   setTimeout(() => {
-    if (chevronVisible === false && window.scrollY < 30) {
+    if (chevronState === 'waiting' && window.scrollY < 50) {
       chevron.classList.add('visible');
-      // Start pulse after fade-in transition completes (1s)
-      setTimeout(() => { chevron.classList.add('pulsing'); }, 1000);
-      chevronVisible = true;
+      chevronState = 'visible';
+      // Start glow pulse after fade-in completes (1.2s transition)
+      setTimeout(() => {
+        if (chevronState === 'visible') chevron.classList.add('pulsing');
+      }, 1300);
     }
-  }, 3500);
-  // Hide on scroll — fade out smoothly
+  }, delay);
+
+  // Hide on scroll — smooth fade out, then clean up
   window.addEventListener('scroll', function hideChevron() {
-    if (window.scrollY > 30) {
-      chevron.style.transition = 'opacity 0.5s ease-out';
-      chevron.style.opacity = '0';
-      setTimeout(() => { chevron.style.animation = 'none'; }, 500);
+    if (window.scrollY > 50 && chevronState !== 'hidden') {
+      chevronState = 'hidden';
+      chevron.classList.add('hiding');
+      chevron.classList.remove('pulsing');
       window.removeEventListener('scroll', hideChevron);
-      chevronVisible = true; // prevent late show
     }
   }, { passive: true });
 }
