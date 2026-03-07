@@ -1170,7 +1170,7 @@ if (chevron) {
 
   // Show after graph fully expands (14s) + 1.5s settle = 15.5s
   // On mobile show sooner since there's less visual complexity
-  const delay = window.innerWidth <= 900 ? 4000 : 15500;
+  const delay = window.innerWidth <= 900 ? 4000 : 5000;
   setTimeout(() => {
     if (chevronState === 'waiting' && window.scrollY < 50) {
       chevron.classList.add('visible');
