@@ -367,11 +367,19 @@
   .method-badge {
     font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em;
     background: var(--cyan-dim); color: var(--cyan); padding: 4px 8px;
-    border-radius: 2px; white-space: nowrap; min-width: 80px; text-align: center;
+    border-radius: 2px; white-space: nowrap; min-width: 96px; text-align: center;
     margin-top: 2px;
   }
   .method-text { color: var(--text-muted); line-height: 1.6; font-size: 14px; }
   .method-text strong { color: var(--text); font-weight: 600; }
+  .method-cta {
+    display: inline-block; margin-top: 24px;
+    font-family: 'DM Mono', monospace; font-size: 12px; letter-spacing: 0.08em;
+    color: var(--cyan); text-decoration: none;
+    padding: 10px 20px; border: 1px solid var(--cyan);
+    border-radius: 3px; transition: all 0.2s;
+  }
+  .method-cta:hover { background: var(--cyan); color: var(--bg); }
 
   /* ── SECTION HEADINGS (extracted from inline styles) ── */
   .section-heading {
@@ -840,6 +848,7 @@
           </div>
         </div>
       </div>
+      <a href="/research/methodology" target="_blank" rel="noopener" class="method-cta">Read the Full Methodology →</a>
     </div>
   </div>
 </section>
