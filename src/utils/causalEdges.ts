@@ -7,7 +7,7 @@
  * Supports country-specific edge weights via countryGraphToRawEdges()
  */
 
-import type { RawEdge, RawNodeV21, LocalViewEdge, LocalViewNode, LocalNodeShape, LocalViewMode, EdgePathway, EdgeStats, EdgeStatsMap } from '../types'
+import type { RawEdge, RawNodeV21, LocalViewEdge, LocalViewNode, LocalNodeShape, LocalViewMode, EdgePathway, EdgeStatsMap } from '../types'
 import type { CountryGraphEdge, CausalPathEntry, TemporalEffect } from '../services/api'
 
 /** Default beta threshold for filtering edges */
