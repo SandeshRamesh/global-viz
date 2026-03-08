@@ -31,6 +31,15 @@ body {
   cursor: default;
 }
 
+/* ── Ambient background texture ── */
+.bg-glow {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0,229,255,0.05) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 85% 60%, rgba(10,18,40,0.9) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 35% at 10% 85%, rgba(0,229,255,0.04) 0%, transparent 50%);
+}
+
 /* ── SKIP LINK ── */
 .skip-link {
   position: absolute; top: -100%; left: 50%; transform: translateX(-50%);
@@ -235,6 +244,7 @@ footer {
 .toc-pdf {
   margin-top: 24px; padding-top: 20px;
   border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 12px;
 }
 .toc-pdf a {
   font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.08em;
@@ -243,6 +253,33 @@ footer {
   transition: opacity 0.2s;
 }
 .toc-pdf a:hover { opacity: 0.7; }
+.toc-pdf .download-link {
+  color: var(--text-muted); border: 1px solid var(--border);
+  padding: 8px 12px; border-radius: 2px;
+  transition: all 0.2s;
+}
+.toc-pdf .download-link:hover {
+  opacity: 1; border-color: var(--cyan); color: var(--cyan);
+}
+.toc-pdf .download-link svg { flex-shrink: 0; }
+
+/* ── Prominent PDF download button (article top) ── */
+.pdf-download {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 20px;
+  font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; text-decoration: none;
+  color: var(--text-muted);
+  padding: 10px 18px;
+  border: 1px solid var(--border-bright);
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+.pdf-download:hover {
+  color: var(--cyan); border-color: var(--cyan);
+  box-shadow: 0 0 16px rgba(0,229,255,0.12);
+}
+.pdf-download svg { flex-shrink: 0; }
 
 /* ── Mobile TOC toggle ── */
 .mobile-toc-toggle {

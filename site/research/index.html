@@ -20,6 +20,13 @@
     padding: 160px 48px 100px;
     max-width: 900px; margin: 0 auto;
     text-align: center;
+    position: relative;
+  }
+  .hub-hero::before {
+    content: ''; position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 500px;
+    background: radial-gradient(ellipse at center, rgba(0,229,255,0.06) 0%, rgba(0,229,255,0.02) 40%, transparent 70%);
+    pointer-events: none; z-index: -1;
   }
   .hub-hero .eyebrow {
     font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.25em;
@@ -63,6 +70,13 @@
     width: 1px; height: 16px; background: var(--border-bright); display: block;
   }
 
+  /* Section divider — faint gradient line */
+  .section-divider {
+    height: 1px; width: 100%;
+    background: rgba(0,229,255,0.12);
+  }
+
+
   /* Findings grid */
   .findings-grid {
     display: grid; grid-template-columns: repeat(2, 1fr);
@@ -72,6 +86,7 @@
   /* Pipeline section */
   .pipeline-section {
     background: var(--navy-2);
+    background-image: radial-gradient(ellipse 70% 50% at 30% 50%, rgba(0,229,255,0.02) 0%, transparent 70%);
     padding: 100px 48px;
   }
   .pipeline-inner {
@@ -135,6 +150,7 @@
 </style>
 </head>
 <body>
+<div class="bg-glow" aria-hidden="true"></div>
 <a href="#findings" class="skip-link">Skip to findings</a>
 
 <!-- NAV -->
@@ -168,6 +184,8 @@
     <a href="/research/methodology">Methodology</a>
   </nav>
 </div>
+
+<div class="section-divider"></div>
 
 <!-- ══════════════════ FINDINGS CARDS ══════════════════ -->
 <section class="research-section" id="findings">
@@ -273,28 +291,30 @@
   <h2 class="section-heading reveal" style="margin-bottom:48px;">Three ways into the evidence.</h2>
 
   <div class="pathways-grid">
-    <a href="/research/paper" class="pathway-card reveal">
+    <a href="https://github.com/sandesh-argon/atlas" target="_blank" rel="noopener" class="pathway-card reveal">
+      <div class="pathway-label">Open Source</div>
+      <h3>GitHub Repository</h3>
+      <p>Full source code, research pipeline, simulation engine, and data processing scripts. Clone, reproduce, and build on the Atlas framework.</p>
+      <span class="pathway-link">View on GitHub &rarr;</span>
+    </a>
+
+    <a href="/research/paper" class="pathway-card reveal reveal-delay-1">
       <div class="pathway-label">Full Paper</div>
       <h3>Research Paper</h3>
       <p>Causal discovery methodology, four anchor findings with stratum-level evidence, tables, and references. The complete academic treatment.</p>
       <span class="pathway-link">Read paper &rarr;</span>
     </a>
 
-    <a href="/research/methodology" class="pathway-card reveal reveal-delay-1">
+    <a href="/research/methodology" class="pathway-card reveal reveal-delay-2">
       <div class="pathway-label">Deep Dive</div>
       <h3>Methodology</h3>
       <p>16 sections on pipeline design, validation architecture, failure registry, and evidence governance. Every claim traceable to an evidence anchor.</p>
       <span class="pathway-link">Read methodology &rarr;</span>
     </a>
-
-    <a href="https://github.com/sandesh-argon/atlas" target="_blank" rel="noopener" class="pathway-card reveal reveal-delay-2">
-      <div class="pathway-label">Open Source</div>
-      <h3>GitHub Repository</h3>
-      <p>Full source code, research pipeline, simulation engine, and data processing scripts. Clone, reproduce, and build on the Atlas framework.</p>
-      <span class="pathway-link">View on GitHub &rarr;</span>
-    </a>
   </div>
 </section>
+
+<div class="section-divider"></div>
 
 <!-- ══════════════════ DATA SOURCES ══════════════════ -->
 <section class="research-section data-sources-section" style="background:var(--navy-2);max-width:100%;padding:100px 48px;">
