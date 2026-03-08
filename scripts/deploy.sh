@@ -6,8 +6,12 @@ set -e
 
 cd /home/sandesh/argon_primary/atlas
 
-# Load environment variables (for Cloudflare cache purge)
-[ -f /home/sandesh/argon_primary/.env ] && export $(grep -v '^#' /home/sandesh/argon_primary/.env | xargs)
+# Load Cloudflare credentials for cache purge
+if [ -f /home/sandesh/argon_primary/.env ]; then
+  CLOUDFLARE_ZONE_ID=$(grep '^CLOUDFLARE_ZONE_ID=' /home/sandesh/argon_primary/.env | cut -d'=' -f2)
+  CLOUDFLARE_API_TOKEN=$(grep '^CLOUDFLARE_API_TOKEN=' /home/sandesh/argon_primary/.env | cut -d'=' -f2)
+  export CLOUDFLARE_ZONE_ID CLOUDFLARE_API_TOKEN
+fi
 
 echo "Pulling latest from live branch..."
 git fetch origin live
