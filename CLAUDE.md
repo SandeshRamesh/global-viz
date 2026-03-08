@@ -28,6 +28,19 @@ Live URLs to verify:
 
 **If something breaks, notify user IMMEDIATELY.**
 
+### Cloudflare Cache
+
+Static assets (PDFs, images) are cached by Cloudflare. After deploying changes to static files:
+- The deploy script automatically purges cache if `CLOUDFLARE_ZONE_ID` and `CLOUDFLARE_API_TOKEN` are set
+- If cache purge fails or credentials aren't set, manually purge from Cloudflare dashboard
+- **Always verify static file changes are live** - download and check, don't trust browser cache
+
+Required env vars (set in shell or `/home/sandesh/argon_primary/.env`):
+```bash
+export CLOUDFLARE_ZONE_ID="your-zone-id"
+export CLOUDFLARE_API_TOKEN="your-api-token"  # needs Cache Purge permission
+```
+
 ### Port Cleanup
 
 After deploying, check for stale processes on old ports:

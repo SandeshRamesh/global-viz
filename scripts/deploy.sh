@@ -6,6 +6,9 @@ set -e
 
 cd /home/sandesh/argon_primary/atlas
 
+# Load environment variables (for Cloudflare cache purge)
+[ -f /home/sandesh/argon_primary/.env ] && export $(grep -v '^#' /home/sandesh/argon_primary/.env | xargs)
+
 echo "Pulling latest from live branch..."
 git fetch origin live
 git checkout live
@@ -56,6 +59,17 @@ if [ $FAIL -ne 0 ]; then
   echo ""
   echo "ERROR: Deployment verification failed!"
   exit 1
+fi
+
+# Purge Cloudflare cache
+echo "Purging Cloudflare cache..."
+if [ -n "$CLOUDFLARE_ZONE_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+  curl -sf -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache" \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"purge_everything":true}' > /dev/null && echo "✓ Cloudflare cache purged" || echo "⚠ Cloudflare purge failed (non-fatal)"
+else
+  echo "⚠ Skipping Cloudflare purge (CLOUDFLARE_ZONE_ID or CLOUDFLARE_API_TOKEN not set)"
 fi
 
 echo ""
