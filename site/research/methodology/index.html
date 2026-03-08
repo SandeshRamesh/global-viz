@@ -394,7 +394,7 @@
     <section id="research-questions" class="reveal">
       <h3>1.1 Research Questions and Scope</h3>
 
-      <p>Three research questions structure this work. First, <strong>methodological</strong>: can a multi-stage causal discovery pipeline preserve interpretability at Atlas scale while staying auditable end to end? Second, <strong>substantive</strong>: do high-coverage relationships reveal mechanism classes that matter for policy design -- cross-strata reversals, threshold effects, mediated transmission chains? Third, <strong>operational</strong>: can those findings be translated into policy-ready prose without breaking evidence fidelity?</p>
+      <p>Three research questions structure this work. First, <strong>methodological</strong>: can a multi-stage causal discovery pipeline preserve interpretability at Atlas scale while staying auditable end to end? Second, <strong>substantive</strong>: do high-coverage relationships reveal mechanism classes that matter for policy design: cross-strata reversals, threshold effects, mediated transmission chains? Third, <strong>operational</strong>: can those findings be translated into policy-ready prose without breaking evidence fidelity?</p>
 
       <p>Atlas separates concerns accordingly. Discovery stages estimate directional structure under explicit assumptions. Runtime layers serve artifacts with scope-aware fallback. Narrative synthesis converts validated evidence into documents reviewable by technical and non-technical audiences without changing underlying numbers.</p>
 
@@ -405,7 +405,7 @@
     <section id="origins" class="reveal">
       <h3>1.2 Origins and Early Failure Context</h3>
 
-      <p>Atlas V1 targeted 174 countries across 65 years and 2,480 indicators. Early exports produced a combined graph with 162 nodes and 204 edges -- the first complete ingestion-to-graph loop, but also the beginning of identified limits in sample retention and temporal coverage (<span class="evidence-ref">CLM-0023<span class="tooltip">V1 original outputs</span></span>, <span class="evidence-ref">CLM-0024<span class="tooltip">V1 original outputs</span></span>).</p>
+      <p>Atlas V1 targeted 174 countries across 65 years and 2,480 indicators. Early exports produced a combined graph with 162 nodes and 204 edges, the first complete ingestion-to-graph loop, but also the beginning of identified limits in sample retention and temporal coverage (<span class="evidence-ref">CLM-0023<span class="tooltip">V1 original outputs</span></span>, <span class="evidence-ref">CLM-0024<span class="tooltip">V1 original outputs</span></span>).</p>
 
       <p>The most consequential early failure was a data-coverage cascade. Under naive temporal-completeness handling, usable sample collapsed after filtering, making structure learning brittle. That failure (FAIL-0004) was resolved by reworking feature engineering around explicit panel-density constraints before causal estimation.</p>
 
@@ -471,7 +471,7 @@
     <section id="data-governance" class="reveal">
       <h3>2.3 Data Governance and Reproducibility Controls</h3>
 
-      <p>Atlas uses three linked registries: <strong>dataset registry</strong> (source identity and access links), <strong>ingestion registry</strong> (fetch/parse lineage and version alignment), and <strong>evidence ledger</strong> (claim-to-artifact binding). Narrative conversion is allowed only when claim-evidence linkage is complete. If a value cannot be traced to a registered claim, it is excluded -- claims are removed, not softened, when traceability fails.</p>
+      <p>Atlas uses three linked registries: <strong>dataset registry</strong> (source identity and access links), <strong>ingestion registry</strong> (fetch/parse lineage and version alignment), and <strong>evidence ledger</strong> (claim-to-artifact binding). Narrative conversion is allowed only when claim-evidence linkage is complete. If a value cannot be traced to a registered claim, it is excluded. Claims are removed, not softened, when traceability fails.</p>
 
       <p>The same governance rule applies to contextual citations: only references already in repository artifacts are permitted. New external claims are prohibited in this narrative phase.</p>
     </section>
@@ -490,7 +490,7 @@
     <section id="stage-a2" class="reveal">
       <h3>3.1 Stage A2: Granger Causality Prefiltering</h3>
 
-      <p>A2 ran <strong>2,159,672 pairwise Granger causality tests</strong> (max lag 5 years), asking whether lagged history of candidate X improves prediction of target Y beyond Y's own history. FDR control at q&lt;0.05 yielded <strong>564,545 retained edges</strong> (26.1% retention, 73.9% pruning) -- expected in high-dimensional settings where many pairwise correlations are weak or temporally non-predictive (<span class="evidence-ref">CLM-0008<span class="tooltip">Granger causality test counts</span></span>, <span class="evidence-ref">CLM-0009<span class="tooltip">Granger causality test counts</span></span>, <span class="evidence-ref">CLM-0010<span class="tooltip">Granger causality test counts</span></span>).</p>
+      <p>A2 ran <strong>2,159,672 pairwise Granger causality tests</strong> (max lag 5 years), asking whether lagged history of candidate X improves prediction of target Y beyond Y's own history. FDR control at q&lt;0.05 yielded <strong>564,545 retained edges</strong> (26.1% retention, 73.9% pruning), expected in high-dimensional settings where many pairwise correlations are weak or temporally non-predictive (<span class="evidence-ref">CLM-0008<span class="tooltip">Granger causality test counts</span></span>, <span class="evidence-ref">CLM-0009<span class="tooltip">Granger causality test counts</span></span>, <span class="evidence-ref">CLM-0010<span class="tooltip">Granger causality test counts</span></span>).</p>
 
       <p>A2 is intentionally permissive. The goal is to avoid discarding plausible temporal candidates before structural testing. A2 output is a screened candidate pool, not publishable causal claims.</p>
     </section>
@@ -529,7 +529,7 @@
 
       <p>The serving corpus includes <strong>5,053 temporal SHAP files</strong> and <strong>286 regional SHAP files</strong>, near parity with graph files (<span class="evidence-ref">CLM-0014<span class="tooltip">Runtime asset counts</span></span>, <span class="evidence-ref">CLM-0015<span class="tooltip">Runtime asset counts</span></span>, <span class="evidence-ref">CLM-0017<span class="tooltip">Runtime asset counts</span></span>, <span class="evidence-ref">CLM-0018<span class="tooltip">Runtime asset counts</span></span>).</p>
 
-      <p>SHAP and causal edges are interpreted jointly. When concentration and edge stability align, mechanism confidence improves. When they diverge, Atlas elevates uncertainty language -- preventing misrepresentation of feature importance as intervention effect size.</p>
+      <p>SHAP and causal edges are interpreted jointly. When concentration and edge stability align, mechanism confidence improves. When they diverge, Atlas elevates uncertainty language, preventing misrepresentation of feature importance as intervention effect size.</p>
     </section>
 
     <!-- 4.1 SHAP in Policy Context -->
@@ -546,7 +546,7 @@
       <span class="section-num">Section 5</span>
       <h2>Simulation Engine</h2>
 
-      <p>Atlas simulation propagates interventions through validated directed graphs with damping, horizon control, and optional nonlinear handling. Output is comparative scenario movement, not absolute point forecasts -- a distinction learned through failure when V3.0 forecasting framing failed validation (<span class="evidence-ref">FAIL-0001<span class="tooltip">Absolute forecasting framing failed predictive checks. Replaced by comparative scenario framing.</span></span>).</p>
+      <p>Atlas simulation propagates interventions through validated directed graphs with damping, horizon control, and optional nonlinear handling. Output is comparative scenario movement, not absolute point forecasts, a distinction learned through failure when V3.0 forecasting framing failed validation (<span class="evidence-ref">FAIL-0001<span class="tooltip">Absolute forecasting framing failed predictive checks. Replaced by comparative scenario framing.</span></span>).</p>
     </section>
 
     <!-- 5.1 Scope Modes -->
@@ -709,9 +709,9 @@
     <section id="a3-logic" class="reveal">
       <h3>10.2 Stage A3 Structural Testing Logic</h3>
 
-      <p>A3 applies conditional-independence reasoning: if X and Y are no longer associated conditioning on separator set S, the direct edge is less plausible. PC-Stable controls orientation updates to reduce order dependence. A3 bridges predictive precedence and graph structure -- removing edges that are predictive but not structurally direct (<span class="evidence-ref">CLM-0011<span class="tooltip">PC-Stable edge reduction</span></span>).</p>
+      <p>A3 applies conditional-independence reasoning: if X and Y are no longer associated conditioning on separator set S, the direct edge is less plausible. PC-Stable controls orientation updates to reduce order dependence. A3 bridges predictive precedence and graph structure, removing edges that are predictive but not structurally direct (<span class="evidence-ref">CLM-0011<span class="tooltip">PC-Stable edge reduction</span></span>).</p>
 
-      <p>A3 assumptions: adequate confounder representation in observed variables and stable partial-correlation behavior under finite samples. When these fail, A3 can retain spurious edges or remove weak true edges -- addressed by A4 resampling and uncertainty-class reporting.</p>
+      <p>A3 assumptions: adequate confounder representation in observed variables and stable partial-correlation behavior under finite samples. When these fail, A3 can retain spurious edges or remove weak true edges, addressed by A4 resampling and uncertainty-class reporting.</p>
     </section>
 
     <!-- 10.3 -->
@@ -747,7 +747,7 @@
     <section id="panel-checks" class="reveal">
       <h3>11.2 Panel Integrity Checks</h3>
 
-      <p>Panel checks verify row, entity, and indicator counts against frozen expectations -- detecting sample shifts that change model behavior. Panel integrity must be monitored after every major transformation, not only at ingest (<span class="evidence-ref">CLM-0005<span class="tooltip">Panel integrity counts</span></span>, <span class="evidence-ref">CLM-0006<span class="tooltip">Panel integrity counts</span></span>, <span class="evidence-ref">CLM-0007<span class="tooltip">Panel integrity counts</span></span>).</p>
+      <p>Panel checks verify row, entity, and indicator counts against frozen expectations, detecting sample shifts that change model behavior. Panel integrity must be monitored after every major transformation, not only at ingest (<span class="evidence-ref">CLM-0005<span class="tooltip">Panel integrity counts</span></span>, <span class="evidence-ref">CLM-0006<span class="tooltip">Panel integrity counts</span></span>, <span class="evidence-ref">CLM-0007<span class="tooltip">Panel integrity counts</span></span>).</p>
     </section>
 
     <!-- 11.3 -->
@@ -761,7 +761,7 @@
     <section id="citation-checks" class="reveal">
       <h3>11.4 Citation and Contradiction Checks</h3>
 
-      <p>Citation checks verify narrative claims map to registered evidence IDs -- zero missing and zero unknown in this cycle. Contradiction checks compare values across artifacts; current unresolved count is <strong>zero</strong> (<span class="evidence-ref">CLM-0051<span class="tooltip">Contradiction closure</span></span>, <span class="evidence-ref">CLM-0054<span class="tooltip">Citation audit results</span></span>).</p>
+      <p>Citation checks verify narrative claims map to registered evidence IDs with zero missing and zero unknown in this cycle. Contradiction checks compare values across artifacts; current unresolved count is <strong>zero</strong> (<span class="evidence-ref">CLM-0051<span class="tooltip">Contradiction closure</span></span>, <span class="evidence-ref">CLM-0054<span class="tooltip">Citation audit results</span></span>).</p>
     </section>
 
     <!-- ═══════════════ 12. FINDINGS GOVERNANCE ═══════════════ -->
@@ -840,7 +840,7 @@
     <section id="external-validity" class="reveal">
       <h3>14.2 External Validity</h3>
 
-      <p>Even high-coverage findings can change behavior across institutional systems. Threshold and reversal findings are especially sensitive -- their value lies in identifying where linear transfer assumptions are unsafe, not in supplying universal constants.</p>
+      <p>Even high-coverage findings can change behavior across institutional systems. Threshold and reversal findings are especially sensitive: their value lies in identifying where linear transfer assumptions are unsafe, not in supplying universal constants.</p>
     </section>
 
     <!-- 14.3 -->
@@ -862,7 +862,7 @@
       <span class="section-num">Section 15</span>
       <h2>Stage-by-Stage Decision Rationale</h2>
 
-      <p>A2 is kept broad because early over-pruning creates irreversible information loss. A3 and A4 are separated because combining structure and stability filters hides failure origin -- reviewers should know whether an edge failed conditional-independence logic or bootstrap stability. Class diversity in findings is enforced because robustness-only ranking over-selects reversals, reducing the policy utility of outputs.</p>
+      <p>A2 is kept broad because early over-pruning creates irreversible information loss. A3 and A4 are separated because combining structure and stability filters hides failure origin. Reviewers should know whether an edge failed conditional-independence logic or bootstrap stability. Class diversity in findings is enforced because robustness-only ranking over-selects reversals, reducing the policy utility of outputs.</p>
     </section>
 
     <!-- ═══════════════ 16. PUBLICATION CONTROLS ═══════════════ -->
@@ -872,7 +872,7 @@
 
       <p>Narrative conversion follows strict controls: section-bounded drafting, evidence-bounded claims, and caveat-completeness review. Three human gates serve distinct purposes: <strong>H1</strong> (finding strength), <strong>H2</strong> (scientific framing and caveat adequacy), <strong>H3</strong> (publication readiness and fresh-reader trust).</p>
 
-      <p>Freeze policy requires contradiction closure, citation integrity, and stable claim snapshots before publication. If claims change after freeze, a new snapshot and rerun are required -- preventing silent drift where prose stays fixed but underlying numbers change.</p>
+      <p>Freeze policy requires contradiction closure, citation integrity, and stable claim snapshots before publication. If claims change after freeze, a new snapshot and rerun are required, preventing silent drift where prose stays fixed but underlying numbers change.</p>
     </section>
 
   </article>
