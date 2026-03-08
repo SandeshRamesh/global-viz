@@ -213,7 +213,7 @@
       <h2>Abstract</h2>
       <p>Atlas presents a claim-traceable causal discovery and scenario simulation framework for development analysis. The current release analyzes 18,296,578 panel observations across 893 country entities and 3,122 indicators from 1990 to 2024. The discovery pipeline proceeds in three stages: 2,159,672 pairwise Granger causality tests yield 564,545 FDR-corrected candidates; PC-Stable structure learning reduces these to 58,837 directed edges; and bootstrap validation (100 iterations) retains 4,976 robust edges. Runtime assets include 5,054 temporal graphs and 5,053 SHAP importance files served through a multi-scope simulation engine.</p>
       <p>We report four anchor findings from the full 140-graph, 35-year corpus, each representing a distinct mechanism class: a development-stage reversal in education&ndash;fertility linkage (F02), a governance threshold dynamic for local election quality (F06), a complete mediation pathway from spending to agricultural income distribution (F08), and a stable upstream predictor for income accumulation (F01). Each finding is documented with stratum-level effect sizes, confidence intervals, and explicit uncertainty flags.</p>
-      <p>The main contribution is twofold. Methodologically, Atlas integrates evidence-governed narrative synthesis so that every published claim traces to a registered evidence anchor. Substantively, the findings demonstrate that mechanism heterogeneity&mdash;sign reversals, threshold effects, and mediated transmission&mdash;materially changes policy interpretation and renders one-size-fits-all intervention design unreliable.</p>
+      <p>The main contribution is twofold. Methodologically, Atlas integrates evidence-governed narrative synthesis so that every published claim traces to a registered evidence anchor. Substantively, the findings demonstrate that mechanism heterogeneity (sign reversals, threshold effects, and mediated transmission) materially changes policy interpretation and renders one-size-fits-all intervention design unreliable.</p>
     </section>
 
     <!-- ══════════════════ 1. INTRODUCTION ══════════════════ -->
@@ -240,35 +240,35 @@
 
     <h3 id="causal-discovery-obs">2.1 Causal Discovery in Observational Settings</h3>
 
-    <p>The temporal precedence framework introduced by Granger (1969) remains the most widely deployed screening test for directed relationships in panel data. By conditioning on lagged values, Granger tests establish whether past values of one series improve prediction of another&mdash;a necessary but insufficient condition for causality. Atlas uses Granger tests as the first-stage filter precisely because they scale to millions of pairwise comparisons while providing a defensible temporal ordering prior.</p>
+    <p>The temporal precedence framework introduced by Granger (1969) remains the most widely deployed screening test for directed relationships in panel data. By conditioning on lagged values, Granger tests establish whether past values of one series improve prediction of another, a necessary but insufficient condition for causality. Atlas uses Granger tests as the first-stage filter precisely because they scale to millions of pairwise comparisons while providing a defensible temporal ordering prior.</p>
 
     <p>Structural approaches emerged to recover richer causal graphs from conditional independence patterns. Spirtes, Glymour, and Scheines (2000) formalized constraint-based structure learning through the PC algorithm, and Pearl (2009) provided the theoretical foundation linking directed acyclic graphs to interventional reasoning. A practical limitation of the original PC algorithm is its sensitivity to variable ordering in high-dimensional settings. Colombo and Maathuis (2014) resolved this with the PC-Stable modification, which produces order-independent adjacency searches and orientation rules. Atlas adopts PC-Stable for its second-stage structural pruning because order-independence is essential when processing thousands of candidate edges derived from heterogeneous indicator sets.</p>
 
-    <p>Recent work has extended causal discovery to large-scale time series applications. Runge, Nowack, Kretschmer, Flaxman, and Sejdinovic (2019) introduced the PCMCI algorithm, which combines a modified PC adjacency search with momentary conditional independence tests to handle autocorrelation&mdash;a pervasive feature of climate and geophysical data. PCMCI demonstrated that staged discovery (condition selection followed by causal testing) outperforms full-conditioning approaches in detection power across hundreds of variables. Atlas shares this staged design philosophy but addresses a different domain: country-level socioeconomic panels where the number of entities (893) and indicators (3,122) is large, time horizons are short (35 years), and mechanism heterogeneity is the primary analytical concern rather than autocorrelation alone.</p>
+    <p>Recent work has extended causal discovery to large-scale time series applications. Runge, Nowack, Kretschmer, Flaxman, and Sejdinovic (2019) introduced the PCMCI algorithm, which combines a modified PC adjacency search with momentary conditional independence tests to handle autocorrelation, a pervasive feature of climate and geophysical data. PCMCI demonstrated that staged discovery (condition selection followed by causal testing) outperforms full-conditioning approaches in detection power across hundreds of variables. Atlas shares this staged design philosophy but addresses a different domain: country-level socioeconomic panels where the number of entities (893) and indicators (3,122) is large, time horizons are short (35 years), and mechanism heterogeneity is the primary analytical concern rather than autocorrelation alone.</p>
 
     <p>The distinctive feature of the Atlas pipeline relative to these methods is not a new estimator but a governed integration: Granger prefiltering controls the candidate space, PC-Stable provides structural pruning, and bootstrap retention (100 iterations) imposes stability requirements. Each stage produces auditable artifact counts, making the reduction from 2.1 million candidates to 4,976 retained edges transparent and reproducible.</p>
 
     <h3 id="dev-econ-heterogeneity">2.2 Development Economics and Mechanism Heterogeneity</h3>
 
-    <p>Development economics has a long tradition of seeking credible identification in observational data. Angrist and Pischke (2009) codified the modern identification toolkit&mdash;instrumental variables, regression discontinuity, and difference-in-differences&mdash;establishing standards for isolating causal effects from cross-sectional and panel variation. A foundational application is Acemoglu, Johnson, and Robinson (2001), who used historical settler mortality as an instrument for institutional quality, demonstrating that institutional differences account for large cross-country income gaps even after controlling for geography. This work established institutional context as a first-order determinant of development outcomes, a finding that Atlas corroborates structurally through governance-related edges in its causal graphs.</p>
+    <p>Development economics has a long tradition of seeking credible identification in observational data. Angrist and Pischke (2009) codified the modern identification toolkit (instrumental variables, regression discontinuity, and difference-in-differences), establishing standards for isolating causal effects from cross-sectional and panel variation. A foundational application is Acemoglu, Johnson, and Robinson (2001), who used historical settler mortality as an instrument for institutional quality, demonstrating that institutional differences account for large cross-country income gaps even after controlling for geography. This work established institutional context as a first-order determinant of development outcomes, a finding that Atlas corroborates structurally through governance-related edges in its causal graphs.</p>
 
-    <p>A central challenge these methods share is that estimated effects often assume homogeneity across units or strata. Vogl (2016) documented a striking reversal in the relationship between income and fertility across the demographic transition: before 1960, children from larger families in developing countries had richer, more educated parents; by century&rsquo;s end, the pattern had inverted. Roughly half of this reversal was attributable to rising aggregate parental education. This finding&mdash;that the sign of a fundamental development relationship depends on the stage of transition&mdash;directly parallels the education&ndash;fertility reversal that Atlas identifies as anchor finding F02, where the direction of the education&ndash;fertility linkage flips between income strata.</p>
+    <p>A central challenge these methods share is that estimated effects often assume homogeneity across units or strata. Vogl (2016) documented a striking reversal in the relationship between income and fertility across the demographic transition: before 1960, children from larger families in developing countries had richer, more educated parents; by century&rsquo;s end, the pattern had inverted. Roughly half of this reversal was attributable to rising aggregate parental education. This finding, that the sign of a fundamental development relationship depends on the stage of transition, directly parallels the education&ndash;fertility reversal that Atlas identifies as anchor finding F02, where the direction of the education&ndash;fertility linkage flips between income strata.</p>
 
-    <p>More recently, Chernozhukov, Demirer, Duflo, and Fern&aacute;ndez-Val (2025) developed a generic framework for detecting heterogeneous treatment effects in randomized experiments using machine learning proxies. Their approach post-processes ML predictions into group-level average effects and best linear predictors without requiring consistency of the underlying ML method. The framework demonstrates that treatment effect heterogeneity is not a nuisance parameter but an object of primary scientific interest&mdash;a principle Atlas operationalizes by classifying findings into mechanism types (reversal, threshold, mediation, stable-upstream) rather than reporting pooled averages.</p>
+    <p>More recently, Chernozhukov, Demirer, Duflo, and Fern&aacute;ndez-Val (2025) developed a generic framework for detecting heterogeneous treatment effects in randomized experiments using machine learning proxies. Their approach post-processes ML predictions into group-level average effects and best linear predictors without requiring consistency of the underlying ML method. The framework demonstrates that treatment effect heterogeneity is not a nuisance parameter but an object of primary scientific interest, a principle Atlas operationalizes by classifying findings into mechanism types (reversal, threshold, mediation, stable-upstream) rather than reporting pooled averages.</p>
 
-    <p>Atlas extends this heterogeneity concern from experimental to observational discovery settings. Where Vogl (2016) documents reversal in a single variable pair and Chernozhukov et al. (2025) provide inference tools for known treatments, Atlas applies stratified causal discovery across the full indicator space to identify which mechanism class governs each pathway. The finding that mechanism class varies systematically by development stratum&mdash;not just effect magnitude&mdash;has direct implications for policy transfer: interventions designed from pooled coefficients risk sign errors when transported across income regimes.</p>
+    <p>Atlas extends this heterogeneity concern from experimental to observational discovery settings. Where Vogl (2016) documents reversal in a single variable pair and Chernozhukov et al. (2025) provide inference tools for known treatments, Atlas applies stratified causal discovery across the full indicator space to identify which mechanism class governs each pathway. The finding that mechanism class varies systematically by development stratum, not just effect magnitude, has direct implications for policy transfer: interventions designed from pooled coefficients risk sign errors when transported across income regimes.</p>
 
     <h3 id="interpretability">2.3 Interpretability and Evidence Governance in Policy-Facing Models</h3>
 
     <p>Translating complex model outputs into actionable policy guidance requires interpretability infrastructure. Lundberg and Lee (2017) introduced SHAP (SHapley Additive exPlanations), which assigns each feature a contribution value for individual predictions grounded in cooperative game theory. Atlas generates SHAP importance files at runtime for each of its 5,053 scope-specific models, enabling decomposition of scenario simulations into driver-level contributions.</p>
 
-    <p>However, interpretability at the feature level does not address a more fundamental governance problem: whether published claims faithfully represent the underlying evidence. Kapoor and Narayanan (2023) documented a systemic reproducibility crisis in ML-based science, finding data leakage and methodological errors across 294 papers in 17 fields. Their proposed solution&mdash;model info sheets that make analytical choices auditable&mdash;shares the same design principle as Atlas&rsquo;s claim registry: every published statement should trace to a verifiable evidence anchor, and the path from data to claim should be inspectable by third parties.</p>
+    <p>However, interpretability at the feature level does not address a more fundamental governance problem: whether published claims faithfully represent the underlying evidence. Kapoor and Narayanan (2023) documented a systemic reproducibility crisis in ML-based science, finding data leakage and methodological errors across 294 papers in 17 fields. Their proposed solution (model info sheets that make analytical choices auditable) shares the same design principle as Atlas&rsquo;s claim registry: every published statement should trace to a verifiable evidence anchor, and the path from data to claim should be inspectable by third parties.</p>
 
     <p>Atlas operationalizes this principle through a claim-registry and human-gate system. AI-assisted narrative synthesis accelerates prose generation, but registered evidence anchors hold authority on quantitative truth. Contradiction closure is required before publication, and quality-control reports accompany all narrative outputs. This approach treats evidence governance not as an afterthought but as a structural requirement of the research-production pipeline.</p>
 
     <h3 id="positioning">2.4 Positioning</h3>
 
-    <p>Atlas occupies the intersection of these three streams. Its causal discovery layer draws on Granger screening, PC-Stable structure learning, and bootstrap stability&mdash;established methods combined in a staged pipeline. Its findings contribute to the development economics literature on mechanism heterogeneity by demonstrating that sign reversals, threshold effects, and mediated transmission systematically vary by development context. Its evidence governance layer addresses the reproducibility concerns raised by Kapoor and Narayanan (2023) through claim-level traceability and uncertainty-preserving narrative rules. The novelty is not a new estimator but a disciplined, full-stack integration: from staged discovery through runtime serving to auditable, policy-facing narrative synthesis.</p>
+    <p>Atlas occupies the intersection of these three streams. Its causal discovery layer draws on Granger screening, PC-Stable structure learning, and bootstrap stability, established methods combined in a staged pipeline. Its findings contribute to the development economics literature on mechanism heterogeneity by demonstrating that sign reversals, threshold effects, and mediated transmission systematically vary by development context. Its evidence governance layer addresses the reproducibility concerns raised by Kapoor and Narayanan (2023) through claim-level traceability and uncertainty-preserving narrative rules. The novelty is not a new estimator but a disciplined, full-stack integration: from staged discovery through runtime serving to auditable, policy-facing narrative synthesis.</p>
 
     <hr>
 
@@ -336,7 +336,7 @@
 
     <h4>Stage A2: Granger Causality Prefiltering</h4>
 
-    <p>Stage A2 tests whether lagged history of a candidate source variable X improves prediction of target Y beyond Y&rsquo;s own history. This is a temporal precedence filter&mdash;necessary evidence for directional plausibility, not sufficient evidence for causal identification. The 73.9% pruning rate is expected in high-dimensional observational settings where many pairwise correlations are weak or temporally non-predictive. A2 is intentionally permissive: the goal is to avoid discarding plausible temporal candidates before structural testing.</p>
+    <p>Stage A2 tests whether lagged history of a candidate source variable X improves prediction of target Y beyond Y&rsquo;s own history. This is a temporal precedence filter, necessary evidence for directional plausibility, not sufficient evidence for causal identification. The 73.9% pruning rate is expected in high-dimensional observational settings where many pairwise correlations are weak or temporally non-predictive. A2 is intentionally permissive: the goal is to avoid discarding plausible temporal candidates before structural testing.</p>
 
     <h4>Stage A3: PC-Stable Structure Learning</h4>
 
@@ -344,7 +344,7 @@
 
     <h4>Stage A4: Bootstrap Effect Estimation</h4>
 
-    <p>Stage A4 estimates edge effect sizes and stability using 100 bootstrap iterations, retaining edges that satisfy retention and interval-sign coherence criteria. The 8.5% retention rate relative to A3 reflects a conservative reliability posture that favors persistent edges over edges that appear strong in a single fit but are unstable under perturbation. Bootstrap output is treated as a robustness filter and uncertainty proxy, not complete uncertainty characterization&mdash;Atlas documents known CI miscalibration risks from earlier phases.</p>
+    <p>Stage A4 estimates edge effect sizes and stability using 100 bootstrap iterations, retaining edges that satisfy retention and interval-sign coherence criteria. The 8.5% retention rate relative to A3 reflects a conservative reliability posture that favors persistent edges over edges that appear strong in a single fit but are unstable under perturbation. Bootstrap output is treated as a robustness filter and uncertainty proxy, not complete uncertainty characterization. Atlas documents known CI miscalibration risks from earlier phases.</p>
 
     <h4>Why Three Stages</h4>
 
@@ -375,7 +375,7 @@
       <li><strong>FAIL-0004:</strong> V1 coverage handling caused sample-dropout cascades; stricter panel-density filtering implemented.</li>
     </ul>
 
-    <p>These failures are not rhetorical disclaimers&mdash;they change what Atlas considers publishable and how policy implications are phrased.</p>
+    <p>These failures are not rhetorical disclaimers: they change what Atlas considers publishable and how policy implications are phrased.</p>
 
     <h3 id="extraction-governance">3.7 Findings Extraction Governance</h3>
 
@@ -422,7 +422,7 @@
 
     <h4>Mechanistic interpretation</h4>
 
-    <p>F02 challenges pooled-effect reasoning. A pooled model would compress this edge into one average sign and suppress the policy-relevant fact that direction inverts by stratum. A plausible interpretation is that the indicator reflects different social processes across development stages&mdash;educational access expansion associated with lower fertility in one regime, and labor-market or demographic structures producing a different association in another. Atlas does not claim unique mechanism identification; it claims the reversal is empirically robust and policy-relevant.</p>
+    <p>F02 challenges pooled-effect reasoning. A pooled model would compress this edge into one average sign and suppress the policy-relevant fact that direction inverts by stratum. A plausible interpretation is that the indicator reflects different social processes across development stages: educational access expansion associated with lower fertility in one regime, and labor-market or demographic structures producing a different association in another. Atlas does not claim unique mechanism identification; it claims the reversal is empirically robust and policy-relevant.</p>
 
     <h4>Policy implications</h4>
 
@@ -507,7 +507,7 @@
 
     <h4>Mechanistic interpretation</h4>
 
-    <p>F08 implies that spending-side changes transmit through fiscal income structure before affecting agricultural distribution outcomes. This is stronger than a &ldquo;both direct and indirect&rdquo; finding&mdash;the direct edge is structurally absent, making this a mediated-channel finding by construction. Endpoint-only interventions can underperform when mediator dynamics are not addressed.</p>
+    <p>F08 implies that spending-side changes transmit through fiscal income structure before affecting agricultural distribution outcomes. This is stronger than a &ldquo;both direct and indirect&rdquo; finding: the direct edge is structurally absent, making this a mediated-channel finding by construction. Endpoint-only interventions can underperform when mediator dynamics are not addressed.</p>
 
     <h4>Policy implications</h4>
 
@@ -552,7 +552,7 @@
 
     <h4>Policy implications</h4>
 
-    <p>F01 can serve as a baseline lever in early scenario design because of its cross-strata stability. Stable does not mean universal&mdash;administrative feasibility, transfer design quality, and governance constraints still determine real-world performance.</p>
+    <p>F01 can serve as a baseline lever in early scenario design because of its cross-strata stability. Stable does not mean universal: administrative feasibility, transfer design quality, and governance constraints still determine real-world performance.</p>
 
     <h4>Uncertainty</h4>
 
@@ -601,7 +601,7 @@
 
     <h3>5.1 Mechanism Heterogeneity as a First-Order Concern</h3>
 
-    <p>The anchor findings support a broad conclusion: mechanism heterogeneity is not a peripheral detail in development analysis&mdash;it directly changes intervention strategy. F02 shows that directional assumptions can reverse by stratum. F06 shows that regime position determines marginal returns. F08 shows that endpoint effects operate through intermediaries even when direct edges are absent. F01 shows that some edges remain stable enough to anchor scenario baselines.</p>
+    <p>The anchor findings support a broad conclusion: mechanism heterogeneity is not a peripheral detail in development analysis: it directly changes intervention strategy. F02 shows that directional assumptions can reverse by stratum. F06 shows that regime position determines marginal returns. F08 shows that endpoint effects operate through intermediaries even when direct edges are absent. F01 shows that some edges remain stable enough to anchor scenario baselines.</p>
 
     <p>For development research, this implies that evaluation design should avoid overreliance on pooled coefficients and report mechanism class explicitly. For policy practice, it implies staged planning: diagnose stratum and threshold position, validate mediator movement, and prioritize robust edges for early scenario exploration.</p>
 
@@ -619,7 +619,7 @@
 
     <h3>5.5 Future Work</h3>
 
-    <p>Within current evidence constraints, next steps include deeper finding-level diagnostics, expanded mediator robustness checks, clearer reporting of year-specific regime shifts, and improved mapping between legacy v2/v2.1 artifacts and v31 identifiers. Systematic falsification tests&mdash;defining one plausible null pathway per anchor finding and testing whether it remains absent&mdash;would further strengthen confidence. Any extension should preserve the same governance principle: no numeric claim without traceable evidence linkage and no confidence framing without uncertainty disclosure.</p>
+    <p>Within current evidence constraints, next steps include deeper finding-level diagnostics, expanded mediator robustness checks, clearer reporting of year-specific regime shifts, and improved mapping between legacy v2/v2.1 artifacts and v31 identifiers. Systematic falsification tests (defining one plausible null pathway per anchor finding and testing whether it remains absent) would further strengthen confidence. Any extension should preserve the same governance principle: no numeric claim without traceable evidence linkage and no confidence framing without uncertainty disclosure.</p>
 
     <hr>
 
@@ -632,7 +632,7 @@
 
     <p>The practical recommendation for teams applying these findings is a five-step checklist: identify mechanism class before interpreting magnitude; verify availability and uncertainty flags; map findings to local policy levers; run local validation before scaling; and document one explicit caveat in every recommendation memo.</p>
 
-    <p>Atlas is positioned as a comparative decision-support system, not an absolute forecaster. That positioning reflects both the statistical limitations of observational causal analysis and the documented failures that shaped current methodology. The framework is most effective when teams treat it as a structured hypothesis engine&mdash;narrowing intervention search spaces and improving monitoring design&mdash;while preserving the institutional judgment and field evidence needed for durable outcomes.</p>
+    <p>Atlas is positioned as a comparative decision-support system, not an absolute forecaster. That positioning reflects both the statistical limitations of observational causal analysis and the documented failures that shaped current methodology. The framework is most effective when teams treat it as a structured hypothesis engine (narrowing intervention search spaces and improving monitoring design) while preserving the institutional judgment and field evidence needed for durable outcomes.</p>
 
     <hr>
 
