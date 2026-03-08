@@ -548,19 +548,23 @@ export const Tutorial = forwardRef<TutorialRef, TutorialProps>(function Tutorial
 
         // Spotlight the Reset (R) button in the top-right toolbar (tight fit)
         const spotlightResetBtn = () => {
-          const btn = document.querySelector<HTMLButtonElement>('button[title="Reset view to initial state (R or Home)"]')
-          if (btn) {
-            const rect = btn.getBoundingClientRect()
+          // Target the "Reset" text label or the icon in compact mode
+          const label = document.querySelector<HTMLElement>('[data-tutorial-reset-label]')
+          const icon = document.querySelector<HTMLElement>('[data-tutorial-reset-icon]')
+          const target = label ?? icon
+          const parentBtn = document.querySelector<HTMLButtonElement>('button[title="Reset view to initial state (R or Home)"]')
+          if (target && parentBtn) {
+            const rect = target.getBoundingClientRect()
             setSpotlight({
               x: rect.left + rect.width / 2,
               y: rect.top + rect.height / 2,
-              r: Math.max(rect.width, rect.height) / 2 + 4
+              r: Math.max(rect.width, rect.height) / 2 + 10
             })
             setPulseSpotlight(!reduced)
-            // Make Reset button clickable through the pointer-events: none overlay
-            btn.style.pointerEvents = 'auto'
-            btn.style.position = 'relative'
-            btn.style.zIndex = '1302'
+            // Make Reset button clickable through the overlay
+            parentBtn.style.pointerEvents = 'auto'
+            parentBtn.style.position = 'relative'
+            parentBtn.style.zIndex = '1302'
           }
         }
         spotlightResetBtn()

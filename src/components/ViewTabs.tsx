@@ -400,11 +400,11 @@ export function ViewTabs({
           }}
         >
           {compact ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" data-tutorial-reset-icon>
               <polyline points="1 4 1 10 7 10" />
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
             </svg>
-          ) : 'Reset (R)'}
+          ) : <><span data-tutorial-reset-label>Reset</span> (R)</>}
         </button>
       </div>
 

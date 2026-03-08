@@ -2602,6 +2602,12 @@ function App() {
     clearCountry()
     setViewMode('global')
 
+    // Release performance caches to prevent memory leaks
+    setPrecomputedShapCache(new Map())
+    setPrecomputedCICache(new Map())
+    temporalEdgesCacheRef.current = new Map()
+    lastValidShapRef.current = new Map()
+
     // Reset Local View if in local or split mode
     if ((viewMode === 'local' || viewMode === 'split') && localViewResetRef.current) {
       localViewResetRef.current()

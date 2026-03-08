@@ -10,7 +10,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:a11y-nav": "vitest run src/a11y/__tests__/graphNodeNav.test.ts",
-    "test:layout": "vitest run src/layouts/__tests__/outcomeAngles.stability.test.ts"
+    "test:layout": "vitest run src/layouts/__tests__/outcomeAngles.stability.test.ts",
+    "perf": "playwright test --config perf/playwright.perf.config.ts",
+    "perf:ci": "playwright test --config perf/playwright.perf.config.ts --reporter=json",
+    "perf:lighthouse": "lhci autorun",
+    "perf:bundle": "playwright test --config perf/playwright.perf.config.ts perf/tests/07-bundle-size.spec.ts"
   },
   "dependencies": {
     "@types/d3": "^7.4.3",
@@ -25,6 +29,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@lhci/cli": "^0.15.1",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",

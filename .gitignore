@@ -39,3 +39,9 @@ _archive/
 __pycache__/
 *.pyc
 precomputed_data.tar.gz
+
+# Performance test reports
+perf/reports/*.json
+perf/reports/*.html
+!perf/reports/.gitkeep
+.lighthouseci/
