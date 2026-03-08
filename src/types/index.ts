@@ -138,6 +138,28 @@ export interface EdgePathway {
   beta: number          // Beta value for this specific pathway
 }
 
+// ============================================
+// Per-Edge Statistics (side-channel for tooltip)
+// ============================================
+
+/** Extended statistics for a single causal edge */
+export interface EdgeStats {
+  beta: number
+  ciLower: number
+  ciUpper: number
+  globalBeta: number
+  pValue?: number
+  rSquared?: number
+  nSamples?: number
+  lag: number
+  lagPvalue: number
+  lagSignificant: boolean
+  relationshipType?: string
+}
+
+/** Map from "source->target" key to EdgeStats */
+export type EdgeStatsMap = Map<string, EdgeStats>
+
 /** Mode for Local View data */
 export type LocalViewMode = 'direct' | 'aggregated' | 'empty'
 

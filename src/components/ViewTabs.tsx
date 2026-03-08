@@ -1,13 +1,15 @@
 /**
  * ViewTabs - Tab switcher for Global, Local, and Split views
- * With action buttons for Reset, Clear, and Share
+ * With action buttons for Reset, Clear, and Share (with citation popover)
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { ViewMode } from '../types'
 import { useSimulationStore } from '../stores/simulationStore'
+import { generateAPACitation, generateBibTeXCitation } from '../utils/citations'
 
 type MapViewMode = 'country' | 'regional'
+type CopiedFormat = 'url' | 'apa' | 'bibtex' | null
 
 interface ViewTabsProps {
   activeView: ViewMode
@@ -17,6 +19,7 @@ interface ViewTabsProps {
   onClear?: () => void        // Clear local view targets callback
   canClear?: boolean          // Whether clear action should be enabled
   onShare?: () => Promise<boolean>  // Copy shareable link callback
+  getShareableURL?: () => string    // Get shareable URL string (for citations)
   onTutorialRestart?: () => void   // Restart guided tutorial
   simMode?: boolean           // Sim mode enables local/split even without targets
   /** Hide text labels on action buttons, show icon only */
@@ -38,6 +41,7 @@ export function ViewTabs({
   onClear,
   canClear,
   onShare,
+  getShareableURL,
   onTutorialRestart,
   simMode = false,
   compact = false,
@@ -46,7 +50,8 @@ export function ViewTabs({
 }: ViewTabsProps) {
   const hasTargets = localTargetCount > 0 || simMode
   const clearEnabled = canClear ?? hasTargets
-  const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle')
+  const [sharePopoverOpen, setSharePopoverOpen] = useState(false)
+  const [copiedFormat, setCopiedFormat] = useState<CopiedFormat>(null)
   const [shareNudge, setShareNudge] = useState(false)
   const playbackFinishedToken = useSimulationStore(s => s.playbackFinishedToken)
   const mapForeground = useSimulationStore(s => s.mapForeground)
@@ -54,6 +59,8 @@ export function ViewTabs({
   const mapViewMode = useSimulationStore(s => s.mapViewMode) as MapViewMode
   const setMapViewMode = useSimulationStore(s => s.setMapViewMode)
   const prevFinishedTokenRef = useRef(playbackFinishedToken)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const shareButtonRef = useRef<HTMLButtonElement>(null)
 
   // Glow the share button when simulation playback reaches the final year
   useEffect(() => {
@@ -65,15 +72,113 @@ export function ViewTabs({
     }
   }, [playbackFinishedToken])
 
-  const handleShare = async () => {
+  // Click-outside to dismiss popover
+  useEffect(() => {
+    if (!sharePopoverOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
+        shareButtonRef.current && !shareButtonRef.current.contains(e.target as Node)
+      ) {
+        setSharePopoverOpen(false)
+        setCopiedFormat(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [sharePopoverOpen])
+
+  // Escape key to dismiss popover
+  useEffect(() => {
+    if (!sharePopoverOpen) return
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSharePopoverOpen(false)
+        setCopiedFormat(null)
+      }
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [sharePopoverOpen])
+
+  const copyToClipboard = useCallback(async (text: string, format: CopiedFormat) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedFormat(format)
+      setTimeout(() => setCopiedFormat(null), 1500)
+    } catch {
+      // Fallback
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-9999px'
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      setCopiedFormat(format)
+      setTimeout(() => setCopiedFormat(null), 1500)
+    }
+  }, [])
+
+  const handleCopyURL = useCallback(async () => {
     if (onShare) {
       const success = await onShare()
       if (success) {
-        setShareStatus('copied')
-        setTimeout(() => setShareStatus('idle'), 2000)
+        setCopiedFormat('url')
+        setTimeout(() => setCopiedFormat(null), 1500)
+      }
+    }
+  }, [onShare])
+
+  const handleCopyAPA = useCallback(async () => {
+    if (getShareableURL) {
+      const url = getShareableURL()
+      await copyToClipboard(generateAPACitation(url), 'apa')
+    }
+  }, [getShareableURL, copyToClipboard])
+
+  const handleCopyBibTeX = useCallback(async () => {
+    if (getShareableURL) {
+      const url = getShareableURL()
+      await copyToClipboard(generateBibTeXCitation(url), 'bibtex')
+    }
+  }, [getShareableURL, copyToClipboard])
+
+  const handleShareClick = () => {
+    setShareNudge(false)
+    if (getShareableURL) {
+      // Has citation support — toggle popover
+      setSharePopoverOpen(prev => !prev)
+      setCopiedFormat(null)
+    } else {
+      // Fallback: direct copy (legacy behavior)
+      if (onShare) {
+        onShare().then(success => {
+          if (success) {
+            setCopiedFormat('url')
+            setTimeout(() => setCopiedFormat(null), 1500)
+          }
+        })
       }
     }
   }
+
+  const popoverRowStyle = (isHovered: boolean): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '7px 12px',
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: 'pointer',
+    border: 'none',
+    background: isHovered ? '#f0f4ff' : 'white',
+    color: '#333',
+    width: '100%',
+    textAlign: 'left' as const,
+    transition: 'background 0.1s ease'
+  })
 
   return (
     <>
@@ -358,7 +463,7 @@ export function ViewTabs({
         </div>
       )}
 
-      {/* Row 4: Share button */}
+      {/* Row 4: Share button with citation popover */}
       <div
         className={shareNudge ? 'share-btn-wrap share-nudge-active' : 'share-btn-wrap'}
         style={{
@@ -372,7 +477,8 @@ export function ViewTabs({
         }}
       >
         <button
-          onClick={() => { setShareNudge(false); handleShare() }}
+          ref={shareButtonRef}
+          onClick={handleShareClick}
           className={shareNudge ? 'share-btn-inner share-nudge-btn' : 'share-btn-inner'}
           style={{
             padding: '6px 12px',
@@ -381,8 +487,8 @@ export function ViewTabs({
             cursor: 'pointer',
             border: 'none',
             borderRadius: 5,
-            background: shareStatus === 'copied' ? '#E8F5E9' : 'white',
-            color: shareStatus === 'copied' ? '#2E7D32' : '#00ACC1',
+            background: sharePopoverOpen ? '#eef0f6' : 'white',
+            color: '#00ACC1',
             transition: 'all 0.3s ease',
             display: 'flex',
             alignItems: 'center',
@@ -390,14 +496,14 @@ export function ViewTabs({
             position: 'relative',
             zIndex: 1
           }}
-          title="Copy shareable link to clipboard"
+          title="Share or cite this view"
           onMouseEnter={(e) => {
-            if (shareStatus !== 'copied') {
+            if (!sharePopoverOpen) {
               e.currentTarget.style.background = '#eef0f6'
             }
           }}
           onMouseLeave={(e) => {
-            if (shareStatus !== 'copied') {
+            if (!sharePopoverOpen) {
               e.currentTarget.style.background = 'white'
             }
           }}
@@ -417,10 +523,87 @@ export function ViewTabs({
             <line x1="12" y1="2" x2="12" y2="15" />
           </svg>
           {compact
-            ? (shareStatus === 'copied' ? '✓' : null)
-            : (shareStatus === 'copied' ? 'Copied!' : 'Share')
+            ? null
+            : 'Share'
           }
         </button>
+
+        {/* Citation popover */}
+        {sharePopoverOpen && (
+          <div
+            ref={popoverRef}
+            style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: 4,
+              background: 'white',
+              borderRadius: 8,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+              border: '1px solid #d0d5e0',
+              overflow: 'hidden',
+              zIndex: 50,
+              minWidth: 180
+            }}
+          >
+            {/* Copy URL */}
+            <button
+              onClick={handleCopyURL}
+              style={popoverRowStyle(false)}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f4ff' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'white' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+              <span style={{ flex: 1 }}>Copy URL</span>
+              {copiedFormat === 'url' && (
+                <span style={{ color: '#2E7D32', fontSize: 11, fontWeight: 600 }}>Copied!</span>
+              )}
+            </button>
+
+            <div style={{ height: 1, background: '#eef0f4' }} />
+
+            {/* Copy APA Citation */}
+            <button
+              onClick={handleCopyAPA}
+              style={popoverRowStyle(false)}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f4ff' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'white' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+              </svg>
+              <span style={{ flex: 1 }}>Copy APA Citation</span>
+              {copiedFormat === 'apa' && (
+                <span style={{ color: '#2E7D32', fontSize: 11, fontWeight: 600 }}>Copied!</span>
+              )}
+            </button>
+
+            <div style={{ height: 1, background: '#eef0f4' }} />
+
+            {/* Copy BibTeX */}
+            <button
+              onClick={handleCopyBibTeX}
+              style={popoverRowStyle(false)}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f0f4ff' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'white' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="16 18 22 12 16 6" />
+                <polyline points="8 6 2 12 8 18" />
+              </svg>
+              <span style={{ flex: 1 }}>Copy BibTeX</span>
+              {copiedFormat === 'bibtex' && (
+                <span style={{ color: '#2E7D32', fontSize: 11, fontWeight: 600 }}>Copied!</span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Row 5: Tour restart — smallest button in the cascade */}

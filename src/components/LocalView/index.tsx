@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import * as d3 from 'd3'
-import type { RawNodeV21, RawEdge } from '../../types'
+import type { RawNodeV21, RawEdge, EdgeStatsMap } from '../../types'
 import {
   buildLocalViewData,
   getLocalViewStats,
@@ -217,6 +217,7 @@ interface LocalViewProps {
   simPlaybackActive?: boolean          // True when timeline is playing (fill mode)
   simEffects?: Map<string, number>     // nodeId → percent_change for current year
   simData?: SimLocalViewData | null    // Pre-built sim data (bypasses structural traversal)
+  edgeStatsMap?: EdgeStatsMap          // Per-edge statistics for tooltip (CI, p-value, lag, etc.)
 }
 
 // ============================================
@@ -247,7 +248,8 @@ export function LocalView({
   simMode = false,
   simPlaybackActive = false,
   simEffects,
-  simData
+  simData,
+  edgeStatsMap
 }: LocalViewProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1896,18 +1898,24 @@ export function LocalView({
         const isAggregated = fullEdge?.isAggregated
         const pathwayCount = fullEdge?.pathwayCount
 
+        // Look up extended stats (try forward key, then reverse)
+        const stats = edgeStatsMap?.get(`${hoveredEdge.source}->${hoveredEdge.target}`)
+          ?? edgeStatsMap?.get(`${hoveredEdge.target}->${hoveredEdge.source}`)
+        const hasStats = stats && !isAggregated
+
         return (
           <div
             style={{
               position: 'absolute',
-              top: 70,
-              right: 10,
+              bottom: 20,
+              left: '50%',
+              transform: 'translateX(-50%)',
               background: 'white',
               padding: '12px 16px',
               borderRadius: 8,
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               zIndex: 20,
-              maxWidth: 300
+              maxWidth: 340
             }}
           >
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
@@ -1919,13 +1927,41 @@ export function LocalView({
             }}>
               β = {hoveredEdge.beta >= 0 ? '+' : ''}{hoveredEdge.beta.toFixed(3)}
               {isAggregated && <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 4 }}>(avg)</span>}
+              {hasStats && (
+                <span style={{ fontSize: 12, fontWeight: 400, color: '#888', marginLeft: 6 }}>
+                  [{stats.ciLower.toFixed(3)}, {stats.ciUpper.toFixed(3)}]
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: 11, color: '#767676', marginTop: 4 }}>
-              {isAggregated
-                ? `${pathwayCount} pathway${pathwayCount !== 1 ? 's' : ''} through child indicators`
-                : (hoveredEdge.beta >= 0 ? 'Positive relationship' : 'Negative relationship')
-              }
-            </div>
+            {hasStats ? (
+              <>
+                <div style={{ fontSize: 11, color: '#555', marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {stats.pValue !== undefined && (
+                    <span>p = {stats.pValue < 0.001 ? '<0.001' : stats.pValue.toFixed(3)}</span>
+                  )}
+                  {stats.pValue !== undefined && <span style={{ color: '#ccc' }}>&middot;</span>}
+                  <span>lag = {stats.lag}yr</span>
+                  {stats.nSamples !== undefined && (
+                    <>
+                      <span style={{ color: '#ccc' }}>&middot;</span>
+                      <span>n = {stats.nSamples.toLocaleString()}</span>
+                    </>
+                  )}
+                </div>
+                {stats.relationshipType && (
+                  <div style={{ fontSize: 11, color: '#767676', marginTop: 3 }}>
+                    {stats.relationshipType.replace(/_/g, ' ')}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: 11, color: '#767676', marginTop: 4 }}>
+                {isAggregated
+                  ? `${pathwayCount} pathway${pathwayCount !== 1 ? 's' : ''} through child indicators`
+                  : (hoveredEdge.beta >= 0 ? 'Positive relationship' : 'Negative relationship')
+                }
+              </div>
+            )}
             {isAggregated && fullEdge?.pathways && fullEdge.pathways.length > 0 && (
               <div style={{ fontSize: 10, color: '#666', marginTop: 8, borderTop: '1px solid #e2e6ee', paddingTop: 8 }}>
                 <div style={{ fontWeight: 500, marginBottom: 4 }}>Top pathways:</div>

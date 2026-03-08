@@ -7,6 +7,7 @@ import {
   getStateFromBrowserURL,
   updateBrowserURL,
   copyURLToClipboard,
+  generateShareableURL,
   type URLState
 } from './utils/urlState'
 import type {
@@ -26,7 +27,8 @@ import { CountrySelector, SimulationPanel, TimelinePlayer, DataQualityPanel } fr
 import { Tutorial, type TutorialHandle, type TutorialRef } from './components/Tutorial'
 import { useSimulationStore, useIsPanelOpen } from './stores/simulationStore'
 import { simulationAPI, type CountryGraphEdge } from './services/api'
-import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData } from './utils/causalEdges'
+import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData, createEdgeStatsMap } from './utils/causalEdges'
+import type { EdgeStatsMap } from './types'
 import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
 import { perfTrace, type StructuralActionName } from './utils/perfTrace'
 import { layoutTrace } from './utils/layoutTrace'
@@ -1264,6 +1266,40 @@ function App() {
     temporalEdgesCacheKey
   ])
 
+  // Edge stats map for LocalView tooltip (CI, p-value, lag, sample size)
+  // Built from the same source as effectiveEdges, only when country/region edges are available
+  const edgeStatsMap = useMemo((): EdgeStatsMap => {
+    // Temporal cached edges for current year
+    const currentYear = historicalTimeline?.years?.[currentYearIndex]
+      ?? temporalShapTimeline?.years?.[currentYearIndex]
+    if ((viewMode === 'local' || viewMode === 'split') && currentYear && !temporalEdgesLoading) {
+      const cacheKey = selectedRegion
+        ? `region:${selectedRegion}`
+        : selectedCountry || (selectedStratum !== 'unified' ? selectedStratum : 'unified')
+      const cachedEdges = temporalEdgesCacheRef.current.get(currentYear)
+      if (cachedEdges && temporalEdgesCacheKey === cacheKey) {
+        return createEdgeStatsMap(cachedEdges)
+      }
+    }
+    // Static country/region graph
+    if ((selectedCountry || selectedRegion) && countryGraph?.edges) {
+      return createEdgeStatsMap(countryGraph.edges)
+    }
+    // Unified (no country) — stats not available
+    return new Map()
+  }, [
+    selectedCountry,
+    selectedRegion,
+    selectedStratum,
+    countryGraph,
+    viewMode,
+    temporalShapTimeline,
+    historicalTimeline,
+    currentYearIndex,
+    temporalEdgesLoading,
+    temporalEdgesCacheKey
+  ])
+
   /**
    * Pre-compute SHAP and CI caches after initial paint (idle) to avoid blocking LCP.
    * When stratum != unified (and no country/region), use stratified timeline.
@@ -1706,6 +1742,40 @@ function App() {
     if (simState.simulationEndYear !== 2029) state.simEnd = simState.simulationEndYear
 
     return copyURLToClipboard(state)
+  }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
+
+  // Build shareable URL string (without copying to clipboard) for citation generators
+  const getShareableURL = useCallback((): string => {
+    const simState = useSimulationStore.getState()
+    const state: URLState = {
+      view: viewMode,
+      expanded: Array.from(expandedNodes),
+      targets: localViewTargets,
+      beta: localViewBetaThreshold !== 0.5 ? localViewBetaThreshold : undefined,
+      highlight: highlightedTarget || undefined,
+      zoom: currentTransformRef.current ? {
+        k: currentTransformRef.current.k,
+        x: currentTransformRef.current.x,
+        y: currentTransformRef.current.y
+      } : undefined
+    }
+    if (simState.selectedCountry) state.country = simState.selectedCountry
+    if (!simState.selectedCountry && simState.selectedStratum !== 'unified') {
+      state.stratum = simState.selectedStratum
+    }
+    if (simState.interventions.length > 0 && (!simState.activeTemplate || simState.templateModified)) {
+      state.interventions = simState.interventions.map(iv => ({
+        ind: iv.indicator,
+        pct: iv.change_percent,
+        yr: iv.year
+      }))
+    }
+    if (simState.activeTemplate && !simState.templateModified) {
+      state.template = simState.activeTemplate.id
+    }
+    if (simState.simulationStartYear !== 2020) state.simStart = simState.simulationStartYear
+    if (simState.simulationEndYear !== 2029) state.simEnd = simState.simulationEndYear
+    return generateShareableURL(state)
   }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
 
   // Toggle expansion of a node
@@ -6877,6 +6947,7 @@ function App() {
             || pinnedPaths.size > 0
           }
           onShare={shareCurrentState}
+          getShareableURL={getShareableURL}
           onTutorialRestart={() => tutorialCompRef.current?.restart()}
           simMode={localViewSimMode}
           compact={viewport.isBelow(1200)}
@@ -7020,6 +7091,7 @@ function App() {
               simPlaybackActive={playbackMode === 'simulation' && isPlaying}
               simEffects={simLocalEffects}
               simData={simLocalViewData}
+              edgeStatsMap={edgeStatsMap}
             />
           )}
         </div>

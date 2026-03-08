@@ -7,7 +7,7 @@
  * Supports country-specific edge weights via countryGraphToRawEdges()
  */
 
-import type { RawEdge, RawNodeV21, LocalViewEdge, LocalViewNode, LocalNodeShape, LocalViewMode, EdgePathway } from '../types'
+import type { RawEdge, RawNodeV21, LocalViewEdge, LocalViewNode, LocalNodeShape, LocalViewMode, EdgePathway, EdgeStats, EdgeStatsMap } from '../types'
 import type { CountryGraphEdge, CausalPathEntry, TemporalEffect } from '../services/api'
 
 /** Default beta threshold for filtering edges */
@@ -79,6 +79,38 @@ export function createCountryBetaMap(
   }
 
   return betaMap
+}
+
+/**
+ * Create a stats lookup map from country graph edges for tooltip display.
+ * Key format: "source->target"
+ *
+ * @param countryEdges - Edges from country graph (includes CI, p-value, lag, etc.)
+ * @returns EdgeStatsMap for side-channel lookup in LocalView tooltip
+ */
+export function createEdgeStatsMap(
+  countryEdges: CountryGraphEdge[]
+): EdgeStatsMap {
+  const statsMap: EdgeStatsMap = new Map()
+
+  for (const edge of countryEdges) {
+    const key = `${edge.source}->${edge.target}`
+    statsMap.set(key, {
+      beta: edge.beta,
+      ciLower: edge.ci_lower,
+      ciUpper: edge.ci_upper,
+      globalBeta: edge.global_beta,
+      pValue: edge.p_value,
+      rSquared: edge.r_squared,
+      nSamples: edge.n_samples,
+      lag: edge.lag,
+      lagPvalue: edge.lag_pvalue,
+      lagSignificant: edge.lag_significant,
+      relationshipType: edge.relationship_type
+    })
+  }
+
+  return statsMap
 }
 
 /**
