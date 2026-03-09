@@ -218,6 +218,19 @@
   /* Hide trailing separator on desktop (last · in the set) */
   .ticker-set .ticker-sep:last-child { display: none; }
 
+  /* Overflow scroll mode — activated by JS when ticker items don't fit */
+  .ticker-bar.ticker-overflow { overflow: hidden; }
+  .ticker-bar.ticker-overflow .ticker-track {
+    justify-content: flex-start; gap: 0; padding: 0;
+    max-width: none; width: max-content;
+    animation: ticker 20s linear infinite;
+    will-change: transform;
+  }
+  .ticker-bar.ticker-overflow .ticker-set { display: flex; align-items: center; }
+  .ticker-bar.ticker-overflow .ticker-set .ticker-sep:last-child { display: inline; }
+  .ticker-bar.ticker-overflow .ticker-item { padding: 0 24px; }
+  .ticker-bar.ticker-overflow .ticker-sep { padding: 0; }
+
   /* ── SECTIONS ── */
   section { padding: 120px 48px; max-width: 1200px; margin: 0 auto; }
 
@@ -498,6 +511,12 @@
     font-size: 80px; color: var(--cyan-dim);
     line-height: 1; font-family: 'Instrument Serif', serif;
   }
+  .pull-quote::after {
+    content: '\201D';
+    position: absolute; right: -20px; bottom: -40px;
+    font-size: 80px; color: var(--cyan-dim);
+    line-height: 1; font-family: 'Instrument Serif', serif;
+  }
   .quote-attr {
     font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.15em;
     color: var(--text-subtle); margin-top: 28px; text-transform: uppercase;
@@ -679,7 +698,7 @@
       We mapped what moves<br>the <em>world.</em>
     </h1>
     <p class="hero-sub">
-      Not what happened. What causes it.<br>For every country. For the first time.
+      Not what's happening, but what's causing it.<br>For every country. For the first time.
     </p>
     <div class="hero-actions">
       <a href="/explore" class="btn-primary" target="_blank" rel="noopener">Explore Atlas</a>
@@ -699,13 +718,13 @@
 <div class="ticker-bar">
   <div class="ticker-track" id="ticker-track">
     <div class="ticker-set">
-      <div class="ticker-item"><span class="val">7,368</span> causal edges discovered</div>
+      <div class="ticker-item"><span class="val">7,368</span> cause-and-effect links found</div>
       <span class="ticker-sep">·</span>
       <div class="ticker-item"><span class="val">98.15%</span> validation pass rate</div>
       <span class="ticker-sep">·</span>
       <div class="ticker-item"><span class="val">7.4 Billion</span> people represented</div>
       <span class="ticker-sep">·</span>
-      <div class="ticker-item"><span class="val">0/592</span> unstable transitions</div>
+      <div class="ticker-item"><span class="val">0/592</span> broken connections</div>
       <span class="ticker-sep">·</span>
     </div>
   </div>
@@ -718,16 +737,16 @@
       <div class="section-label">The Problem</div>
       <h2 class="problem-title">
         Everyone wants to help.<br>
-        <em>No one agrees how.</em>
+        <em>No one agrees on how.</em>
       </h2>
       <div class="problem-body">
-        <p>Now, for the first time, we have a map. Not a theory. Not an opinion. Built from 35 years of evidence, across every country on Earth. We can see what actually drives human progress, and test what changes it.</p>
+        <p>Built from 35 years of evidence across every country on Earth, we can see what actually drives human progress. And test what changes it.</p>
       </div>
       <div class="problem-bridge">The world deserves better than guesswork.</div>
     </div>
     <div class="problem-right reveal reveal-delay-2">
-      <div class="question-card">What actually causes a country to become less violent?</div>
-      <div class="question-card">If a country builds more schools, what else gets better?</div>
+      <div class="question-card">What truly reduces violence in a country?</div>
+      <div class="question-card">If a country builds more schools, what other areas improve?</div>
       <div class="question-card">Why do the same policies work in some countries but fail in others?</div>
       <div class="question-card">Which investments ripple outward, and which ones dead-end?</div>
     </div>
@@ -746,7 +765,7 @@
     <div class="cap-card reveal reveal-delay-1">
       <span class="cap-num">01 — EXPLORE</span>
       <h3 class="cap-title">The full causal web, made navigable</h3>
-      <p class="cap-body">Start at "Quality of Life." Click any branch. Watch 3,122 nodes unfold across 9 domains, every one sized by how much it actually matters.</p>
+      <p class="cap-body">Click any branch. Watch over 3,000 nodes unfold across 9 domains, every one sized by its impact on <span style="color:var(--cyan)">quality of life</span>.</p>
     </div>
     <div class="cap-card reveal reveal-delay-2">
       <span class="cap-num">02 — SIMULATE</span>
@@ -770,15 +789,15 @@
         These are not correlations.
       </h2>
       <p class="method-intro reveal">
-        Every connection in Atlas passed five tests before it was included. Not one. Five. Here's what that means.
+        Every connection in Atlas passed five statistical and structural validation tests before it was included. Here's what that means.
       </p>
       <div class="how-steps reveal">
         <div class="how-step">
           <span class="step-num">01</span>
           <div class="step-content">
-            <div class="step-title">We checked if one thing happens before another.</div>
+            <div class="step-title">We checked whether one thing happens before another.</div>
             <div class="step-meta">Granger Causality Prefiltering · FDR q &lt; 0.05</div>
-            <p class="step-body">We tested 2,159,672 variable pairs across up to 5 years of lag. 564,545 survived. Those are the ones where cause consistently comes before effect.</p>
+            <p class="step-body">We tested 2.16 million variable pairs across up to 5 years of lag. 565,000 survived. Those are the ones where cause consistently comes before effect.</p>
           </div>
         </div>
         <div class="how-step">
@@ -786,7 +805,7 @@
           <div class="step-content">
             <div class="step-title">We removed false connections.</div>
             <div class="step-meta">PC-Stable Algorithm + DAG Enforcement · alpha = 0.001</div>
-            <p class="step-body">85,726 edges passed the causality test. We then removed circular logic. If A causes B causes A, neither is trustworthy. 58,837 remained.</p>
+            <p class="step-body">85,700 edges passed the causality test. We then removed circular logic. If A causes B causes A, neither is trustworthy. 58,800 remained.</p>
           </div>
         </div>
         <div class="how-step">
@@ -794,7 +813,7 @@
           <div class="step-content">
             <div class="step-title">We stress-tested every connection 100 times.</div>
             <div class="step-meta">LassoCV + OLS Bootstrap Validation · 100 iterations</div>
-            <p class="step-body">Each edge was re-estimated 100 times on different data samples. Only edges with a consistent effect size, every single time, survived. 4,976 out of 58,837 made the cut.</p>
+            <p class="step-body">Each edge was re-estimated 100 times on different data samples. Only edges with a consistent effect size survived. 4,980 out of 58,800 made the cut.</p>
           </div>
         </div>
         <div class="how-step">
@@ -919,7 +938,7 @@
     <div class="audience-card reveal reveal-delay-1">
       <svg class="audience-icon" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.5" role="img" aria-label="Policymakers icon"><path d="M12 2L2 8v2h20V8L12 2z"/><line x1="5" y1="10" x2="5" y2="20"/><line x1="9" y1="10" x2="9" y2="20"/><line x1="15" y1="10" x2="15" y2="20"/><line x1="19" y1="10" x2="19" y2="20"/><line x1="1" y1="20" x2="23" y2="20"/></svg>
       <h3 class="audience-title">Policymakers & Governments</h3>
-      <p class="audience-body">Test interventions before committing resources. Instead of asking "should we invest in education or health?" and ask "if we increase primary enrollment by 15% in our country, what happens to governance indicators, GDP, and health outcomes over the next five years?" Atlas gives you the causal answer.</p>
+      <p class="audience-body">Test interventions before committing resources. Rather than asking whether to invest in education or health, you can now test "if we increase primary enrollment by 15% in our country, what happens to governance, GDP, and health outcomes over the next five years?" Atlas gives you the causal answer.</p>
     </div>
     <div class="audience-card reveal reveal-delay-2">
       <svg class="audience-icon" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.5" role="img" aria-label="Researchers icon"><circle cx="12" cy="8" r="6"/><line x1="12" y1="14" x2="12" y2="22"/><line x1="7" y1="22" x2="17" y2="22"/><circle cx="12" cy="8" r="2" fill="var(--cyan)" stroke="none" opacity="0.4"/></svg>
@@ -929,7 +948,7 @@
     <div class="audience-card reveal reveal-delay-3">
       <svg class="audience-icon" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="1.5" role="img" aria-label="Curious public icon"><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
       <h3 class="audience-title">The Curious Public</h3>
-      <p class="audience-body">You don't need a degree to use Atlas. Start anywhere. Follow any thread. See how sanitation connects to school attendance, or how governance shapes growth, in any country, any year.</p>
+      <p class="audience-body">You don't need a degree to use Atlas. Start anywhere. Follow any thread. See how trade openness connects to life expectancy, or how governance shapes growth, in any country, any year.</p>
     </div>
   </div>
 </section>
@@ -1200,6 +1219,52 @@ if (chevron) {
       window.removeEventListener('scroll', hideChevron);
     }
   }, { passive: true });
+}
+
+// ── DESKTOP TICKER OVERFLOW: animate when items don't fit ──
+{
+  const tickerBar = document.querySelector('.ticker-bar');
+  const tickerTrack = document.getElementById('ticker-track');
+  const origSet = tickerTrack?.querySelector('.ticker-set');
+
+  if (tickerBar && tickerTrack && origSet) {
+    let cloned = false;
+    // Measure original items' total width (items + gaps)
+    function measureContentWidth() {
+      const items = origSet.querySelectorAll('.ticker-item, .ticker-sep');
+      let w = 0;
+      items.forEach(el => { w += el.offsetWidth; });
+      // Add gap spacing (48px gap on desktop between items)
+      const gapCount = origSet.querySelectorAll('.ticker-item').length - 1;
+      w += gapCount * 48;
+      return w;
+    }
+
+    function checkTickerOverflow() {
+      // Skip on mobile — mobile JS handles its own animation
+      if (window.innerWidth <= 900) return;
+
+      // Temporarily remove overflow class to get natural layout for measurement
+      tickerBar.classList.remove('ticker-overflow');
+
+      const barWidth = tickerBar.clientWidth;
+      const contentWidth = measureContentWidth();
+
+      if (contentWidth > barWidth - 64) { // 64px = 32px padding each side
+        if (!cloned) {
+          tickerTrack.appendChild(origSet.cloneNode(true));
+          tickerTrack.appendChild(origSet.cloneNode(true));
+          cloned = true;
+        }
+        tickerBar.classList.add('ticker-overflow');
+      } else {
+        tickerBar.classList.remove('ticker-overflow');
+      }
+    }
+
+    checkTickerOverflow();
+    window.addEventListener('resize', checkTickerOverflow);
+  }
 }
 
 // ── MOBILE TICKER: clone sets + touch drag + flick momentum + auto-resume ──
