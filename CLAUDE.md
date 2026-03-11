@@ -10,81 +10,170 @@ Before ANY commit/push:
 3. **Test locally first** - `curl` endpoints, check pages load
 4. **Verify after deploy** - All health checks must pass
 
-Deployment workflow:
+**If something breaks, notify user IMMEDIATELY.**
+
+---
+
+## Docker Architecture
+
+**Atlas runs on Docker, NOT systemd. Do NOT use systemctl commands.**
+
+Single container (`atlas`) runs:
+- **nginx** (port 3005) - serves frontend + static files
+- **uvicorn** (port 8000) - FastAPI backend
+- **supervisord** - manages both processes
+
+Key files:
+```
+Dockerfile                      # Multi-stage build (node -> python)
+deploy/docker/nginx.conf        # nginx routing config (CRITICAL)
+deploy/docker/supervisord.conf  # process manager config
+docker-compose.yml              # in parent /home/sandesh/argon_primary/
+```
+
+**CRITICAL: Files are baked into Docker image at build time!**
+- Changes to ANY file require `docker-compose build atlas`
+- Just restarting container will NOT pick up changes
+- Must use `down` then `up -d` for clean restart
+
+---
+
+## Deployment Workflow
+
 ```bash
-# 1. Make changes
-# 2. Test locally
-# 3. Commit to live branch
-# 4. Push to both branches: git push origin live && git push origin live:master
-# 5. Rebuild and restart Docker:
+# 1. Make changes, commit to live branch
+git add . && git commit -m "message"
+
+# 2. Push to both branches
+git push origin live && git push origin live:master
+
+# 3. Rebuild and restart Docker (MUST do all 3 steps)
 cd /home/sandesh/argon_primary
 docker-compose down atlas
 docker-compose build atlas
 docker-compose up -d atlas
-# 6. Purge Cloudflare cache (auto if env vars set, else manual)
-# 7. Verify all endpoints respond
-```
 
-**IMPORTANT: Atlas runs on Docker, NOT systemd!**
-- Container: `atlas` (ports 3005 + 8000)
-- Files are baked into Docker image - MUST rebuild for changes
-- MUST use `docker-compose down` then `up -d` to fully restart
-- Do NOT use `systemctl` commands - they won't work
-- After rebuild, ALWAYS purge Cloudflare cache
+# 4. Purge Cloudflare cache
+curl -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"purge_everything":true}'
+
+# 5. Verify all endpoints
+curl -I https://atlas.argonanalytics.org/
+curl -I https://atlas.argonanalytics.org/explore/
+curl -I https://atlas.argonanalytics.org/research/
+curl -I https://api.argonanalytics.org/health
+```
 
 Live URLs to verify:
 - Landing: https://atlas.argonanalytics.org
-- App: https://atlas.argonanalytics.org/explore
-- Research: https://atlas.argonanalytics.org/research
+- App: https://atlas.argonanalytics.org/explore/
+- Research: https://atlas.argonanalytics.org/research/
+- Paper: https://atlas.argonanalytics.org/research/paper/
+- Methodology: https://atlas.argonanalytics.org/research/methodology/
 - API Health: https://api.argonanalytics.org/health
-
-**If something breaks, notify user IMMEDIATELY.**
-
-### Cloudflare Cache
-
-Static assets (PDFs, images) are cached by Cloudflare. After deploying changes to static files:
-- The deploy script automatically purges cache if `CLOUDFLARE_ZONE_ID` and `CLOUDFLARE_API_TOKEN` are set
-- If cache purge fails or credentials aren't set, manually purge from Cloudflare dashboard
-- **Always verify static file changes are live** - download and check, don't trust browser cache
-
-Required env vars (set in shell or `/home/sandesh/argon_primary/.env`):
-```bash
-export CLOUDFLARE_ZONE_ID="your-zone-id"
-export CLOUDFLARE_API_TOKEN="your-api-token"  # needs Cache Purge permission
-```
-
-### Port Cleanup
-
-After deploying, check for stale processes on old ports:
-```bash
-# Check what's running on common dev ports
-lsof -i :5173 -i :5174 -i :5175 -i :3000 -i :3001 -i :3002
-
-# Kill stale dev servers if needed
-pkill -f "vite"
-pkill -f "npm run dev"
-```
-
-Production ports (do NOT kill):
-- 3005: atlas-frontend (systemd)
-- 8000: atlas-api (systemd)
 
 ---
 
-## SSH Session Safety Rules
+## Cloudflare Tunnels
 
-**CRITICAL**: Follow these rules to prevent session crashes:
+Traffic flow:
+```
+Browser -> Cloudflare CDN -> cloudflared tunnel -> localhost:3005/8000 -> Docker (nginx/uvicorn)
+```
 
-1. **Never pipe curl directly** - save to file first: `curl -s -m 5 url > /tmp/out.json`
-2. **Always use timeouts**: `curl -m 5`
-3. **Limit output**: `head -c 500` or `head -20`
-4. **Kill before starting**: `pkill -9 -f pattern` and verify
-5. **Start servers with nohup**: `nohup uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/api.log 2>&1 &`
+Tunnel config: `/home/sandesh/.cloudflared/argon-analytics.yml`
+```yaml
+- atlas.argonanalytics.org -> localhost:3005
+- api.argonanalytics.org -> localhost:8000
+```
 
-## Build & Dev
+**CRITICAL nginx setting in `deploy/docker/nginx.conf`:**
+```nginx
+absolute_redirect off;
+```
+Without this, nginx redirects include internal port (`http://...:3005/`) which breaks through Cloudflare.
+
+---
+
+## Cloudflare Cache
+
+Static assets (PDFs, images, HTML) are cached by Cloudflare.
+
+After deploying changes to static files:
+1. Deploy script auto-purges if env vars set
+2. If not, manually purge from Cloudflare dashboard or API
+3. **Always verify changes are live** - download file, don't trust browser
+
+Env vars (in `/home/sandesh/argon_primary/.env`):
+```bash
+CLOUDFLARE_ZONE_ID=8514b32adc010aae325021fec9c85820
+CLOUDFLARE_API_TOKEN=<token>
+```
+
+---
+
+## Troubleshooting
+
+### Site not loading
+```bash
+# 1. Check Docker container
+docker ps | grep atlas
+
+# 2. Check container logs
+docker logs atlas --tail 50
+
+# 3. Test local endpoints
+curl -I http://localhost:3005/
+curl -I http://localhost:8000/health
+
+# 4. Test external
+curl -I https://atlas.argonanalytics.org/
+
+# 5. Check Cloudflare tunnel
+sudo systemctl status cloudflared
+```
+
+### Redirects broken (infinite load, wrong URL with :3005)
+1. Check `absolute_redirect off;` exists in `deploy/docker/nginx.conf`
+2. Rebuild Docker: `docker-compose down atlas && docker-compose build atlas && docker-compose up -d atlas`
+3. Purge Cloudflare cache
+4. Test: `curl -I https://atlas.argonanalytics.org/explore` should show `location: /explore/` (relative, no port)
+
+### Static files not updating
+1. Files are baked into Docker image - MUST rebuild
+2. Purge Cloudflare cache after rebuild
+3. Verify inside container: `docker exec atlas cat /usr/share/nginx/html/index.html | head -5`
+
+### Container won't start
+```bash
+# Check port conflicts
+lsof -i :3005 -i :8000
+
+# Force stop and remove
+docker-compose down atlas
+
+# Check logs
+docker logs atlas
+```
+
+### API errors
+```bash
+# Check API logs
+docker logs atlas 2>&1 | grep -i error
+
+# Test API directly
+curl http://localhost:8000/health
+curl http://localhost:8000/api/countries
+```
+
+---
+
+## Build & Dev (Local Development)
 
 ```bash
-# Frontend (localhost:5173/global-viz/)
+# Frontend dev server (localhost:5173)
 npm run dev
 
 # Backend API (localhost:8000)
@@ -93,6 +182,8 @@ python -m uvicorn api.main:app --port 8000
 ```
 
 Toggle API endpoint in `src/services/api.ts`: `API_MODE = 'local' | 'public'`
+
+---
 
 ## Project Overview
 
@@ -103,74 +194,36 @@ Interactive causal graph visualization for development economics research. React
 ## Repository Structure
 
 ```
-viz/
+atlas/
 ├── src/                          # Frontend application code
 │   ├── components/
-│   │   ├── simulation/           # CountrySelector, SimulationPanel, InterventionBuilder,
-│   │   │                         # SimulationRunner, TimelinePlayer, ResultsPanel, TemplateSelector
-│   │   ├── LocalView/            # DAG flow view (structural + sim modes)
-│   │   ├── ViewTabs.tsx          # Global/Local/Split view switcher
-│   │   └── StrataTabs.tsx        # Income stratification tabs
-│   ├── stores/simulationStore.ts # Zustand state (panel, country, interventions, playback)
+│   │   ├── simulation/           # Simulation UI components
+│   │   ├── LocalView/            # DAG flow view
+│   │   └── ViewTabs.tsx          # View switcher
+│   ├── stores/simulationStore.ts # Zustand state
 │   ├── services/api.ts           # API client
-│   ├── utils/causalEdges.ts      # buildLocalViewData + buildSimLocalViewData
-│   ├── layouts/                  # RadialLayout.ts, LocalViewLayout.ts
-│   ├── styles/App.css            # CSS animations (edge pulse, node flash, intervention glow)
-│   └── App.tsx                   # Main app + D3 radial rendering (~4500 lines)
-│
-├── simulation/                   # V3.1 simulation engine (self-contained)
-│   ├── graph_loader_v31.py       # Year-specific graph loading with fallback
-│   ├── simulation_runner_v31.py  # Instant simulation runner
-│   ├── temporal_simulation_v31.py # Multi-year temporal simulation
-│   ├── propagation_v31.py        # Causal propagation engine
-│   ├── indicator_stats.py        # Country-specific statistics
-│   ├── income_classifier.py      # World Bank income classification
-│   ├── regional_spillovers.py    # Regional spillover effects
-│   └── saturation_functions.py   # Indicator saturation bounds
+│   └── App.tsx                   # Main app + D3 rendering
 │
 ├── api/                          # FastAPI backend
 │   ├── main.py                   # Entry point
 │   ├── routers/                  # Route handlers
-│   ├── services/                 # Business logic
-│   └── config.py                 # Paths, CORS, timeouts
+│   └── services/                 # Business logic
+│
+├── simulation/                   # V3.1 simulation engine
+│
+├── site/                         # Static pages (landing, research)
+│   ├── index.html                # Landing page
+│   └── research/                 # Research hub, paper, methodology
+│
+├── deploy/docker/                # Docker configs
+│   ├── nginx.conf                # nginx routing (CRITICAL)
+│   └── supervisord.conf          # Process manager
 │
 ├── data/                         # Research data (~19GB, gitignored)
-│   ├── v31/                      # V3.1 temporal outputs
-│   │   ├── temporal_graphs/      # 17GB - year-specific causal graphs
-│   │   ├── temporal_shap/        # 1.2GB - SHAP importance values
-│   │   ├── baselines/            # 305MB - precomputed baselines
-│   │   ├── development_clusters/
-│   │   ├── feedback_loops/
-│   │   └── metadata/
-│   └── raw/                      # 70MB - from original research data
-│       ├── v21_panel_data_for_v3.parquet
-│       ├── v21_nodes.csv
-│       └── v21_causal_edges.csv
 │
-├── docs/                         # Documentation
-│   ├── architecture/             # CLAUDE_CODE_REPO_REFERENCE.md
-│   ├── plans/                    # roadmap.md, phase plans, 3d-sandbox-spec.md
-│   ├── reports/                  # phase4-progress.md, performance-report.md
-│   ├── runbooks/                 # Operational runbooks
-│   └── phases/                   # Historical phase implementation notes
-│
-├── deploy/                       # Deployment scaffolding
-│   ├── docker/                   # Dockerfiles
-│   ├── nginx/                    # SPA routing + reverse proxy
-│   └── env/                      # .env.staging.example, .env.prod.example
-│
-├── scripts/                      # Automation
-│   ├── dev/                      # analyze.cjs, test-layout.cjs
-│   └── ci/                       # CI scripts
-│
-└── .github/workflows/            # CI/CD pipelines (ci.yml, deploy.yml)
+├── Dockerfile                    # Multi-stage Docker build
+└── scripts/deploy.sh             # Deployment automation
 ```
-
-**File placement rules** (see `docs/architecture/CLAUDE_CODE_REPO_REFERENCE.md`):
-- Plans/RFCs → `docs/plans/`
-- Progress/status reports → `docs/reports/`
-- Utility scripts → `scripts/dev/`
-- No ad-hoc docs at repo root
 
 ## Key API Endpoints
 
@@ -179,40 +232,9 @@ viz/
 | `/health` | Health check |
 | `/api/countries` | List 203 countries |
 | `/api/graph/{country}` | Country graph + SHAP + baseline |
-| `/api/temporal/shap/{target}/timeline` | Unified SHAP all years |
-| `/api/temporal/shap/{country}/{target}/timeline` | Country SHAP timeline |
-| `/api/temporal/graph/{year}` | Unified graph for year |
-| `/api/temporal/graph/{country}/{year}` | Country graph for year |
 | `/api/simulate/v31` | V3.1 instant simulation |
 | `/api/simulate/v31/temporal` | V3.1 temporal simulation |
 
-## Roadmap & Progress
+## Backlog
 
-See `docs/plans/roadmap.md` for full phase history and feature details.
-
-**Completed**: Phases 2–9A (Core Sim → Sim Polish → Sim UX → Pre-Launch → Map → Regional → Polish → Accessibility → Desktop Adaptive Layout)
-
-**Next**: Phase 9B/C — Tablet & Mobile
-
-**Pending fix**: Layout stability on single-node collapse — see `docs/plans/codex-layout-stability-fix.md`
-
-## Key Constants
-
-```typescript
-DOMAIN_COLORS       // 9 domain color mappings
-RING_LABELS         // ['Quality of Life', 'Outcomes', 'Coarse Domains', 'Fine Domains', 'Indicator Groups', 'Indicators']
-MAX_INTERVENTIONS   // 5
-API_MODE            // 'local' | 'public'
-SIM_MS_PER_YEAR     // Animation speed per sim year
-```
-
-## Data Structure
-
-- **Temporal SHAP**: 35 years (1990-2024) x 178 countries
-- **Income Strata**: Unified, Developing (<$4.5k), Emerging ($4.5k-$14k), Advanced (>$14k)
-- **Graph edges**: Year-specific, country-specific, stratum-specific variants
-- **Indicator domains**: Development (38), Economic (24), Education (12), Environment (20), Governance (5)
-
-## Backlog (unscheduled)
-
-See `docs/plans/roadmap.md` → "Future Phases (BACKLOG)" for full list.
+See `docs/plans/roadmap.md` for full roadmap and backlog.

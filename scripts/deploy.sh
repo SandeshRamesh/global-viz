@@ -1,62 +1,66 @@
 #!/bin/bash
-# Deploy script for atlas
+# Deploy script for Atlas
 # Run after pushing to live branch
 
 set -e
 
-cd /home/sandesh/argon_primary/atlas
+echo "=== Atlas Deployment ==="
 
-# Load Cloudflare credentials for cache purge
+# Load Cloudflare credentials
 if [ -f /home/sandesh/argon_primary/.env ]; then
   CLOUDFLARE_ZONE_ID=$(grep '^CLOUDFLARE_ZONE_ID=' /home/sandesh/argon_primary/.env | cut -d'=' -f2)
   CLOUDFLARE_API_TOKEN=$(grep '^CLOUDFLARE_API_TOKEN=' /home/sandesh/argon_primary/.env | cut -d'=' -f2)
   export CLOUDFLARE_ZONE_ID CLOUDFLARE_API_TOKEN
 fi
 
-echo "Pulling latest from live branch..."
+# 1. Pull latest code
+echo ""
+echo "[1/5] Pulling latest from live branch..."
+cd /home/sandesh/argon_primary/atlas
 git fetch origin live
 git checkout live
 git reset --hard origin/live
 
-echo "Verifying critical files..."
+# 2. Verify critical files exist
+echo ""
+echo "[2/5] Verifying critical files..."
 test -f public/data/world-110m.json || { echo "ERROR: world-110m.json missing"; exit 1; }
+test -f site/index.html || { echo "ERROR: site/index.html missing"; exit 1; }
+test -f deploy/docker/nginx.conf || { echo "ERROR: nginx.conf missing"; exit 1; }
 
-echo "Installing dependencies..."
-npm ci
-
-echo "Building frontend..."
-# Vite builds SPA into dist/explore/
-VITE_API_BASE=https://api.argonanalytics.org npm run build
-
-echo "Assembling site..."
-# Copy landing page to dist/ root (served at /)
-cp site/index.html dist/index.html
-cp -r site/assets dist/assets 2>/dev/null || true
-rm -rf dist/research && cp -r site/research dist/research
-cp site/favicon.svg dist/favicon.svg 2>/dev/null || true
-cp site/404.html dist/404.html 2>/dev/null || true
-# serve.json provides rewrite rules (replaces -s flag)
-cp serve.json dist/serve.json
-
-echo "Rebuilding and restarting Docker container..."
+# 3. Rebuild and restart Docker (all 3 steps required!)
+echo ""
+echo "[3/5] Rebuilding Docker container..."
 cd /home/sandesh/argon_primary
+docker-compose down atlas
 docker-compose build atlas
 docker-compose up -d atlas
-cd /home/sandesh/argon_primary/atlas
 
-echo "Waiting for container to start..."
-sleep 5
+# 4. Wait for container to be healthy
+echo ""
+echo "[4/5] Waiting for container to start..."
+sleep 8
 
-echo "Verifying deployment..."
+# 5. Verify deployment
+echo ""
+echo "[5/5] Verifying deployment..."
 FAIL=0
 
-curl -sf http://localhost:3005/ > /dev/null && echo "✓ Landing page OK" || { echo "✗ Landing page FAILED"; FAIL=1; }
-curl -sf http://localhost:3005/explore/ > /dev/null && echo "✓ SPA OK" || { echo "✗ SPA FAILED"; FAIL=1; }
-curl -sf http://localhost:3005/explore/test-route 2>/dev/null | grep -q "Atlas" && echo "✓ SPA fallback OK" || { echo "✗ SPA fallback FAILED"; FAIL=1; }
-curl -sf http://localhost:3005/research/ > /dev/null && echo "✓ Research hub OK" || { echo "✗ Research hub FAILED"; FAIL=1; }
-curl -sf http://localhost:3005/research/paper/ > /dev/null && echo "✓ Research paper OK" || { echo "✗ Research paper FAILED"; FAIL=1; }
-curl -sf http://localhost:3005/research/methodology/ > /dev/null && echo "✓ Methodology OK" || { echo "✗ Methodology FAILED"; FAIL=1; }
-curl -sf http://localhost:8000/health > /dev/null && echo "✓ API OK" || { echo "✗ API FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/ > /dev/null && echo "  ✓ Landing page" || { echo "  ✗ Landing page FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/explore/ > /dev/null && echo "  ✓ Explore app" || { echo "  ✗ Explore app FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/research/ > /dev/null && echo "  ✓ Research hub" || { echo "  ✗ Research hub FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/research/paper/ > /dev/null && echo "  ✓ Research paper" || { echo "  ✗ Research paper FAILED"; FAIL=1; }
+curl -sf http://localhost:3005/research/methodology/ > /dev/null && echo "  ✓ Methodology" || { echo "  ✗ Methodology FAILED"; FAIL=1; }
+curl -sf http://localhost:8000/health > /dev/null && echo "  ✓ API health" || { echo "  ✗ API health FAILED"; FAIL=1; }
+
+# Check redirects don't include port
+REDIRECT=$(curl -sI http://localhost:3005/explore 2>&1 | grep -i "^location:" | head -1)
+if echo "$REDIRECT" | grep -q ":3005"; then
+  echo "  ✗ Redirect includes port (nginx absolute_redirect issue)"
+  FAIL=1
+else
+  echo "  ✓ Redirects OK (no port)"
+fi
 
 if [ $FAIL -ne 0 ]; then
   echo ""
@@ -65,18 +69,20 @@ if [ $FAIL -ne 0 ]; then
 fi
 
 # Purge Cloudflare cache
+echo ""
 echo "Purging Cloudflare cache..."
 if [ -n "$CLOUDFLARE_ZONE_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then
   curl -sf -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache" \
     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
     -H "Content-Type: application/json" \
-    --data '{"purge_everything":true}' > /dev/null && echo "✓ Cloudflare cache purged" || echo "⚠ Cloudflare purge failed (non-fatal)"
+    --data '{"purge_everything":true}' > /dev/null && echo "  ✓ Cache purged" || echo "  ⚠ Cache purge failed (non-fatal)"
 else
-  echo "⚠ Skipping Cloudflare purge (CLOUDFLARE_ZONE_ID or CLOUDFLARE_API_TOKEN not set)"
+  echo "  ⚠ Skipping (CLOUDFLARE_ZONE_ID or CLOUDFLARE_API_TOKEN not set)"
 fi
 
 echo ""
-echo "Deployment complete!"
-echo "  Landing:  https://atlas.argonanalytics.org"
-echo "  Tool:     https://atlas.argonanalytics.org/explore"
-echo "  API:      https://api.argonanalytics.org"
+echo "=== Deployment Complete ==="
+echo "  Landing:     https://atlas.argonanalytics.org"
+echo "  Explore:     https://atlas.argonanalytics.org/explore/"
+echo "  Research:    https://atlas.argonanalytics.org/research/"
+echo "  API Health:  https://api.argonanalytics.org/health"
