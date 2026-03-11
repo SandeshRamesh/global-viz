@@ -16,9 +16,14 @@ Deployment workflow:
 # 2. Test locally
 # 3. Commit to live branch
 # 4. Push to both branches: git push origin live && git push origin live:master
-# 5. Run: ./scripts/deploy.sh
+# 5. Rebuild Docker: cd /home/sandesh/argon_primary && docker-compose build atlas && docker-compose up -d atlas
 # 6. Verify all endpoints respond
 ```
+
+**IMPORTANT: Atlas runs on Docker, NOT systemd!**
+- Container: `atlas` (ports 3005 + 8000)
+- Rebuild required for file changes (files are baked into image)
+- Do NOT use `systemctl` commands - they won't work
 
 Live URLs to verify:
 - Landing: https://atlas.argonanalytics.org

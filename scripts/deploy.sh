@@ -38,14 +38,13 @@ cp site/404.html dist/404.html 2>/dev/null || true
 # serve.json provides rewrite rules (replaces -s flag)
 cp serve.json dist/serve.json
 
-echo "Updating systemd service (remove -s flag, serve.json handles routing)..."
-# One-time: sudo systemctl edit atlas-frontend
-# Change: ExecStart=npx serve dist -l 3005
-# (remove the -s flag — serve.json rewrites handle SPA fallback)
-echo "Restarting services..."
-sudo systemctl restart atlas-frontend atlas-api
+echo "Rebuilding and restarting Docker container..."
+cd /home/sandesh/argon_primary
+docker-compose build atlas
+docker-compose up -d atlas
+cd /home/sandesh/argon_primary/atlas
 
-echo "Waiting for services to start..."
+echo "Waiting for container to start..."
 sleep 5
 
 echo "Verifying deployment..."
