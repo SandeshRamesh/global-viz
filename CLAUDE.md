@@ -16,14 +16,21 @@ Deployment workflow:
 # 2. Test locally
 # 3. Commit to live branch
 # 4. Push to both branches: git push origin live && git push origin live:master
-# 5. Rebuild Docker: cd /home/sandesh/argon_primary && docker-compose build atlas && docker-compose up -d atlas
-# 6. Verify all endpoints respond
+# 5. Rebuild and restart Docker:
+cd /home/sandesh/argon_primary
+docker-compose down atlas
+docker-compose build atlas
+docker-compose up -d atlas
+# 6. Purge Cloudflare cache (auto if env vars set, else manual)
+# 7. Verify all endpoints respond
 ```
 
 **IMPORTANT: Atlas runs on Docker, NOT systemd!**
 - Container: `atlas` (ports 3005 + 8000)
-- Rebuild required for file changes (files are baked into image)
+- Files are baked into Docker image - MUST rebuild for changes
+- MUST use `docker-compose down` then `up -d` to fully restart
 - Do NOT use `systemctl` commands - they won't work
+- After rebuild, ALWAYS purge Cloudflare cache
 
 Live URLs to verify:
 - Landing: https://atlas.argonanalytics.org
