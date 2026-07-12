@@ -508,6 +508,7 @@ export function InterventionBuilder() {
     indicators,
     indicatorsLoading,
     indicatorsLoadFailed,
+    indicatorsLoaded,
     loadIndicators,
     selectedCountry,
     countryGraph,
@@ -643,12 +644,14 @@ export function InterventionBuilder() {
     return temporalEdgeCounts.has(key) ? temporalEdgeCounts.get(key)! : null
   }, [temporalEdgeCounts])
 
-  // Load indicators on mount (with failure guard to prevent infinite retry)
+  // Load indicators on mount. Guard on `indicatorsLoaded` (set after any
+  // successful fetch, even an empty one) so a zero-indicator API response can't
+  // trigger an infinite refetch loop; `indicatorsLoadFailed` covers HTTP errors.
   useEffect(() => {
-    if (indicators.length === 0 && !indicatorsLoading && !indicatorsLoadFailed) {
+    if (!indicatorsLoaded && !indicatorsLoading && !indicatorsLoadFailed) {
       loadIndicators()
     }
-  }, [indicators.length, indicatorsLoading, indicatorsLoadFailed, loadIndicators])
+  }, [indicatorsLoaded, indicatorsLoading, indicatorsLoadFailed, loadIndicators])
 
   /**
    * Outgoing edge counts for the dropdown — loaded from the scope-appropriate graph.

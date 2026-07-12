@@ -35,6 +35,9 @@ RUN pip install --no-cache-dir -r api/requirements.txt
 COPY api/ ./api/
 COPY simulation/ ./simulation/
 
+# Copy static data the API reads at runtime (V2.1 indicator graph lives in public/data)
+COPY public/ ./public/
+
 # Copy built frontend from builder stage
 COPY --from=frontend-builder /app/dist /usr/share/nginx/html
 

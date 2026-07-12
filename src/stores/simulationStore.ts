@@ -135,6 +135,7 @@ interface SimulationState {
   indicators: IndicatorInfo[];
   indicatorsLoading: boolean;
   indicatorsLoadFailed: boolean;
+  indicatorsLoaded: boolean;
 
   // Countries load failure
   countriesLoadFailed: boolean;
@@ -325,6 +326,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   indicators: [],
   indicatorsLoading: false,
   indicatorsLoadFailed: false,
+  indicatorsLoaded: false,
   countriesLoadFailed: false,
   interventions: [],
   isSimulating: false,
@@ -932,7 +934,9 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
     set({ indicatorsLoading: true, indicatorsLoadFailed: false, error: null });
     try {
       const response = await simulationAPI.getIndicators();
-      set({ indicators: response.indicators, indicatorsLoading: false, indicatorsLoadFailed: false });
+      // Mark as loaded on any successful fetch (even an empty list) so the mount
+      // effect never re-fires in a loop when the API returns zero indicators.
+      set({ indicators: response.indicators, indicatorsLoading: false, indicatorsLoadFailed: false, indicatorsLoaded: true });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : 'Failed to load indicators',
