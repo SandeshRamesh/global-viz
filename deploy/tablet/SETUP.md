@@ -99,3 +99,57 @@ Run:
       cd /opt/atlas
       export DATA_ROOT=/opt/atlas/data SERVE_STATIC=true
       exec /opt/atlas-venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8000'
+
+---
+
+## Full data transfer (complete)
+
+20 GB / 178 countries on device. Built as 11 parallel gzip chunks (3.2 GB, 6.25:1),
+pushed to /sdcard, extracted natively with toybox tar via `su`, then a single
+`chown -R 10352:10352`. Scripts: `/home/sandesh/atlas-transfer/{build-chunks,push-extract}.sh`.
+
+Device after transfer: 40 GB used, 184 GB free.
+
+**Restart is mandatory after a data change.** `AVAILABLE_COUNTRY_GRAPH_COUNT` and
+`TEMPORAL_TARGETS` are evaluated at import time (`api/config.py:82,87`), so the API
+keeps reporting the old country count until uvicorn is restarted.
+
+### Verified with full data
+
+| Endpoint | Result |
+|---|---|
+| `/api/countries` | 200 — **178 countries** |
+| `/api/graph/{c}/timeline` | 200 — 11 years (2014-2024) — **play button works** |
+| `/api/temporal/shap/quality_of_life/timeline` | 200 — 8.1 MB |
+| `/api/map/qol-scores/all` | 200 |
+| `/api/simulate/v31/temporal` (Kenya) | 200 — 1.22 s, **qol_timeline active** |
+| `/api/simulate/v31/temporal` (India, after stress) | 200 — 1.36 s |
+| `/explore/` | 200 — 0.05 s |
+
+### Root cause of the two "dormant" features
+
+Both the missing play button and `qol_timeline: None` came from the same gap:
+**`data/raw/` was absent** from the smoke slice.
+
+- The play button's gate is `historicalTimeline.years.length > 0`
+  (`TimelinePlayer.tsx:371`), fed by `/api/graph/{c}/timeline`, which reads the panel parquet.
+- QoL needs `data/raw/v21_nodes.csv` (`qol_definition.py:136`). The failure was
+  swallowed by the `try:` around the QoL block (`temporal_simulation_v31.py:1055`),
+  so it returned `None` silently instead of erroring.
+
+This corrects the backend hand-off twice: it said QoL was dormant because three
+metadata files were missing (they are present), and it advised skipping `raw/`
+as "not required" — doing so silently disables QoL *and* the historical timeline.
+
+### Memory (the thing to watch)
+
+RSS climbs as the LRU caches fill: 224 MB (1 country) -> 1647 MB (5) -> **1876 MB (30)**.
+Device: 11.7 GB total, ~4.0 GB available, 11.3 GB swap free. Comfortable, but the
+default bounds are generous for a tablet also running a WebView. All five are
+env-tunable if it needs trimming:
+
+    TEMPORAL_SERVICE_GRAPH_CACHE_MAX=96   # default 192, ~6.9 MiB per cached year-graph
+    GRAPH_SERVICE_GRAPH_CACHE_MAX=32      # default 64
+    TEMPORAL_SERVICE_SHAP_CACHE_MAX=128   # default 256
+
+A large one-off is `graph_service._panel_df` — the 68 MB parquet held resident.
