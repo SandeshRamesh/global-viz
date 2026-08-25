@@ -1,0 +1,132 @@
+"""
+Offline static serving (tablet / air-gapped kiosk).
+
+In production the SPA and the landing/research pages are served by nginx, and
+this process only answers /api/*. On the offline tablet there is no nginx: a
+single uvicorn bound to 127.0.0.1 must serve both, so the app and the API are
+same-origin. That removes CORS from the picture entirely, leaves one process to
+supervise, and lets the kiosk WebView point at a plain http://127.0.0.1:8000.
+
+This module is opt-in and inert unless SERVE_STATIC=true, so importing it has no
+effect on the production deployment.
+
+Layout served (mirrors the nginx routing in deploy/docker/nginx.conf):
+
+    /explore/...   -> dist/explore/     built Vite SPA
+    /research/...  -> site/research/    research hub, paper, methodology
+    /              -> site/index.html   landing page
+    /<anything>    -> site/...          favicon.svg and other landing assets
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Route
+
+logger = logging.getLogger("api.offline_static")
+
+SERVE_STATIC = os.getenv("SERVE_STATIC", "false").strip().lower() == "true"
+
+
+class SPAStaticFiles(StaticFiles):
+    """
+    StaticFiles with an HTML5-history fallback.
+
+    The SPA uses client-side routing, so a deep link such as /explore/foo has no
+    file behind it and must still return index.html. This mirrors nginx's
+    `try_files $uri $uri/ /index.html`.
+    """
+
+    async def get_response(self, path: str, scope):
+        # StaticFiles raises rather than returning a 404, so the fallback has to
+        # catch. It raises starlette's HTTPException — fastapi's is a subclass,
+        # so catching that one would never match.
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            return await super().get_response("index.html", scope)
+        if response.status_code == 404:
+            return await super().get_response("index.html", scope)
+        return response
+
+
+def mount_offline_static(app: FastAPI, root: Path) -> bool:
+    """
+    Mount the built frontend and static pages onto *app*.
+
+    `root` is the repo root (the directory holding dist/ and site/).
+    Returns True if anything was mounted.
+
+    Mount order matters. All /api/* routes and /health are registered before
+    this runs, so they keep winning; the catch-all mount at "/" is appended
+    last and only sees what nothing else matched. The one exception is the
+    exact path "/", which main.py already claims with a JSON API-info route —
+    that route is replaced in place so the landing page wins on the tablet
+    while staying untouched in production.
+    """
+    if not SERVE_STATIC:
+        return False
+
+    dist_explore = root / "dist" / "explore"
+    site_dir = root / "site"
+    mounted = False
+
+    if dist_explore.is_dir():
+        app.mount("/explore", SPAStaticFiles(directory=dist_explore, html=True), name="explore")
+        logger.info("offline: serving SPA from %s", dist_explore)
+        mounted = True
+    else:
+        logger.warning("offline: SPA not found at %s — run `npm run build`", dist_explore)
+
+    if site_dir.is_dir():
+        research_dir = site_dir / "research"
+        if research_dir.is_dir():
+            app.mount("/research", StaticFiles(directory=research_dir, html=True), name="research")
+
+        index_html = site_dir / "index.html"
+        if index_html.is_file():
+            _replace_root_route(app, index_html)
+
+        # Catch-all for the remaining landing assets (favicon.svg, 404.html, ...).
+        # Appended last so it never shadows an API route.
+        app.mount("/", StaticFiles(directory=site_dir, html=True), name="site")
+        logger.info("offline: serving landing/research from %s", site_dir)
+        mounted = True
+    else:
+        logger.warning("offline: site/ not found at %s", site_dir)
+
+    return mounted
+
+
+def _replace_root_route(app: FastAPI, index_html: Path) -> None:
+    """
+    Swap the JSON API-info handler registered for exact "/" so the landing page
+    is served instead. The API info stays reachable at /api-info.
+    """
+
+    async def serve_index(request):
+        return FileResponse(index_html)
+
+    for i, route in enumerate(app.router.routes):
+        if isinstance(route, Route) and route.path == "/" and "GET" in (route.methods or set()):
+            original = route.endpoint
+
+            async def api_info(request, _original=original):
+                result = await _original()
+                return JSONResponse(result)
+
+            app.router.routes[i] = Route("/", serve_index, methods=["GET"], name="landing")
+            app.router.routes.insert(i + 1, Route("/api-info", api_info, methods=["GET"], name="api_info"))
+            logger.info("offline: '/' now serves the landing page; API info moved to /api-info")
+            return
+
+    app.router.routes.insert(0, Route("/", serve_index, methods=["GET"], name="landing"))

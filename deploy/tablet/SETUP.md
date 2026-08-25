@@ -68,3 +68,34 @@ Port **8000**, health path **/health** (accepts GET and HEAD).
 - Monte Carlo at 66 s is not interactive. Leave `n_ensemble_runs=0` (matches live)
   or precompute.
 - Data currently one country (Afghanistan, 114 MB). Full set is ~20 GB.
+
+---
+
+## Frontend (added)
+
+Built with `VITE_API_BASE=http://127.0.0.1:8000 npm run build` and served by the
+same uvicorn via `api/offline_static.py` (opt-in, `SERVE_STATIC=true`), so app
+and API are same-origin on one port — no CORS, one process to supervise.
+
+Routes verified on-device:
+
+| Path | Result |
+|---|---|
+| `/` | 200 — landing page |
+| `/explore/` | 200 — SPA |
+| `/explore/<deep/route>` | 200 — history fallback to index.html |
+| `/research/`, `/research/paper/`, `/research/methodology/` | 200 |
+| `/favicon.svg` | 200 |
+| `/health`, `/api/countries` | 200 |
+| `/api-info` | 200 — the JSON root that `/` used to serve |
+
+Gotcha: `StaticFiles` *raises* `starlette.exceptions.HTTPException` on a miss
+rather than returning a 404. `fastapi.HTTPException` is a subclass, so catching
+that one silently never matches and the SPA fallback dies. Catch starlette's.
+
+Run:
+
+    proot-distro login debian -- bash -lc '
+      cd /opt/atlas
+      export DATA_ROOT=/opt/atlas/data SERVE_STATIC=true
+      exec /opt/atlas-venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8000'

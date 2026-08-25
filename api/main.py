@@ -237,6 +237,12 @@ app.include_router(temporal_router)  # V3.1 temporal data (has own /api/temporal
 app.include_router(map_router, prefix="/api")  # Map QOL scores for choropleth
 
 
+# Offline/tablet static serving (opt-in via SERVE_STATIC=true; inert in production).
+# Must run after all API routes are registered — see api/offline_static.py.
+from pathlib import Path as _Path  # noqa: E402
+from .offline_static import mount_offline_static  # noqa: E402
+
+
 # Root endpoint
 @app.get("/", tags=["root"])
 async def root():
@@ -371,3 +377,7 @@ if __name__ == "__main__":
         port=8000,
         reload=True
     )
+
+
+# Mounted last so the catch-all at "/" cannot shadow any API route.
+mount_offline_static(app, _Path(__file__).parent.parent)
