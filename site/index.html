@@ -15,9 +15,7 @@
 <meta name="twitter:description" content="178 countries. 35 years. 7,368 causal relationships.">
 <link rel="canonical" href="https://atlas.argonanalytics.org">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="/fonts/fonts.css" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1399,7 +1397,7 @@ if (window.innerWidth <= 900) {
 const cobeEl = document.getElementById('cobe-canvas');
 
 try {
-const { default: createGlobe } = await import('https://esm.sh/cobe@0.6.3');
+const { default: createGlobe } = await import('/vendor/cobe.js');
 
 const hero = document.querySelector('.hero');
 const prefersStill = window.matchMedia('(prefers-reduced-motion: reduce)').matches;

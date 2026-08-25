@@ -153,3 +153,80 @@ env-tunable if it needs trimming:
     TEMPORAL_SERVICE_SHAP_CACHE_MAX=128   # default 256
 
 A large one-off is `graph_service._panel_df` — the 68 MB parquet held resident.
+
+---
+
+## Fully offline (verified in airplane mode)
+
+### Vendored external assets
+
+The SPA was already self-contained. The landing/research pages were not — they
+pulled Google Fonts and the globe library from the network. Both are now local:
+
+- `site/fonts/` — 17 woff2 files + `fonts.css` (400 KB). Instrument Serif, DM Mono, Inter.
+- `site/vendor/cobe.js` — cobe 0.6.3, self-contained ESM bundle (11.5 KB).
+  Note `https://esm.sh/cobe@0.6.3?bundle` returns a *re-export shim*, not the code.
+  The real bundle is at `/cobe@0.6.3/es2020/cobe.bundle.mjs`.
+
+Remaining `atlas.argonanalytics.org` URLs are `og:`/`canonical` metadata and
+citation text — never fetched by a browser, and correct for the published site.
+
+### Storage layout — everything on the SD-card partition
+
+`/sdcard` on this device is not a removable card: it is a FUSE view of
+`/data/media/0`, the *same f2fs partition* as `/data/data`. So the move was an
+instant same-filesystem rename (20 GB in 0 s), not a copy.
+
+    /data/media/0/atlas-offline/atlas   <- app + 20 GB data   (= /sdcard/atlas-offline/atlas)
+    /data/media/0/atlas-offline/venv    <- Python venv, 332 MB
+
+Termux's uid cannot traverse `/data/media/0` (it is `media_rw`-only), so these are
+bind-mounted into the container at the paths the venv was built against:
+
+    mount --bind /data/media/0/atlas-offline/atlas $RFS/opt/atlas
+    mount --bind /data/media/0/atlas-offline/venv  $RFS/opt/atlas-venv
+
+This keeps native f2fs speed — binding the FUSE path instead would add
+translation overhead on every one of the 15,885 files. **These mounts do not
+survive reboot and must be re-established at boot.**
+
+Launcher: `~/start-atlas.sh` in Termux home.
+
+### CRITICAL: OnePlus HANS silently kills localhost
+
+The single worst failure mode found. OxygenOS's HANS (Hybrid App Network
+Scheduler) freezes networking for backgrounded apps via eBPF:
+
+    -A oplus_fw_INPUT  -m bpf --object-pinned .../skfilter_ingress_hans -j DROP
+    -A oplus_fw_OUTPUT -m bpf --object-pinned .../skfilter_egress_hans  -j DROP
+
+**It drops loopback too.** The symptom is vicious: uvicorn stays alive, the
+socket stays in LISTEN, the process sits in `do_epoll_wait` — and every
+connection times out with no SYN-ACK, including from root. Nothing in any log.
+A kiosk WebView would just hang forever with no error.
+
+Two fixes applied, both needed:
+
+    cmd deviceidle whitelist +com.termux          # persistent
+    appops set com.termux RUN_ANY_IN_BACKGROUND allow
+
+    # surgical: exempt loopback ahead of the HANS drop. NOT persistent —
+    # must be re-applied at boot. Does not disable HANS for real traffic.
+    iptables -I oplus_fw_INPUT  1 -i lo -j RETURN
+    iptables -I oplus_fw_OUTPUT 1 -o lo -j RETURN
+
+Diagnosis trick: if the socket is LISTENing and the process is epoll-waiting but
+connections time out even as root, it is the firewall, not the app.
+
+### Verified: airplane mode ON, wlan0 DOWN, no adb forward
+
+| Path | Result |
+|---|---|
+| `/`, `/explore/`, `/research/`, `/research/paper/`, `/research/methodology/` | all 200 |
+| `/fonts/fonts.css`, `/vendor/cobe.js`, `/favicon.svg` | all 200 |
+| `/explore/assets/index-*.js` (673 KB), `/explore/data/world-110m.json` | 200 |
+| `/health` | 200 — 0.004 s |
+| `/api/countries` | 200 — 178 countries |
+| `/api/graph/Kenya/timeline` | 200 — 757 KB, 0.95 s |
+| `/api/map/qol-scores/all` | 200 |
+| `POST /api/simulate/v31/temporal` | 200 — **1.02 / 1.12 s**, qol_timeline active |
