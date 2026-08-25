@@ -1,0 +1,28 @@
+# Atlas — offline tablet runtime dependencies
+#
+# This is the SERVING path only, derived by tracing the actual import graph of
+# api/ + simulation/ (excluding tests and precompute scripts). It is deliberately
+# much smaller than api/requirements.txt, which also covers the research/precompute
+# pipeline (dowhy, econml, scikit-learn, statsmodels, scipy, matplotlib, seaborn).
+# None of those are imported when serving requests.
+#
+# Verified import sources:
+#   fastapi/pydantic  -> api/routers/*, api/middleware/*, api/models/*
+#   uvicorn           -> api/main.py
+#   numpy             -> simulation/{propagation,temporal_simulation,saturation_functions,indicator_stats}_*.py
+#   pandas            -> api/services/{graph,map}_service.py, simulation/{simulation_runner,indicator_stats}_*.py
+#                        (top-level imports — hard requirement, not lazy)
+#   pyarrow           -> OPTIONAL. Only for pd.read_parquet of the 66MB panel file.
+#                        Both call sites are try/except-guarded and degrade gracefully
+#                        (see indicator_stats.py:431 "parquet engines may be absent").
+#                        Without it the map's gap_index choropleth loses its colouring;
+#                        simulation is unaffected.
+
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.5.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Optional — omit if it will not install; see note above.
+pyarrow>=14.0.0
