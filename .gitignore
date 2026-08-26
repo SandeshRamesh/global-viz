@@ -45,3 +45,6 @@ perf/reports/*.json
 perf/reports/*.html
 !perf/reports/.gitkeep
 .lighthouseci/
+
+# Claude Code worktrees (local scratch, not part of the project)
+.claude/worktrees/

@@ -1,5 +1,6 @@
 export type StructuralActionName =
   | 'toggleExpansion'
+  | 'rotateThenExpand'
   | 'expandRing'
   | 'collapseRing'
   | 'expandAll'
