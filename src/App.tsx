@@ -953,9 +953,12 @@ function App() {
       if (prev.includes(nodeId)) return prev
       return [...prev, nodeId]
     })
-    // Switch to local view when double-clicking from global view
-    // Stay in local view if already there
-    setViewMode(prev => prev === 'global' ? 'local' : prev)
+    // Stay in whichever view you are already in. Previously this jumped from
+    // global straight to local (changed in efc1620; it was 'split' before
+    // that), which meant the cause/effect glows — which render on the *global*
+    // graph — were applied to a view nobody was looking at. The node is added
+    // to the Local View targets either way; switch via the view tabs when you
+    // want it.
     // Clear drill-down history (manual change invalidates undo)
     setDrillDownHistory(null)
   }, [])
@@ -2596,7 +2599,6 @@ function App() {
   }, [visibleNodes])
 
   // Compute all node IDs visible in Local View (targets + inputs + outputs)
-  // Used for glow highlighting in Global View
   // Track node roles for glow colors: target=cyan, input=orange, output=purple
   // Supports multi-depth (causes of causes, effects of effects)
   const localViewNodeRoles = useMemo(() => {
@@ -2646,6 +2648,41 @@ function App() {
 
     return roles
   }, [localViewTargets, rawData, localViewBetaThreshold, localViewInputDepth, localViewOutputDepth])
+
+  /**
+   * Roles used for the glow overlay on the GLOBAL graph.
+   *
+   * Fixed at one hop in each direction — direct causes and direct effects only.
+   * The Local View's depth controls are deliberately not consulted: turning
+   * those up is meant to deepen the Local View, not flood the global graph with
+   * causes-of-causes. Same colour convention: target cyan, cause orange,
+   * effect purple.
+   */
+  const globalHighlightRoles = useMemo(() => {
+    const roles = new Map<string, 'target' | 'input' | 'output'>()
+    if (localViewTargets.length === 0 || !rawData) return roles
+
+    const causalEdges = getCausalEdges(rawData.edges)
+    const targets = new Set(localViewTargets)
+
+    for (const targetId of localViewTargets) {
+      roles.set(targetId, 'target')
+    }
+
+    for (const edge of causalEdges) {
+      if (Math.abs(edge.beta) < localViewBetaThreshold) continue
+      // One hop in: a direct cause of a target.
+      if (targets.has(edge.target) && !roles.has(edge.source)) {
+        roles.set(edge.source, 'input')
+      }
+      // One hop out: a direct effect of a target.
+      if (targets.has(edge.source) && !roles.has(edge.target)) {
+        roles.set(edge.target, 'output')
+      }
+    }
+
+    return roles
+  }, [localViewTargets, rawData, localViewBetaThreshold])
 
   // Flat set of all Local View node IDs (for filtering)
   const localViewNodeIds = useMemo(() => {
@@ -4283,7 +4320,7 @@ function App() {
     // Map: visible node ID -> { node, role } (may aggregate multiple roles)
     const glowTargets = new Map<string, { node: ExpandableNode; role: 'target' | 'input' | 'output' }>()
 
-    for (const [nodeId, role] of localViewNodeRoles.entries()) {
+    for (const [nodeId, role] of globalHighlightRoles.entries()) {
       if (visibleNodeIds.has(nodeId)) {
         // Node is visible, glow it directly
         const node = visibleNodes.find(n => n.id === nodeId)
@@ -6084,7 +6121,7 @@ function App() {
       layoutReadyTimerRef.current = null
     }
 
-  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, localViewNodeRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, selectedRegion, selectedStratum, qolNodeScoreForTooltip, storeInterventions, finalizeStructuralTrace, setStructuralLock, graphNavEnabled, announceGraphNav])
+  }, [visibleNodes, visibleEdges, computedRingsState, ringConfigs, expandedNodes, toggleExpansion, resetView, fitToVisibleNodes, ringRadii, layoutValues, calculateInitialTransform, highlightedPath, highlightedTarget, highlightSource, nodesByRingMemo, addToLocalView, localViewNodeIds, globalHighlightRoles, viewMode, splitRatio, temporalResults, historicalTimeline, playbackMode, currentYearIndex, precomputedShapCache, aggregateEffects, isPlaying, isPanelOpen, layoutReady, setLayoutReady, pinnedPaths, rawData, selectedCountry, selectedRegion, selectedStratum, qolNodeScoreForTooltip, storeInterventions, finalizeStructuralTrace, setStructuralLock, graphNavEnabled, announceGraphNav])
 
   // Initialize screen reader live region
   useEffect(() => { initAnnouncer() }, [])
