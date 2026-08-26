@@ -13,3 +13,22 @@ html, body, #root {
 body {
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+/* ---------------------------------------------------------------------------
+   Touch tuning (tablet/kiosk)
+
+   `touch-action: manipulation` tells the browser this region only pans and
+   pinch-zooms — it will never be a double-tap-to-zoom target. Two things
+   follow: our own dblclick handlers stop competing with the browser's
+   double-tap zoom, and the browser no longer holds every tap for ~300ms
+   waiting to see if a second one arrives. Pinch-to-zoom is preserved.
+
+   Scoped to <svg> rather than applied globally: that covers both the radial
+   graph and the Local View (their wrappers are inline-styled with no stable
+   class), while leaving normal page zoom on the rest of the UI untouched.
+   --------------------------------------------------------------------------- */
+svg {
+  touch-action: manipulation;
+  /* Kill the grey flash Android WebView paints over tapped SVG nodes. */
+  -webkit-tap-highlight-color: transparent;
+}

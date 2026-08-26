@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import Fuse from 'fuse.js'
 import './styles/App.css'
 import { debug } from './utils/debug'
+import { getClickDelay } from './utils/pointer'
 import {
   getStateFromBrowserURL,
   updateBrowserURL,
@@ -5180,7 +5181,8 @@ function App() {
 
     // Delayed single-click to allow time for double-click detection
     // This prevents accidental expand/collapse when user intended to double-click
-    const CLICK_DELAY = 100 // ms - window for double-click
+    // Pointer-aware: 100ms was unhittable with a finger. See utils/pointer.ts
+    const CLICK_DELAY = getClickDelay()
     const TOOLTIP_SHOW_DELAY = 260
 
     g.on('click', (event) => {

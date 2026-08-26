@@ -11,6 +11,13 @@
  * Updated: Ring radius calculation now includes density-based text footprint.
  */
 
+import {
+  isCoarsePointer,
+  TOUCH_MIN_NODE_RADIUS_PX,
+  TOUCH_SPACING_MULTIPLIER,
+  TOUCH_MAX_SPACING_MULTIPLIER,
+} from '../utils/pointer'
+
 import { debug } from '../utils/debug'
 
 /**
@@ -129,7 +136,11 @@ export class NodeSizeCalculator {
     // ~1.6px on 1080p display (visible on any screen)
     const minRadius = Math.max(
       readableUnit * 2,       // 2px on 1x display, 1px on 2x
-      baseUnit * 0.2          // 0.2% of viewport (~1.6px on 1080p)
+      baseUnit * 0.2,         // 0.2% of viewport (~1.6px on 1080p)
+      // Touch needs a bigger floor: a ~1.6px radius node is a 3px tap target,
+      // far under the 24px WCAG 2.5.8 minimum. Raising the floor also widens
+      // spacing, which scales off node radius.
+      isCoarsePointer() ? TOUCH_MIN_NODE_RADIUS_PX : 0
     )
 
     // MAXIMUM RADIUS: Scales inversely with node density
@@ -204,17 +215,21 @@ export class SpacingCalculator {
     const { readableUnit, baseUnit } = this.scales
 
     // Either 2 readable units or 0.2% of viewport
-    return Math.max(
+    const base = Math.max(
       readableUnit * 2,       // 2px on 1x, 1px on 2x
       baseUnit * 0.2          // 0.2% of viewport
     )
+    // Open the gaps up on touch so neighbouring nodes stop stealing each
+    // other's taps.
+    return isCoarsePointer() ? base * TOUCH_SPACING_MULTIPLIER : base
   }
 
   /**
    * Get maximum spacing (cap for large nodes)
    */
   get maxSpacing(): number {
-    return this.scales.baseUnit * 0.7  // 0.7% of viewport
+    const max = this.scales.baseUnit * 0.7  // 0.7% of viewport
+    return isCoarsePointer() ? max * TOUCH_MAX_SPACING_MULTIPLIER : max
   }
 
   /**
