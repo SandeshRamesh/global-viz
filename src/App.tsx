@@ -28,7 +28,7 @@ import { CountrySelector, SimulationPanel, TimelinePlayer, DataQualityPanel } fr
 import { Tutorial, type TutorialHandle, type TutorialRef } from './components/Tutorial'
 import { useSimulationStore, useIsPanelOpen } from './stores/simulationStore'
 import { simulationAPI, type CountryGraphEdge } from './services/api'
-import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData, createEdgeStatsMap } from './utils/causalEdges'
+import { getCausalEdges, countryGraphToRawEdges, buildSimLocalViewData, createEdgeStatsMap, aggregateChildEdges } from './utils/causalEdges'
 import type { EdgeStatsMap } from './types'
 import { extractIndicatorsFromGraph, computeCountryCoverage } from './utils/countryAggregation'
 import { perfTrace, type StructuralActionName } from './utils/perfTrace'
@@ -2652,33 +2652,43 @@ function App() {
   /**
    * Roles used for the glow overlay on the GLOBAL graph.
    *
-   * Fixed at one hop in each direction — direct causes and direct effects only.
-   * The Local View's depth controls are deliberately not consulted: turning
-   * those up is meant to deepen the Local View, not flood the global graph with
-   * causes-of-causes. Same colour convention: target cyan, cause orange,
-   * effect purple.
+   * Uses aggregateChildEdges — the same function the Local View builds from —
+   * rather than raw causal edges. That matters: causal edges only exist between
+   * ring 4/5 indicators, so reading them directly means a ring 1-3 node (any
+   * Domain) has no neighbours at all and nothing lights up. aggregateChildEdges
+   * walks a target's indicator descendants, then rolls each edge up to the
+   * target's own ring, skipping edges internal to the target. So whatever the
+   * Local View shows as a cause or effect glows here on the same node.
+   *
+   * One hop by construction: only direct edges of the target's own indicators
+   * are aggregated, never edges of those neighbours in turn.
+   *
+   * Colours: target cyan, cause orange, effect purple.
    */
   const globalHighlightRoles = useMemo(() => {
     const roles = new Map<string, 'target' | 'input' | 'output'>()
     if (localViewTargets.length === 0 || !rawData) return roles
 
-    const causalEdges = getCausalEdges(rawData.edges)
+    const nodeById = new Map(rawData.nodes.map(n => [String(n.id), n]))
     const targets = new Set(localViewTargets)
-
     for (const targetId of localViewTargets) {
       roles.set(targetId, 'target')
     }
 
-    for (const edge of causalEdges) {
-      if (Math.abs(edge.beta) < localViewBetaThreshold) continue
-      // One hop in: a direct cause of a target.
-      if (targets.has(edge.target) && !roles.has(edge.source)) {
-        roles.set(edge.source, 'input')
-      }
-      // One hop out: a direct effect of a target.
-      if (targets.has(edge.source) && !roles.has(edge.target)) {
-        roles.set(edge.target, 'output')
-      }
+    const { inputEdges, outputEdges } = aggregateChildEdges(
+      localViewTargets,
+      rawData.edges,
+      nodeById,
+      localViewBetaThreshold
+    )
+
+    for (const { edge } of inputEdges.values()) {
+      const source = String(edge.source)
+      if (!targets.has(source) && !roles.has(source)) roles.set(source, 'input')
+    }
+    for (const { edge } of outputEdges.values()) {
+      const target = String(edge.target)
+      if (!targets.has(target) && !roles.has(target)) roles.set(target, 'output')
     }
 
     return roles
