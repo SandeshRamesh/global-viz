@@ -30,6 +30,7 @@ import type {
   CountryGraphEdge
 } from '../../services/api'
 import type { RawNodeV21 } from '../../types'
+import { CredibilityContent } from './CredibilityContent'
 
 interface DataQualityPanelProps {
   isOpen: boolean
@@ -56,7 +57,7 @@ const DEFAULT_POSITION = { x: 10, y: window.innerHeight - 70 - 450 }
 type ViewMode = 'country' | 'unified' | 'stratified'
 
 // Page types within the panel
-type PanelPage = 'quality' | 'distribution' | 'ci-stats'
+type PanelPage = 'quality' | 'distribution' | 'ci-stats' | 'credibility'
 
 interface CountryQualityData extends CountryDataQuality {
   viewMode: 'country'
@@ -247,12 +248,16 @@ export function DataQualityPanel({
   // Show CI Stats tab when in local view with edges
   const showCIStatsTab = isLocalView && edges && edges.length > 0
 
-  // Show tabs if either distribution or CI Stats tabs are available
-  const showTabs = showDistributionTab || showCIStatsTab
+  // Credibility reads a static artifact, so it is available in every view mode
+  const showCredibilityTab = true
+
+  // Show tabs if any secondary tab is available
+  const showTabs = showDistributionTab || showCIStatsTab || showCredibilityTab
 
   // For country mode without CI Stats, always show quality page
   // This guards against the race condition where effect hasn't run yet after view switch
   const effectiveActivePage = (() => {
+    if (activePage === 'credibility') return 'credibility'
     if (activePage === 'ci-stats' && showCIStatsTab) return 'ci-stats'
     if (viewMode === 'country' && !showCIStatsTab) return 'quality'
     if (activePage === 'distribution' && !showDistributionTab) return 'quality'
@@ -265,8 +270,10 @@ export function DataQualityPanel({
   // Reset state when view mode changes
   useEffect(() => {
     if (prevViewModeRef.current !== viewMode) {
-      // View mode changed - reset to quality page and clear data
-      setActivePage('quality')
+      // View mode changed - reset to quality page and clear data.
+      // Credibility is view-independent, so leave the user on it if that is
+      // where they were.
+      setActivePage(prev => (prev === 'credibility' ? prev : 'quality'))
       setQualityData(null)
       setExpandedStratum(null)
       distributionCache.current.clear()
@@ -586,7 +593,9 @@ export function DataQualityPanel({
           <span style={{ fontWeight: 600, fontSize: 13, color: '#333', flexShrink: 0 }}>Data Quality</span>
           {isCollapsed && activePage !== 'quality' && (
             <span style={{ fontSize: 11, color: '#767676' }}>
-              {activePage === 'distribution' ? '· Distribution' : '· CI Stats'}
+              {activePage === 'distribution' ? '· Distribution'
+                : activePage === 'credibility' ? '· Fit'
+                : '· CI Stats'}
             </span>
           )}
         </div>
@@ -696,6 +705,25 @@ export function DataQualityPanel({
               }}
             >
               CI Stats
+            </button>
+          )}
+          {showCredibilityTab && (
+            <button
+              onClick={() => setActivePage('credibility')}
+              style={{
+                flex: 1,
+                padding: '10px 12px',
+                border: 'none',
+                background: effectiveActivePage === 'credibility' ? 'white' : 'transparent',
+                borderBottom: effectiveActivePage === 'credibility' ? '2px solid #3B82F6' : '2px solid transparent',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: effectiveActivePage === 'credibility' ? 600 : 400,
+                color: effectiveActivePage === 'credibility' ? '#3B82F6' : '#666',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Fit
             </button>
           )}
         </div>
@@ -957,6 +985,9 @@ export function DataQualityPanel({
             nodeById={nodeById}
           />
         )}
+
+        {/* Credibility / fit-quality page */}
+        {effectiveActivePage === 'credibility' && <CredibilityContent />}
       </div>
       </div>
     </div>

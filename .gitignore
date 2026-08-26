@@ -28,7 +28,9 @@ npm-debug.log*
 Thumbs.db
 
 # Data (large files — ~19GB research data, not tracked in git)
-data/
+# Anchored to the repo root: an unanchored `data/` also matched `public/data/`,
+# which holds small static assets the app fetches at runtime and which must ship.
+/data/
 export/
 _archive/
 
@@ -39,6 +41,9 @@ _archive/
 __pycache__/
 *.pyc
 precomputed_data.tar.gz
+
+# Browser automation scratch output (snapshots, console logs, screenshots)
+.playwright-mcp/
 
 # Performance test reports
 perf/reports/*.json
