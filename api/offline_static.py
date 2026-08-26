@@ -25,7 +25,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.routing import Route
@@ -81,6 +81,17 @@ def mount_offline_static(app: FastAPI, root: Path) -> bool:
     mounted = False
 
     if dist_explore.is_dir():
+        # The research pages link back to "/explore" with no trailing slash.
+        # The mount below does not answer that form, so without this redirect a
+        # researcher who opens the methodology and taps "back to the app" hits a
+        # 404 — a dead end in a kiosk with no browser chrome. nginx did this for
+        # us in production via try_files.
+        async def explore_redirect(request):
+            return RedirectResponse("/explore/", status_code=308)
+
+        app.router.routes.append(
+            Route("/explore", explore_redirect, methods=["GET", "HEAD"], name="explore_redirect")
+        )
         app.mount("/explore", SPAStaticFiles(directory=dist_explore, html=True), name="explore")
         logger.info("offline: serving SPA from %s", dist_explore)
         mounted = True

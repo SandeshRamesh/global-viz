@@ -958,7 +958,69 @@ export function DataQualityPanel({
           />
         )}
       </div>
+
+      <ResearchLinks />
       </div>
+    </div>
+  )
+}
+
+/**
+ * ResearchLinks - footer shortcuts out to the written research.
+ *
+ * Both pages are served from the same origin as the app (see
+ * api/offline_static.py), so these work with no network at all — which is the
+ * point on the offline tablet. Each page carries its own link to the full PDF.
+ *
+ * Same-tab navigation rather than target="_blank": a kiosk WebView has no tab
+ * strip, so a new window would strand the researcher with no way back. The
+ * research pages link back to /explore, which redirects to the app.
+ */
+function ResearchLinks() {
+  const links: Array<{ label: string; href: string }> = [
+    { label: 'Methodology', href: '/research/methodology/' },
+    { label: 'Research paper', href: '/research/paper/' },
+  ]
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 8,
+        padding: '10px 12px',
+        borderTop: '1px solid #E5E5E5',
+        flexShrink: 0,
+      }}
+    >
+      {links.map(({ label, href }) => (
+        <a
+          key={href}
+          className="touch-target-44"
+          href={href}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            minHeight: 40,
+            padding: '8px 10px',
+            border: '1px solid #D4D4D4',
+            borderRadius: 6,
+            background: '#FFFFFF',
+            color: '#333',
+            fontSize: 12,
+            fontWeight: 600,
+            textDecoration: 'none',
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+          {label}
+        </a>
+      ))}
     </div>
   )
 }
