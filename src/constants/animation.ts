@@ -46,19 +46,8 @@ const FAST: BudgetPreset = {
   structuralLockMs: 240,
 }
 
-// A single expand can now rotate the ring up to 180°. At BALANCED's 260ms that
-// sweep is violent, so this preset slows the rotation and camera, and extends
-// the structural lock to cover them (otherwise the next action interrupts
-// mid-sweep).
-const EXPAND_SWEEP: BudgetPreset = {
-  ...BALANCED,
-  rotationMs: 620,
-  cameraMs: 620,
-  structuralLockMs: 700,
-}
-
 const PRESETS: Record<LayoutAction, { normal: BudgetPreset; fast: BudgetPreset }> = {
-  single_expand: { normal: EXPAND_SWEEP, fast: FAST },
+  single_expand: { normal: BALANCED, fast: FAST },
   single_collapse: { normal: BALANCED, fast: FAST },
   ring_expand: { normal: FAST, fast: FAST },
   ring_collapse: { normal: FAST, fast: FAST },

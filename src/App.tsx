@@ -1801,9 +1801,10 @@ function App() {
   const [rotationAnchorOutcomeId, setRotationAnchorOutcomeId] = useState<string | null>(null)
   const rotateThenExpandTimerRef = useRef<number | null>(null)
 
-  // Must exceed EXPAND_SWEEP.rotationMs (620) so the expansion lands after the
-  // sweep rather than during it.
-  const ROTATE_BEFORE_EXPAND_MS = 660
+  // Just past BALANCED.rotationMs (260) so the expansion lands after the sweep
+  // rather than during it. If it lands inside the structural lock the action is
+  // queued and flushed when the lock lifts, so this stays correct either way.
+  const ROTATE_BEFORE_EXPAND_MS = 320
   // Skip the rotate phase when the branch is already effectively right-facing,
   // so a second click on a nearby branch stays snappy.
   const ROTATE_SKIP_THRESHOLD_RAD = Math.PI / 12  // 15°
