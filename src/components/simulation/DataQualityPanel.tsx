@@ -977,8 +977,12 @@ export function DataQualityPanel({
  * research pages link back to /explore, which redirects to the app.
  */
 function ResearchLinks() {
+  // Methodology goes to the landing page's methodology section rather than
+  // straight to the long-form page: that section is the quick review, and it
+  // carries its own "Read the Full Methodology" link onward. Two hops, both
+  // available. The paper button goes straight to the full paper.
   const links: Array<{ label: string; href: string }> = [
-    { label: 'Methodology', href: '/research/methodology/' },
+    { label: 'Methodology', href: '/#method' },
     { label: 'Research paper', href: '/research/paper/' },
   ]
 
