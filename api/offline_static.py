@@ -35,7 +35,40 @@ logger = logging.getLogger("api.offline_static")
 SERVE_STATIC = os.getenv("SERVE_STATIC", "false").strip().lower() == "true"
 
 
-class SPAStaticFiles(StaticFiles):
+def _apply_cache_policy(response, path: str) -> None:
+    """
+    Mirror the nginx caching rules this module replaces (deploy/docker/nginx.conf).
+
+    HTML entry points must NEVER be cached: they reference hashed asset bundles
+    (index-<hash>.js) that change on every build, so a stale cached index.html
+    points at a file that no longer exists. Starlette's StaticFiles sends only
+    etag/last-modified, and with no Cache-Control a WebView falls back to
+    *heuristic* caching — it will happily serve the page from cache for hours
+    without ever revalidating, so a redeploy appears to do nothing.
+
+    Hashed assets are content-addressed, so they can be cached hard.
+    """
+    # Key off the response content type, not the path. StaticFiles resolves a
+    # directory request like "/explore/" to the path "." and "/research/paper/"
+    # to "paper" — neither ends in ".html", so a path-based test silently misses
+    # exactly the entry points that must not be cached.
+    content_type = response.headers.get("content-type", "").lower()
+    if content_type.startswith("text/html"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    elif "assets/" in path.lower().replace("\\", "/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+
+
+class CachePolicyStaticFiles(StaticFiles):
+    """StaticFiles that applies the cache policy above."""
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        _apply_cache_policy(response, path)
+        return response
+
+
+class SPAStaticFiles(CachePolicyStaticFiles):
     """
     StaticFiles with an HTML5-history fallback.
 
@@ -53,9 +86,12 @@ class SPAStaticFiles(StaticFiles):
         except StarletteHTTPException as exc:
             if exc.status_code != 404:
                 raise
-            return await super().get_response("index.html", scope)
+            response = await super().get_response("index.html", scope)
+            _apply_cache_policy(response, "index.html")
+            return response
         if response.status_code == 404:
-            return await super().get_response("index.html", scope)
+            response = await super().get_response("index.html", scope)
+            _apply_cache_policy(response, "index.html")
         return response
 
 
@@ -101,7 +137,7 @@ def mount_offline_static(app: FastAPI, root: Path) -> bool:
     if site_dir.is_dir():
         research_dir = site_dir / "research"
         if research_dir.is_dir():
-            app.mount("/research", StaticFiles(directory=research_dir, html=True), name="research")
+            app.mount("/research", CachePolicyStaticFiles(directory=research_dir, html=True), name="research")
 
         index_html = site_dir / "index.html"
         if index_html.is_file():
@@ -109,7 +145,7 @@ def mount_offline_static(app: FastAPI, root: Path) -> bool:
 
         # Catch-all for the remaining landing assets (favicon.svg, 404.html, ...).
         # Appended last so it never shadows an API route.
-        app.mount("/", StaticFiles(directory=site_dir, html=True), name="site")
+        app.mount("/", CachePolicyStaticFiles(directory=site_dir, html=True), name="site")
         logger.info("offline: serving landing/research from %s", site_dir)
         mounted = True
     else:
@@ -125,7 +161,11 @@ def _replace_root_route(app: FastAPI, index_html: Path) -> None:
     """
 
     async def serve_index(request):
-        return FileResponse(index_html)
+        # Same no-cache rule as every other HTML entry point.
+        return FileResponse(
+            index_html,
+            headers={"Cache-Control": "no-cache, must-revalidate"},
+        )
 
     for i, route in enumerate(app.router.routes):
         if isinstance(route, Route) and route.path == "/" and "GET" in (route.methods or set()):
