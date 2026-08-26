@@ -2686,6 +2686,55 @@ function App() {
     currentTransformRef.current = newTransform
   }, [visibleNodes, viewMode, splitRatio])
 
+  // ── Staged expand/collapse ────────────────────────────────────────────────
+  // Walks the hierarchy one ring at a time, fitting the view after each step,
+  // so the structure unfolds legibly instead of appearing all at once.
+  //
+  // Stops at Indicator Groups (ring 4). expandRing(r) reveals ring r+1, so
+  // expanding 0..3 lands exactly there; expanding ring 4 would pull in the full
+  // Indicators ring, which is thousands of nodes and not what this is for.
+  const STAGED_TARGET_RING = 4 // RING_LABELS[4] === 'Indicator Groups'
+  // ring_expand/ring_collapse use the FAST budget (structuralLockMs 240) and
+  // fitToVisibleNodes runs a 300ms transition; these clear both with a margin.
+  const STAGED_SETTLE_MS = 260
+  const STAGED_FIT_MS = 340
+
+  const [stagedRunning, setStagedRunning] = useState<null | 'expand' | 'collapse'>(null)
+  const stagedAbortRef = useRef(false)
+
+  // fitToVisibleNodes closes over visibleNodes, which changes on every step.
+  // Calling it through a ref avoids fitting to a stale node set.
+  const fitToVisibleNodesRef = useRef(fitToVisibleNodes)
+  useEffect(() => { fitToVisibleNodesRef.current = fitToVisibleNodes }, [fitToVisibleNodes])
+
+  useEffect(() => () => { stagedAbortRef.current = true }, [])
+
+  const runStagedRings = useCallback(async (mode: 'expand' | 'collapse') => {
+    stagedAbortRef.current = false
+    setStagedRunning(mode)
+    const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+    // Expand outward 0..3; collapse inward 3..0.
+    const rings = mode === 'expand'
+      ? Array.from({ length: STAGED_TARGET_RING }, (_, i) => i)
+      : Array.from({ length: STAGED_TARGET_RING }, (_, i) => STAGED_TARGET_RING - 1 - i)
+
+    try {
+      for (const ring of rings) {
+        if (stagedAbortRef.current) return
+        if (mode === 'expand') expandRing(ring)
+        else collapseRing(ring)
+
+        await wait(STAGED_SETTLE_MS)
+        if (stagedAbortRef.current) return
+        fitToVisibleNodesRef.current()
+        await wait(STAGED_FIT_MS)
+      }
+    } finally {
+      if (!stagedAbortRef.current) setStagedRunning(null)
+    }
+  }, [expandRing, collapseRing])
+
   // Auto-zoom when sim causes visible node count to change (new effects cascading in)
   const prevSimVisibleCountRef = useRef(0)
   useEffect(() => {
@@ -6732,6 +6781,56 @@ function App() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Staged expand / collapse — unfolds one ring at a time, fitting the
+            view between steps, stopping at Indicator Groups. */}
+        {viewMode !== 'local' && (
+          <div style={{
+            background: 'white',
+            padding: '8px 10px',
+            borderRadius: 4,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            pointerEvents: 'auto',
+            display: 'flex',
+            gap: 6,
+            maxWidth: viewport.isBelow(768) ? undefined : 180
+          }}>
+            <button
+              className="touch-target-44"
+              onClick={() => runStagedRings('expand')}
+              disabled={stagedRunning !== null}
+              aria-label="Expand all rings to indicator groups"
+              title="Expand one ring at a time, up to Indicator Groups"
+              style={{
+                flex: 1, minHeight: 34, padding: '6px 8px', fontSize: 10, fontWeight: 600,
+                border: '1px solid #bcc3d4', borderRadius: 3,
+                background: stagedRunning === 'expand' ? '#dfe4f0' : '#eef0f6',
+                color: stagedRunning !== null ? '#999' : '#333',
+                cursor: stagedRunning !== null ? 'default' : 'pointer',
+                lineHeight: 1.2
+              }}
+            >
+              {stagedRunning === 'expand' ? 'Expanding…' : 'Expand all'}
+            </button>
+            <button
+              className="touch-target-44"
+              onClick={() => runStagedRings('collapse')}
+              disabled={stagedRunning !== null}
+              aria-label="Collapse all rings"
+              title="Collapse one ring at a time"
+              style={{
+                flex: 1, minHeight: 34, padding: '6px 8px', fontSize: 10, fontWeight: 600,
+                border: '1px solid #bcc3d4', borderRadius: 3,
+                background: stagedRunning === 'collapse' ? '#dfe4f0' : '#eef0f6',
+                color: stagedRunning !== null ? '#999' : '#333',
+                cursor: stagedRunning !== null ? 'default' : 'pointer',
+                lineHeight: 1.2
+              }}
+            >
+              {stagedRunning === 'collapse' ? 'Collapsing…' : 'Collapse all'}
+            </button>
           </div>
         )}
         </header>
