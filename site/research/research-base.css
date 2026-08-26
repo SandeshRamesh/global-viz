@@ -23,6 +23,23 @@
 
 html { scroll-behavior: smooth; }
 
+/* ---------------------------------------------------------------------------
+   Kill double-tap-to-zoom (tablet/kiosk)
+
+   `touch-action: manipulation` permits panning and pinch-zoom but tells the
+   browser this will never be a double-tap-zoom target. Two consequences:
+   double-taps reach the app instead of being swallowed as a zoom gesture, and
+   the browser stops holding every tap ~300ms to wait for a possible second one.
+
+   Pinch-zoom is deliberately preserved so the paper and methodology stay
+   readable. Applied page-wide, not just to <svg>, because taps on panels and
+   buttons were still being captured as zoom gestures.
+   --------------------------------------------------------------------------- */
+html, body {
+  touch-action: manipulation;
+}
+
+
 body {
   background: var(--navy);
   color: var(--text);

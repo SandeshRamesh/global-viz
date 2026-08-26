@@ -23,12 +23,15 @@ body {
    double-tap zoom, and the browser no longer holds every tap for ~300ms
    waiting to see if a second one arrives. Pinch-to-zoom is preserved.
 
-   Scoped to <svg> rather than applied globally: that covers both the radial
-   graph and the Local View (their wrappers are inline-styled with no stable
-   class), while leaving normal page zoom on the rest of the UI untouched.
+   Applied page-wide, not just to <svg>: taps on the panels and controls were
+   still being captured as zoom gestures, which made double-tap selection in
+   the graph unreliable. Pinch-zoom is deliberately kept.
    --------------------------------------------------------------------------- */
-svg {
+html, body, svg {
   touch-action: manipulation;
+}
+
+svg {
   /* Kill the grey flash Android WebView paints over tapped SVG nodes. */
   -webkit-tap-highlight-color: transparent;
 }
