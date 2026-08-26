@@ -136,6 +136,7 @@ export function DataQualityPanel({
   // Drag state
   const [position, setPosition] = useState(DEFAULT_POSITION)
   const [isDragging, setIsDragging] = useState(false)
+  const dragPointerId = useRef<number | null>(null)
   const dragOffset = useRef({ x: 0, y: 0 })
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -193,10 +194,20 @@ export function DataQualityPanel({
   }, [isOpen, onClose])
 
   // Drag handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  // Drag uses Pointer Events, not mouse events. A touch drag fires
+  // pointermove/touchmove but never mousemove, so the mouse-only version made
+  // the panel undraggable on the tablet while working fine under a mouse.
+  // Pointer Events cover mouse, touch and pen through one code path.
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (isMobileLayout) return
     // Only drag from header, not close button
     if ((e.target as HTMLElement).closest('button')) return
+
+    // Capture the pointer so moves keep arriving even when the finger outruns
+    // the header — easy to do on touch, and without capture the drag dies.
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture?.(e.pointerId)
+    dragPointerId.current = e.pointerId
 
     setIsDragging(true)
     dragOffset.current = {
@@ -206,8 +217,10 @@ export function DataQualityPanel({
     e.preventDefault()
   }, [position, isMobileLayout])
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
+  const handlePointerMove = useCallback((e: PointerEvent) => {
     if (!isDragging) return
+    // Ignore any second finger that lands mid-drag.
+    if (dragPointerId.current !== null && e.pointerId !== dragPointerId.current) return
 
     const newX = e.clientX - dragOffset.current.x
     const newY = e.clientY - dragOffset.current.y
@@ -222,21 +235,27 @@ export function DataQualityPanel({
     })
   }, [isDragging])
 
-  const handleMouseUp = useCallback(() => {
+  const handlePointerUp = useCallback((e: PointerEvent) => {
+    if (dragPointerId.current !== null && e.pointerId !== dragPointerId.current) return
+    dragPointerId.current = null
     setIsDragging(false)
   }, [])
 
-  // Add/remove global mouse listeners for drag
+  // Add/remove global pointer listeners for drag. pointercancel matters on
+  // touch: the OS can revoke the gesture (palm rejection, a system swipe), and
+  // without it the panel would stay stuck to the finger.
   useEffect(() => {
     if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('mouseup', handleMouseUp)
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+      window.addEventListener('pointercancel', handlePointerUp)
       return () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+        window.removeEventListener('pointercancel', handlePointerUp)
       }
     }
-  }, [isDragging, handleMouseMove, handleMouseUp])
+  }, [isDragging, handlePointerMove, handlePointerUp])
 
   // Determine view mode
   const viewMode: ViewMode = selectedCountry ? 'country' : (selectedStratum === 'unified' ? 'unified' : 'stratified')
@@ -563,7 +582,7 @@ export function DataQualityPanel({
     >
       {/* Header - draggable (desktop) / tappable (mobile) */}
       <div
-        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
         style={{
           padding: '12px 16px',
           borderBottom: isCollapsed ? 'none' : '1px solid #e2e6ee',
@@ -572,6 +591,9 @@ export function DataQualityPanel({
           alignItems: 'center',
           background: '#f0f2f8',
           cursor: isMobileLayout ? 'default' : (isDragging ? 'grabbing' : 'grab'),
+          // Without this the browser claims the gesture as a scroll/pan
+          // before pointermove ever reaches us.
+          touchAction: isMobileLayout ? 'auto' : 'none',
           flexShrink: 0,
           minHeight: DQ_HEADER_HEIGHT,
           minWidth: 0,

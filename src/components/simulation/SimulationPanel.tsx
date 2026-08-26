@@ -69,6 +69,7 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
   // Drag state
   const [position, setPosition] = useState(() => getDefaultPosition())
   const [isDragging, setIsDragging] = useState(false)
+  const dragPointerId = useRef<number | null>(null)
   const dragOffset = useRef({ x: 0, y: 0 })
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -116,10 +117,17 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
     return () => window.removeEventListener('resize', handleResize)
   }, [clampPosition])
 
-  // Drag handlers (disabled on mobile — panel is fullscreen)
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  // Drag handlers (disabled on mobile — panel is fullscreen).
+  // Pointer Events, not mouse events: a touch drag never fires mousemove, so
+  // the mouse-only version left this panel undraggable on a tablet.
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (isMobileLayout) return
     if ((e.target as HTMLElement).closest('button')) return
+
+    // Capture so moves keep arriving when the finger outruns the header.
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture?.(e.pointerId)
+    dragPointerId.current = e.pointerId
 
     setIsDragging(true)
     dragOffset.current = {
@@ -129,8 +137,9 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
     e.preventDefault()
   }, [position, isMobileLayout])
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
+  const handlePointerMove = useCallback((e: PointerEvent) => {
     if (!isDragging) return
+    if (dragPointerId.current !== null && e.pointerId !== dragPointerId.current) return
 
     const newX = e.clientX - dragOffset.current.x
     const newY = e.clientY - dragOffset.current.y
@@ -138,21 +147,26 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
     setPosition(clampPosition({ x: newX, y: newY }))
   }, [isDragging, clampPosition])
 
-  const handleMouseUp = useCallback(() => {
+  const handlePointerUp = useCallback((e: PointerEvent) => {
+    if (dragPointerId.current !== null && e.pointerId !== dragPointerId.current) return
+    dragPointerId.current = null
     setIsDragging(false)
   }, [])
 
-  // Global mouse listeners for drag
+  // Global pointer listeners for drag. pointercancel matters on touch: the OS
+  // can revoke the gesture, and without it the panel stays stuck to the finger.
   useEffect(() => {
     if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('mouseup', handleMouseUp)
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+      window.addEventListener('pointercancel', handlePointerUp)
       return () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+        window.removeEventListener('pointercancel', handlePointerUp)
       }
     }
-  }, [isDragging, handleMouseMove, handleMouseUp])
+  }, [isDragging, handlePointerMove, handlePointerUp])
 
   // Focus trap + Escape to close
   useEffect(() => {
@@ -239,8 +253,11 @@ export function SimulationPanel({ onMinimize }: SimulationPanelProps) {
     >
       {/* Header - draggable (desktop) / tappable (mobile) */}
       <div
-        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
         style={{
+          // Stop the browser claiming the drag as a scroll/pan before
+          // pointermove reaches us.
+          touchAction: isMobileLayout ? 'auto' : 'none',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
