@@ -2705,7 +2705,14 @@ function App() {
   //      queues the action, and each queue write overwrites the previous one,
   //      dropping layers. Hence waiting for the lock to actually clear.
   const STAGED_TARGET_RING = 4 // RING_LABELS[4] === 'Indicator Groups'
+  // Collapse stops once ring 2 has been collapsed, which leaves rings 0-2
+  // visible: Quality of Life, Outcomes and Coarse Domains. Going further would
+  // hide the domains, and the resting state we want still shows them.
+  const STAGED_COLLAPSE_FLOOR_RING = 2
   const STAGED_FIT_MS = 340    // fitToVisibleNodes runs a 300ms transition
+  // Collapsing brings labels back as rings drop away, so hold longer than the
+  // fit transition to leave time to actually read them before the next step.
+  const STAGED_COLLAPSE_HOLD_MS = 1000
   const STAGED_POLL_MS = 40
   const STAGED_STEP_TIMEOUT_MS = 4000
 
@@ -2743,10 +2750,14 @@ function App() {
     const waitForLock = () => waitUntil(() => performance.now() >= structuralLockUntilRef.current)
     const ringVisible = (ring: number) => visibleNodesRef.current.some(n => n.ring === ring)
 
-    // Expand outward 0..3; collapse inward 3..0.
-    const rings = mode === 'expand'
-      ? Array.from({ length: STAGED_TARGET_RING }, (_, i) => i)
-      : Array.from({ length: STAGED_TARGET_RING }, (_, i) => STAGED_TARGET_RING - 1 - i)
+    // Expand outward 0..3 (reveals rings 1..4).
+    // Collapse inward 3..2 (leaves rings 0..2 visible: Outcomes + Domains).
+    const rings: number[] = []
+    if (mode === 'expand') {
+      for (let r = 0; r < STAGED_TARGET_RING; r++) rings.push(r)
+    } else {
+      for (let r = STAGED_TARGET_RING - 1; r >= STAGED_COLLAPSE_FLOOR_RING; r--) rings.push(r)
+    }
 
     try {
       for (const ring of rings) {
@@ -2765,7 +2776,7 @@ function App() {
         if (stagedAbortRef.current) return
 
         fitToVisibleNodesRef.current()
-        await wait(STAGED_FIT_MS)
+        await wait(mode === 'collapse' ? STAGED_COLLAPSE_HOLD_MS : STAGED_FIT_MS)
       }
     } finally {
       if (!stagedAbortRef.current) setStagedRunning(null)
@@ -6862,8 +6873,8 @@ function App() {
               className="touch-target-44"
               onClick={() => runStagedRings('collapse')}
               disabled={stagedRunning !== null}
-              aria-label="Collapse all rings"
-              title="Collapse one ring at a time"
+              aria-label="Collapse rings back to outcomes and domains"
+              title="Collapse one ring at a time, back to Outcomes + Domains"
               style={{
                 flex: 1, minHeight: 34, padding: '6px 8px', fontSize: 10, fontWeight: 600,
                 border: '1px solid #bcc3d4', borderRadius: 3,
