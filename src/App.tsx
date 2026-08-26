@@ -2693,26 +2693,55 @@ function App() {
   // Stops at Indicator Groups (ring 4). expandRing(r) reveals ring r+1, so
   // expanding 0..3 lands exactly there; expanding ring 4 would pull in the full
   // Indicators ring, which is thousands of nodes and not what this is for.
+  //
+  // Driven by observed state, not fixed delays. Two traps make the naive
+  // version stall after a single layer:
+  //   1. expandRing closes over `allNodes`, which is layoutResult.nodes —
+  //      only the *currently laid out* nodes. A loop holding one closure asks
+  //      the old value for ring 2 nodes that do not exist there yet and
+  //      silently expands nothing. Hence the refs.
+  //   2. The structural lock is set from the layout effect *after* the render,
+  //      so a fixed wait can land inside it; runOrQueueStructuralAction then
+  //      queues the action, and each queue write overwrites the previous one,
+  //      dropping layers. Hence waiting for the lock to actually clear.
   const STAGED_TARGET_RING = 4 // RING_LABELS[4] === 'Indicator Groups'
-  // ring_expand/ring_collapse use the FAST budget (structuralLockMs 240) and
-  // fitToVisibleNodes runs a 300ms transition; these clear both with a margin.
-  const STAGED_SETTLE_MS = 260
-  const STAGED_FIT_MS = 340
+  const STAGED_FIT_MS = 340    // fitToVisibleNodes runs a 300ms transition
+  const STAGED_POLL_MS = 40
+  const STAGED_STEP_TIMEOUT_MS = 4000
 
   const [stagedRunning, setStagedRunning] = useState<null | 'expand' | 'collapse'>(null)
   const stagedAbortRef = useRef(false)
 
-  // fitToVisibleNodes closes over visibleNodes, which changes on every step.
-  // Calling it through a ref avoids fitting to a stale node set.
+  // These all close over state that changes on every step, so the running
+  // sequence must reach them through refs rather than captured values.
   const fitToVisibleNodesRef = useRef(fitToVisibleNodes)
+  const expandRingRef = useRef(expandRing)
+  const collapseRingRef = useRef(collapseRing)
+  const visibleNodesRef = useRef(visibleNodes)
   useEffect(() => { fitToVisibleNodesRef.current = fitToVisibleNodes }, [fitToVisibleNodes])
+  useEffect(() => { expandRingRef.current = expandRing }, [expandRing])
+  useEffect(() => { collapseRingRef.current = collapseRing }, [collapseRing])
+  useEffect(() => { visibleNodesRef.current = visibleNodes }, [visibleNodes])
 
   useEffect(() => () => { stagedAbortRef.current = true }, [])
 
   const runStagedRings = useCallback(async (mode: 'expand' | 'collapse') => {
     stagedAbortRef.current = false
     setStagedRunning(mode)
+
     const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+    /** Poll until `test()` passes, or give up so a hiccup cannot hang the UI. */
+    const waitUntil = async (test: () => boolean) => {
+      const deadline = performance.now() + STAGED_STEP_TIMEOUT_MS
+      while (!test() && performance.now() < deadline) {
+        if (stagedAbortRef.current) return
+        await wait(STAGED_POLL_MS)
+      }
+    }
+
+    const waitForLock = () => waitUntil(() => performance.now() >= structuralLockUntilRef.current)
+    const ringVisible = (ring: number) => visibleNodesRef.current.some(n => n.ring === ring)
 
     // Expand outward 0..3; collapse inward 3..0.
     const rings = mode === 'expand'
@@ -2722,18 +2751,26 @@ function App() {
     try {
       for (const ring of rings) {
         if (stagedAbortRef.current) return
-        if (mode === 'expand') expandRing(ring)
-        else collapseRing(ring)
 
-        await wait(STAGED_SETTLE_MS)
+        // Never issue into a live lock — it would be queued and then clobbered.
+        await waitForLock()
         if (stagedAbortRef.current) return
+
+        if (mode === 'expand') expandRingRef.current(ring)
+        else collapseRingRef.current(ring)
+
+        // Wait for the layer to actually appear/disappear, then for layout.
+        await waitUntil(() => ringVisible(ring + 1) === (mode === 'expand'))
+        await waitForLock()
+        if (stagedAbortRef.current) return
+
         fitToVisibleNodesRef.current()
         await wait(STAGED_FIT_MS)
       }
     } finally {
       if (!stagedAbortRef.current) setStagedRunning(null)
     }
-  }, [expandRing, collapseRing])
+  }, [])
 
   // Auto-zoom when sim causes visible node count to change (new effects cascading in)
   const prevSimVisibleCountRef = useRef(0)
@@ -3425,6 +3462,13 @@ function App() {
         })
       zoomRef.current = zoom
       svg.call(zoom)
+        // d3.zoom() installs its own dblclick.zoom handler that zooms the
+        // camera on double-click. It is a JS handler, so touch-action cannot
+        // suppress it, and clearing the un-namespaced 'dblclick' elsewhere does
+        // not remove it — d3 treats the two registrations separately. Without
+        // this, a double-tap both zoomed the camera and ran our own dblclick
+        // action. LocalView already did this; the radial graph never did.
+        .on('dblclick.zoom', null)
 
       // Initial view - use shared calculation
       const initialTransform = calculateInitialTransform(visibleNodes)
