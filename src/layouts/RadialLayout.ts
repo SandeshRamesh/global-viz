@@ -82,6 +82,9 @@ export interface LayoutConfig {
   prevOutcomeSectorSnapshot?: OutcomeSectorSnapshot
   // Max per-layout global rotation adjustment for outcome sectors (radians)
   maxOutcomeRotationStep?: number
+  // Outcome to rotate toward without expanding it. Used for the rotate-then-
+  // expand click sequence; causalHint's anchors are simulation-only.
+  rotationAnchorOutcomeId?: string | null
 }
 
 export interface ComputedRingConfig {
@@ -158,6 +161,7 @@ let currentTextConfig: TextConfig | null = null
 
 // Module-level causal hint holder (set per layout computation)
 let currentCausalHint: CausalLayoutHint | null = null
+let currentRotationAnchorOutcomeId: string | null = null
 
 // Module-level ring node counts for density-based text scaling
 let ringNodeCounts: Map<number, number> = new Map()
@@ -173,6 +177,7 @@ function setLayoutParams(config: LayoutConfig): void {
   currentMaxSpacing = config.maxSpacing ?? 7
   currentTextConfig = config.textConfig ?? null
   currentCausalHint = config.causalHint ?? null
+  currentRotationAnchorOutcomeId = config.rotationAnchorOutcomeId ?? null
 }
 
 // ============================================================================
@@ -424,7 +429,13 @@ function assignOutcomeAngles(
   prevOutcomeSectorSnapshot: OutcomeSectorSnapshot | undefined,
   maxOutcomeRotationStep: number
 ): { angles: Map<string, number>; extents: Map<string, number>; snapshot: OutcomeSectorSnapshot } {
-  const anchorOutcomes = currentCausalHint?.anchorOutcomes
+  // Union the causal anchors (simulation) with the explicit rotation anchor
+  // (click-to-rotate), so either can pull the ring round.
+  let anchorOutcomes = currentCausalHint?.anchorOutcomes
+  if (currentRotationAnchorOutcomeId) {
+    anchorOutcomes = new Set(anchorOutcomes ?? [])
+    anchorOutcomes.add(currentRotationAnchorOutcomeId)
+  }
   const result = computeOutcomeSectors({
     outcomeIds: allOutcomeIds,
     outcomeRequirements,
