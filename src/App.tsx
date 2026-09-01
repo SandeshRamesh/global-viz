@@ -224,7 +224,13 @@ function generateRingConfigs(radii: number[], maxNodeRadius: number = 20) {
 function getOutcomeRotationStep(layoutAction: LayoutAction | null): number {
   switch (layoutAction) {
     case 'single_expand':
-      return Math.PI / 14  // ~12.9°
+      // Unbounded: a direct click should bring the branch round to 0° (screen
+      // right) in one pass. The old ~12.9° cap meant a branch on the left side
+      // needed ~14 clicks to get there, so in practice it never arrived and the
+      // branch appeared to open in an arbitrary direction.
+      // Only the global rotation offset changes — the canonical sector order is
+      // untouched, so the ring sweeps as one body rather than re-ordering.
+      return Math.PI
     case 'ring_expand':
     case 'global_expand':
       return Math.PI / 18  // 10°
@@ -1779,9 +1785,77 @@ function App() {
   }, [viewMode, expandedNodes, localViewTargets, localViewBetaThreshold, highlightedTarget])
 
   // Toggle expansion of a node
-  const toggleExpansion = useCallback((nodeId: string) => {
+  // Lets phase 2 re-enter the latest toggleExpansion without the callback
+  // having to depend on itself.
+  const toggleExpansionRef = useRef<((nodeId: string, skipRotate?: boolean) => void) | null>(null)
+
+  // ── Rotate-then-expand ────────────────────────────────────────────────────
+  // Clicking a node first swings its branch round to 0° (screen right), then
+  // expands it there, so the children open into the readable side of the
+  // canvas instead of wherever the branch happened to sit.
+  //
+  // Phase 1 sets an anchor: the ring rotates toward that outcome without
+  // expanding anything (the sector solver already accepts anchorOutcomeIds).
+  // Phase 2 performs the real expansion once the sweep has landed.
+  const [rotationAnchorOutcomeId, setRotationAnchorOutcomeId] = useState<string | null>(null)
+  const rotateThenExpandTimerRef = useRef<number | null>(null)
+
+  // Must exceed EXPAND_SWEEP.rotationMs (620) so the expansion lands after the
+  // sweep rather than during it.
+  const ROTATE_BEFORE_EXPAND_MS = 660
+  // Skip the rotate phase when the branch is already effectively right-facing,
+  // so a second click on a nearby branch stays snappy.
+  const ROTATE_SKIP_THRESHOLD_RAD = Math.PI / 12  // 15°
+
+  useEffect(() => () => {
+    if (rotateThenExpandTimerRef.current !== null) {
+      window.clearTimeout(rotateThenExpandTimerRef.current)
+    }
+  }, [])
+
+  const toggleExpansion = useCallback((nodeId: string, skipRotate = false) => {
     if (!rawData) return
     const isCollapsing = expandedNodes.has(nodeId)
+
+    // Rotate-then-expand: on expansion, if this branch is not already facing
+    // right, swing it round first and defer the expansion by one beat.
+    if (!isCollapsing && !skipRotate) {
+      if (rotateThenExpandTimerRef.current !== null) {
+        window.clearTimeout(rotateThenExpandTimerRef.current)
+        rotateThenExpandTimerRef.current = null
+      }
+
+      // Walk up to the ring-1 outcome that owns this branch — that is the unit
+      // the sector solver rotates.
+      const byId = new Map(allNodes.map(n => [n.id, n]))
+      let cursor = byId.get(nodeId)
+      while (cursor && cursor.ring > 1 && cursor.parentId) {
+        cursor = byId.get(cursor.parentId)
+      }
+      const outcome = cursor && cursor.ring === 1 ? cursor : null
+
+      if (outcome && rotationAnchorOutcomeId !== outcome.id) {
+        // Node positions are laid out as (r·cos θ, r·sin θ), so the branch's
+        // current bearing is just atan2 — no need to reach into the solver.
+        const bearing = Math.atan2(outcome.y, outcome.x)
+        const offRight = Math.abs(Math.atan2(Math.sin(bearing), Math.cos(bearing)))
+
+        if (offRight > ROTATE_SKIP_THRESHOLD_RAD) {
+          // Phase 1: rotate only. beginLayoutAction('single_expand') is what
+          // gives this pass the uncapped rotation step.
+          beginLayoutAction('single_expand', 'rotateThenExpand', { nodeId, phase: 'rotate' })
+          setRotationAnchorOutcomeId(outcome.id)
+          rotateThenExpandTimerRef.current = window.setTimeout(() => {
+            rotateThenExpandTimerRef.current = null
+            setRotationAnchorOutcomeId(null)
+            // Phase 2: the real expansion, now that the branch faces right.
+            toggleExpansionRef.current?.(nodeId, true)
+          }, ROTATE_BEFORE_EXPAND_MS)
+          return
+        }
+      }
+    }
+
     runOrQueueStructuralAction(() => {
       beginLayoutAction(
         isCollapsing ? 'single_collapse' : 'single_expand',
@@ -1831,7 +1905,11 @@ function App() {
         return next
       })
     })
-  }, [rawData, expandedNodes, runOrQueueStructuralAction, beginLayoutAction])
+  }, [rawData, expandedNodes, runOrQueueStructuralAction, beginLayoutAction, allNodes, rotationAnchorOutcomeId])
+
+  // Keep the self-ref pointing at the current closure so the deferred phase-2
+  // expansion runs against fresh state, not the values captured at click time.
+  useEffect(() => { toggleExpansionRef.current = toggleExpansion }, [toggleExpansion])
 
   // Expand all nodes
   // Calculate initial zoom transform to fit content tightly
@@ -3227,7 +3305,8 @@ function App() {
       // Pass causal hints for angular clustering during simulation
       causalHint: playbackMode === 'simulation' ? causalHint : undefined,
       prevOutcomeSectorSnapshot: outcomeSectorSnapshotRef.current ?? undefined,
-      maxOutcomeRotationStep
+      maxOutcomeRotationStep,
+      rotationAnchorOutcomeId: rotationAnchorOutcomeId
     }
 
     // Compute layout using ring-independent angular positioning algorithm
@@ -3293,7 +3372,7 @@ function App() {
       drivers: driverCount,
       overlaps: overlaps.length
     })
-  }, [effectiveNodes, nodePadding, expandedNodes, pinnedPaths, playbackMode, causalHint, selectedCountry, selectedRegion, selectedStratum])  // Uses effectiveNodes for country-specific importance
+  }, [effectiveNodes, nodePadding, expandedNodes, pinnedPaths, playbackMode, causalHint, selectedCountry, selectedRegion, selectedStratum, rotationAnchorOutcomeId])  // Uses effectiveNodes for country-specific importance
 
   // Render visible nodes and edges (called when expansion state changes)
   const renderVisualization = useCallback(() => {
